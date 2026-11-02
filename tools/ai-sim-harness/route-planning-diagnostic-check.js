@@ -7,7 +7,16 @@ let ticks = 0;
 const s = { root: { position: { x: 1, z: 2 } }, suppressedUntil: 0 };
 const sim = { time: 10 };
 const success = { point: { x: 4, z: 6 }, stats: { graphNodes: 5, evaluatedEdges: 9, nativePathQueries: 2 } };
-const failed = { point: null, stats: { graphNodes: 5, evaluatedEdges: 7, nativePathQueries: 1 } };
+const failed = {
+  point: null,
+  stats: {
+    graphNodes: 5,
+    evaluatedEdges: 7,
+    nativePathQueries: 1,
+    rejected: { 'no-connected-progress-route': 1, 'blocked-physical-segment': 7 },
+    terminal: 'none'
+  }
+};
 const reused = { point: { x: 4, z: 6 }, reused: true };
 const retained = { cursor: 0, waypoints: [{ x: 4, z: 6, slotId: 'real-cover' }] };
 const reports = [{ x: 12, z: 15 }];
@@ -59,6 +68,20 @@ assert.equal(d.totals.movementQueries, 2);
 assert.equal(d.totals.graphNodes, 15, 'only fresh plans contribute graph counters');
 assert.equal(d.totals.edgeQueries, 25);
 assert.equal(d.totals.detourQueries, 5);
+assert.equal(d.failedFinalReasons['no-connected-progress-route'], 1);
+assert.equal(d.edgeRejections['blocked-physical-segment'], 7);
+assert.equal(d.freshTerminals.none, 1);
+reports[0].at = 11;
+assert.equal(pick({ x: 0, z: 9 }), success);
+reports[0].x = 12.2;
+assert.equal(pick({ x: 0, z: 9 }), success);
+reports[0].x = 13;
+assert.equal(pick({ x: 0, z: 9 }), success);
+const refined = P.snapshot().routePlanning;
+assert.equal(refined.freshReasons['contact-observation-metadata-changed'], 1);
+assert.equal(refined.freshReasons['contact-precise-location-changed'], 1);
+assert.equal(refined.freshReasons['contact-rounded-location-changed'], 1);
+assert.equal(refined.fresh, 6);
 P.reset();
 assert.equal(P.snapshot().routePlanning.calls, 0);
 assert.equal(P.snapshot().routePlanning.fresh, 0);
