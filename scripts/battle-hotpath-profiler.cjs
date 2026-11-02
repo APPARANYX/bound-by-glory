@@ -35,6 +35,8 @@
       failedFinalReasons: Object.create(null),
       edgeRejections: Object.create(null),
       freshTerminals: Object.create(null),
+      byWindow: Object.create(null),
+      byMinute: Object.create(null),
       totals: {
         candidateQueries: 0,
         candidatesReturned: 0,
@@ -112,6 +114,23 @@
         },
         start = clock(),
         result;
+      /* Diagnostic-only observation: classify route work at the instant the
+         native planner is requested. No controller decision or owner state is
+         changed. summary() is read-only but adds measurement overhead, so
+         these buckets must NOT be used for wall-time acceptance. */
+      var covered = root.BattleTacticalCoveredManeuver,
+        windowState =
+          s && s.squad && covered && typeof covered.summary === 'function'
+            ? covered.summary(s.squad)
+            : null,
+        origin = !windowState
+          ? 'unknown'
+          : !windowState.pendingCover
+            ? 'new-window'
+            : windowState.phase === 'moving'
+              ? 'active-window-refill:' + windowState.movingCount
+              : 'pending-window:' + windowState.phase,
+        minute = String(Math.floor(Math.max(0, (sim && +sim.time) || 0) / 60));
       routeActive = sample;
       try {
         result = fn.apply(this, arguments);
@@ -123,6 +142,24 @@
           routePlanning.calls++;
           var hasRetained = !!(retained && retained.waypoints && retained.waypoints[retained.cursor]),
             negativeCache = previous && previous.result === result && !result.point && previous.negative;
+          var event = result.reused ? 'retained' : negativeCache ? 'negativeCache' : 'fresh';
+          [ [routePlanning.byWindow, origin], [routePlanning.byMinute, minute] ].forEach(function (entry) {
+            var table = entry[0],
+              name = entry[1],
+              bucket = table[name] ||
+                (table[name] = {
+                  calls: 0, fresh: 0, negativeCache: 0, retained: 0,
+                  failedFresh: 0, movementQueries: 0, sightQueries: 0,
+                  candidateQueries: 0, candidatesReturned: 0
+                });
+            bucket.calls++;
+            bucket[event]++;
+            if (event === 'fresh' && !result.point) bucket.failedFresh++;
+            bucket.movementQueries += sample.totals.movementQueries;
+            bucket.sightQueries += sample.totals.sightQueries;
+            bucket.candidateQueries += sample.totals.candidateQueries;
+            bucket.candidatesReturned += sample.totals.candidatesReturned;
+          });
           if (result.reused) routePlanning.retained++;
           else if (negativeCache) routePlanning.negativeCache++;
           else {
@@ -485,6 +522,8 @@
         failedFinalReasons: Object.assign({}, routePlanning.failedFinalReasons),
         edgeRejections: Object.assign({}, routePlanning.edgeRejections),
         freshTerminals: Object.assign({}, routePlanning.freshTerminals),
+        byWindow: JSON.parse(JSON.stringify(routePlanning.byWindow)),
+        byMinute: JSON.parse(JSON.stringify(routePlanning.byMinute)),
         totals: Object.assign({}, routePlanning.totals)
       }
     };
