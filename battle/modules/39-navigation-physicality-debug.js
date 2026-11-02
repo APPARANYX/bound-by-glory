@@ -113,7 +113,9 @@
       N.version + '|' + ((o && o.__physicalVersion) || 0) + '|' + (footprints || staticFootprints(sim)).length
     );
   }
-  var PHYS_CELL = 28;
+  var PHYS_CELL = 28,
+    PHYS_CACHED_COLLECTIONS = 1024,
+    PHYS_CACHED_CELLS = 64;
   function axes(fp) {
     var ux = isFinite(+fp.ux) ? +fp.ux : 1,
       uz = isFinite(+fp.uz) ? +fp.uz : 0,
@@ -173,7 +175,8 @@
       buckets: buckets,
       stamp: new Int32Array(list.length),
       epoch: 0,
-      scratch: []
+      scratch: [],
+      collections: new Map()
     };
     function col(x) {
       return clamp(Math.floor((x - minX) / PHYS_CELL), 0, cols - 1);
@@ -216,11 +219,6 @@
             })
           : null;
     if (!idx || idx.empty) return dynamic || [];
-    idx.epoch++;
-    if (idx.epoch >= 2147483000) {
-      idx.stamp.fill(0);
-      idx.epoch = 1;
-    }
     var out = idx.scratch;
     (out.length = 0), (pad = pad || 0);
     var minX = Math.min(a.x, b.x) - pad,
@@ -232,17 +230,35 @@
       c1 = clamp(Math.floor((maxX - idx.minX) / PHYS_CELL), 0, idx.cols - 1),
       r0 = clamp(Math.floor((minZ - idx.minZ) / PHYS_CELL), 0, idx.rows - 1),
       r1 = clamp(Math.floor((maxZ - idx.minZ) / PHYS_CELL), 0, idx.rows - 1);
-    for (var c = c0; c <= c1; c++)
-      for (var r = r0; r <= r1; r++) {
-        var bucket = idx.buckets[c + r * idx.cols];
-        if (!bucket) continue;
-        for (var j = 0; j < bucket.length; j++) {
-          var id = bucket[j];
-          if (idx.stamp[id] === idx.epoch) continue;
-          idx.stamp[id] = idx.epoch;
-          out.push(idx.list[id]);
-        }
+    /* Only fixed index membership is reused, in its original encounter order.
+       Exact segments and live dynamic hulls are still tested on every call.
+       Long rectangles collect normally; these bounds limit retention, not work. */
+    var key = (c1 - c0 + 1) * (r1 - r0 + 1) <= PHYS_CACHED_CELLS ? c0 + ',' + c1 + ',' + r0 + ',' + r1 : null,
+      ids = key === null ? null : idx.collections.get(key);
+    if (!ids) {
+      ids = [];
+      if (++idx.epoch >= 2147483000) {
+        idx.stamp.fill(0);
+        idx.epoch = 1;
       }
+      for (var c = c0; c <= c1; c++)
+        for (var r = r0; r <= r1; r++) {
+          var bucket = idx.buckets[c + r * idx.cols];
+          if (!bucket) continue;
+          for (var j = 0; j < bucket.length; j++) {
+            var id = bucket[j];
+            if (idx.stamp[id] === idx.epoch) continue;
+            idx.stamp[id] = idx.epoch;
+            ids.push(id);
+          }
+        }
+      if (key !== null) {
+        if (idx.collections.size >= PHYS_CACHED_COLLECTIONS) idx.collections.clear();
+        idx.collections.set(key, ids);
+      }
+    }
+    // Resolve IDs against the current list, never retain a stale footprint object.
+    for (var k = 0; k < ids.length; k++) out.push(idx.list[ids[k]]);
     return dynamic && dynamic.length ? out.concat(dynamic) : out;
   }
   function refreshOccupied(sim, force) {

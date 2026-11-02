@@ -5,8 +5,10 @@
    N.movementClear/findPath at load time, then pins what they promise together: moving and static
    OBBs, move versus sight query modes, the truck self-ignore, and replay determinism. */
 const assert = require('node:assert/strict'),
+  fs = require('node:fs'),
+  path = require('node:path'),
   H = require('./harness'),
-  { loadModule, quietConsole } = require('./module-loader');
+  { loadModule, loadSource, quietConsole } = require('./module-loader');
 let n = 0;
 function test(name, fn) {
   fn();
@@ -19,7 +21,18 @@ function world(opts) {
   loadModule(r, 'battle/modules/14-z-ballistic-raycast.js', { console: quietConsole });
   r.BattleModules = { registerSystem() {}, unitsFor: () => [] };
   loadModule(r, 'battle/battle-navigation.js', { console: quietConsole });
-  loadModule(r, 'battle/modules/39-navigation-physicality-debug.js', { console: quietConsole });
+  const file = 'battle/modules/39-navigation-physicality-debug.js';
+  const source = fs
+    .readFileSync(path.join(H.REPO, file), 'utf8')
+    .replace(
+      'var id = bucket[j];',
+      'root._physicalBucketVisits = (root._physicalBucketVisits || 0) + 1; var id = bucket[j];'
+    )
+    .replace(
+      'function shapeHit(a, b, fp, margin) {',
+      'function shapeHit(a, b, fp, margin) { root._physicalShapeTests = (root._physicalShapeTests || 0) + 1;'
+    );
+  loadSource(r, source, { console: quietConsole, ...opts.bindings }, file);
   assert.ok(r.BattleNavigationPhysicality, 'physicality layer installed');
   const obstacles = [];
   obstacles.__physicalFootprints = opts.statics || [];
@@ -162,6 +175,73 @@ test('empty dynamic list skips filtering while static and subsequently moving ge
   assert.equal(N.movementClear(P(10, -4), P(10, 4)), false, 'newly attached truck blocks immediately');
   vehicle.position.x = 20;
   assert.equal(N.movementClear(P(10, -4), P(10, 4)), true, 'moving truck remains live');
+});
+
+test('physical cell collections avoid repeated bucket visits without retaining query answers', () => {
+  const statics = [wall('long', 0, 0, 18, 0.3, 0)],
+    { r, N, obstacles } = world({ statics }),
+    vehicle = { id: 'live-truck', position: { x: 8, z: 4 }, heading: { x: 0, z: 1 } };
+  N.movementClear(P(-10, 4), P(10, 4));
+  const visits = r._physicalBucketVisits;
+  const tests = r._physicalShapeTests;
+  for (let i = 0; i < 200; i++) {
+    const z = 3 + i / 200;
+    assert.equal(N.movementClear(P(-10, z), P(10, z)), true);
+  }
+  assert.equal(r._physicalBucketVisits, visits, 'warm cell rectangle does not recollect static IDs');
+  assert.ok(r._physicalShapeTests >= tests + 200, 'every exact ray still tests current geometry');
+  // Replacing an object in the existing list must read the current object at its ID,
+  // even without changing the index's version or the list identity/length.
+  statics[0] = wall('replacement', 0, 4, 18, 0.3, 0);
+  assert.equal(N.movementClear(P(-10, 4), P(10, 4)), false);
+  statics[0] = wall('restored', 0, 0, 18, 0.3, 0);
+  assert.equal(N.movementClear(P(-10, 4), P(10, 4)), true);
+  obstacles.__dynamicFootprints = [truckFootprint(vehicle)];
+  assert.equal(N.movementClear(P(-10, 4), P(10, 4)), false, 'new truck enters warmed collection');
+  assert.equal(N.movementClear(P(-10, 4), P(10, 4), { ignoreDynamicId: vehicle.id }), true);
+  vehicle.position.z = 12;
+  assert.equal(N.movementClear(P(-10, 4), P(10, 4)), true, 'same-time live truck movement');
+  statics[0] = wall('new-index', 0, 4, 18, 0.3, 0);
+  obstacles.__physicalVersion++;
+  assert.equal(N.movementClear(P(-10, 4), P(10, 4)), false, 'geometry version replaces collection cache');
+  obstacles.__physicalFootprints = [wall('new-list', 0, 0, 18, 0.3, 0)];
+  assert.equal(N.movementClear(P(-10, 4), P(10, 4)), true, 'source replacement replaces collection cache');
+});
+
+test('bounded physical collections match fresh collection order under eviction pressure', () => {
+  let clears = 0,
+    maximum = 0;
+  class BoundedMap extends Map {
+    set(k, v) {
+      super.set(k, v);
+      maximum = Math.max(maximum, this.size);
+      return this;
+    }
+    clear() {
+      clears++;
+      super.clear();
+    }
+  }
+  class MissMap extends Map {
+    get() {
+      return undefined;
+    }
+  }
+  const statics = [wall('south', -600, -600, 3, 2, 0), wall('north', 600, 600, 3, 2, 0)];
+  for (let i = 0; i < 75; i++)
+    statics.push(wall('ob-' + i, (i % 15) * 50 - 350, Math.floor(i / 15) * 70 - 200, 9, 0.8, i * 0.31));
+  const fast = world({ statics, bindings: { Map: BoundedMap } }),
+    fresh = world({ statics, bindings: { Map: MissMap } });
+  for (let i = 0; i < 1600; i++) {
+    const a = P(-500 + (i % 25) * 28, -400 + (Math.floor(i / 25) % 16) * 28),
+      b = P(a.x + (Math.floor(i / 400) + 1) * 28, a.z + 12);
+    assert.equal(fast.N.movementClear(a, b), fresh.N.movementClear(a, b), 'exact movement query');
+    const fa = fast.r.BattleNavigationPhysicality.planLocal(fast.sim, a, b),
+      fb = fresh.r.BattleNavigationPhysicality.planLocal(fresh.sim, a, b);
+    assert.deepEqual(fa, fb, 'native detour points and encounter order');
+  }
+  assert.ok(clears > 0, 'retained-collection eviction is exercised');
+  assert.ok(maximum <= 1024, 'retained lists remain bounded');
 });
 
 test('moving truck OBB follows the live vehicle, with no stale cached volume', () => {
