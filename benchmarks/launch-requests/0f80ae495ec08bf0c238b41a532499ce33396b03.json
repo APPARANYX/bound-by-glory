@@ -1,0 +1,16 @@
+{
+  "branch": "work/benchmark-launch/roundstats-causal-20261030",
+  "launch_parent_sha": "a018ab1b14e0db31c63f7b1635df533c2a570261",
+  "launch_sha": "0f80ae495ec08bf0c238b41a532499ce33396b03",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/a018ab1b14e0db31c63f7b1635df533c2a570261",
+  "request": {
+    "benchmark": "causal",
+    "ref": "work/pin/roundstats-a018ab1b",
+    "seconds": 600,
+    "seeds": 20
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/roundstats-a018ab1b",
+  "source_sha_at_archive": "a018ab1b14e0db31c63f7b1635df533c2a570261"
+}
