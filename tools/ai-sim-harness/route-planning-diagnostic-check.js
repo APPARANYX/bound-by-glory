@@ -4,7 +4,8 @@ const assert = require('node:assert/strict');
 const { loadModule } = require('./module-loader');
 
 let ticks = 0;
-const s = { root: { position: { x: 1, z: 2 } }, suppressedUntil: 0 };
+const s = { squad: {}, root: { position: { x: 1, z: 2 } }, suppressedUntil: 0 };
+const windowState = { pendingCover: false, phase: 'idle', movingCount: 0 };
 const sim = { time: 10 };
 const success = { point: { x: 4, z: 6 }, stats: { graphNodes: 5, evaluatedEdges: 9, nativePathQueries: 2 } };
 const failed = {
@@ -24,6 +25,7 @@ const root = {
   performance: { now: () => ++ticks },
   BattleNavigation: { version: 1, movementClear: () => true },
   SquadAI: { hasLineOfSight: () => true },
+  BattleTacticalCoveredManeuver: { summary: sq => { assert.equal(sq, s.squad); return windowState; } },
   BattleCoverPositions: {
     routeCandidates: () => [{ x: 4, z: 6 }],
     candidates: () => [{ x: 4, z: 6 }]
@@ -54,6 +56,11 @@ assert.equal(pick({ x: 10, z: 8 }), failed);
 assert.equal(pick({ x: 0, z: 9 }), success);
 const d = P.snapshot().routePlanning;
 assert.equal(d.calls, 5);
+assert.equal(d.byWindow['new-window'].calls, 5);
+assert.equal(d.byWindow['new-window'].fresh, 3);
+windowState.pendingCover = true;
+windowState.phase = 'moving';
+windowState.movingCount = 2;
 assert.equal(d.fresh, 3);
 assert.equal(d.retained, 1);
 assert.equal(d.negativeCache, 1);
@@ -82,8 +89,13 @@ assert.equal(refined.freshReasons['contact-observation-metadata-changed'], 1);
 assert.equal(refined.freshReasons['contact-precise-location-changed'], 1);
 assert.equal(refined.freshReasons['contact-rounded-location-changed'], 1);
 assert.equal(refined.fresh, 6);
+assert.equal(refined.byWindow['active-window-refill:2'].calls, 3);
+assert.equal(refined.byWindow['active-window-refill:2'].fresh, 3);
+assert.equal(refined.byMinute['0'].calls, 8);
+assert.equal(refined.byMinute['0'].fresh, 6);
 P.reset();
 assert.equal(P.snapshot().routePlanning.calls, 0);
+assert.deepEqual(P.snapshot().routePlanning.byWindow, {});
 assert.equal(P.snapshot().routePlanning.fresh, 0);
 P.restore();
 assert.equal(root.BattleTacticalContactRoute.pick, originalPick);
