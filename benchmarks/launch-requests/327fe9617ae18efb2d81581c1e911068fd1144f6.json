@@ -1,0 +1,22 @@
+{
+  "branch": "work/benchmark-launch/698-releasedorder-off-us-defend",
+  "launch_parent_sha": "58bef7c1a82a4f7f514fb74e2636cac15c552f9f",
+  "launch_sha": "327fe9617ae18efb2d81581c1e911068fd1144f6",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/58bef7c1a82a4f7f514fb74e2636cac15c552f9f",
+  "request": {
+    "battle_type": "us-defend",
+    "benchmark": "standard",
+    "origin_agent": "claude",
+    "purpose": "PR698 releasedOrder pair, controller off (legacy)",
+    "query_off": "strategicInterception=0&releasedOrder=0",
+    "query_on": "strategicInterception=0",
+    "ref": "claude/project-thread-jxet0c",
+    "seed": "pr698-rl",
+    "seeds": "60",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "claude/project-thread-jxet0c",
+  "source_sha_at_archive": null
+}
