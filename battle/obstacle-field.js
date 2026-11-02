@@ -16,6 +16,7 @@
   var SILHOUETTE = { stand: 1.75, crouch: 1.2, prone: 0.55 };
   var EYE = { stand: 1.55, crouch: 1.05, prone: 0.42 };
   var DEFAULT_HEIGHT = 1.6;
+  var axisCache = new WeakMap();
 
   var clamp = root.GTMath.clamp;
   function finite(v, d) {
@@ -32,15 +33,32 @@
   function axes(ob) {
     var ux = finite(ob && ob.ux, 1),
       uz = finite(ob && ob.uz, 0),
+      vx = finite(ob && ob.vx, NaN),
+      vz = finite(ob && ob.vz, NaN),
+      cached = axisCache.get(ob);
+    /* Cache only normalization of these exact scalar inputs, never a ray answer.
+       Read all four live getters first, including moving/rotating truck headings.
+       SameValue retains signed zero and treats missing/invalid second axes alike. */
+    if (
+      cached &&
+      Object.is(cached.ux, ux) &&
+      Object.is(cached.uz, uz) &&
+      Object.is(cached.vx, vx) &&
+      Object.is(cached.vz, vz)
+    )
+      return cached.value;
+    var inputs = { ux: ux, uz: uz, vx: vx, vz: vz },
       l = Math.hypot(ux, uz) || 1;
     ux /= l;
     uz /= l;
-    var vx = finite(ob && ob.vx, -uz),
-      vz = finite(ob && ob.vz, ux),
-      vl = Math.hypot(vx, vz) || 1;
+    vx = isFinite(vx) ? vx : -uz;
+    vz = isFinite(vz) ? vz : ux;
+    var vl = Math.hypot(vx, vz) || 1;
     vx /= vl;
     vz /= vl;
-    return { ux: ux, uz: uz, vx: vx, vz: vz };
+    inputs.value = { ux: ux, uz: uz, vx: vx, vz: vz };
+    axisCache.set(ob, inputs);
+    return inputs.value;
   }
   function toLocal(ob, x, z) {
     var a = axes(ob),

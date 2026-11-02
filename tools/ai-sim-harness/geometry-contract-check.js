@@ -50,6 +50,86 @@ function truckFootprint(v) {
 }
 const P = (x, z) => ({ x, z });
 
+test('obstacle sight reuses unchanged axes without caching ray answers', () => {
+  const r = { GTMath: { clamp: (v, lo, hi) => Math.max(lo, Math.min(hi, v)) }, GTLog() {} },
+    countedMath = Object.create(Math);
+  let normalizations = 0;
+  countedMath.hypot = (...args) => {
+    normalizations++;
+    return Math.hypot(...args);
+  };
+  loadModule(r, 'battle/obstacle-field.js', { Math: countedMath, console: quietConsole });
+  const F = r.BattleObstacleField,
+    ob = { ...wall('slope', 0, 0, 5, 0.4, 0.3), y0: 0, y1: 0.7 },
+    keys = Object.keys(ob),
+    a = { x: -9, z: 0, y: 1 },
+    b = { x: 9, z: 0, y: 1 };
+  const hit = F.sightHitT(ob, a, b);
+  assert.notEqual(hit, null, 'real sloped prism ray intersects');
+  assert.equal(normalizations, 2, 'one normalization for each of the two axes');
+  for (let i = 0; i < 500; i++) assert.equal(F.sightHitT(ob, a, b), hit);
+  assert.equal(normalizations, 2, 'identical axis inputs never repeat normalization');
+  assert.equal(F.sightHitT(ob, { ...a, y: 10 }, { ...b, y: 10 }), null, 'new ray still tested');
+  ob.height = 20;
+  assert.notEqual(F.sightHitT(ob, { ...a, y: 10 }, { ...b, y: 10 }), null, 'height remains live');
+  ob.x = 50;
+  assert.equal(F.sightHitT(ob, a, b), null, 'translation remains live');
+  assert.deepEqual(Object.keys(ob), keys, 'cache adds no obstacle fields');
+});
+
+test('cached obstacle axes match fresh inputs across mutation, fallbacks and signed zero', () => {
+  const r = { GTMath: { clamp: (v, lo, hi) => Math.max(lo, Math.min(hi, v)) }, GTLog() {} };
+  loadModule(r, 'battle/obstacle-field.js', { console: quietConsole });
+  const F = r.BattleObstacleField,
+    ob = { ...wall('changing', 0, 0, 5, 0.4, 0), y0: 0.1, y1: 0.9 },
+    variants = [
+      [1, 0, 0, 1],
+      [1, 1, -1, 1],
+      [2, 1, -1, 1],
+      [2, 2, -1, 1],
+      [2, 2, -2, 1],
+      [2, 2, -2, 2],
+      [2, 3, -3, 2],
+      [0, 0, 0, 0],
+      [undefined, undefined, undefined, undefined],
+      [NaN, Infinity, NaN, Infinity],
+      ['2', '3', '-3', '2'],
+      [null, null, null, null],
+      [1, -0, -0, 1],
+      [1, 0, 0, 1],
+      [1, 0, 1, 1],
+      [1, 0, 1, -1]
+    ];
+  for (const [ux, uz, vx, vz] of variants) {
+    Object.assign(ob, { ux, uz, vx, vz });
+    for (let i = 0; i < 80; i++) {
+      const t = i * 0.31,
+        a = { x: Math.sin(t) * 9, z: Math.cos(t) * 9, y: i % 4 },
+        b = { x: -a.x, z: -a.z, y: (i + 1) % 4 },
+        fresh = { ...ob };
+      assert.equal(F.sightHitT(ob, a, b), F.sightHitT(fresh, a, b), 'warm/fresh prism intersection');
+      assert.equal(F.horizontalDistance(ob, a.x, a.z), F.horizontalDistance(fresh, a.x, a.z));
+      assert.equal(F.obstacleTop(ob, a.x, a.z), F.obstacleTop(fresh, a.x, a.z));
+    }
+  }
+});
+
+test('obstacle axis reuse always reads live truck heading getters', () => {
+  const { F, obstacles } = world(),
+    vehicle = { id: 'turning-truck', position: { x: 0, z: 0 }, heading: { x: 0, z: 1 } },
+    fp = truckFootprint(vehicle),
+    a = { x: -5, z: 2, y: 1 },
+    b = { x: 5, z: 2, y: 1 };
+  obstacles.__dynamicFootprints = [fp];
+  assert.equal(F.sightBlocked(obstacles, a, b), true);
+  vehicle.heading = { x: 1, z: 0 };
+  assert.equal(F.sightBlocked(obstacles, a, b), false, 'same version/time rotated truck no longer blocks');
+  vehicle.position.z = 2;
+  assert.equal(F.sightBlocked(obstacles, a, b), true, 'same version/time translated truck blocks');
+  assert.equal(F.sightBlocked(obstacles, a, b, { ignoreDynamicId: vehicle.id }), false);
+  assert.equal(F.sightBlocked(obstacles, a, b), true, 'self-ignore does not cache a visibility answer');
+});
+
 test('static OBB blocks a crossing step and honours the 0.45 m body margin', () => {
   const { N } = world({ statics: [wall('w', 0, 0, 5, 0.25, 0)] });
   assert.equal(N.movementClear(P(0, -4), P(0, 4)), false, 'crossing the wall');
