@@ -18,9 +18,12 @@ function navigation(fullScan) {
     'var w = walls[candidates ? candidates[i] : i];',
     'var w = walls[candidates ? candidates[i] : i];\n      root._wallVisits++;'
   );
+  src = src.replace('          out.push(id);', '          out.push(id);\n          root._wallCollections++;');
   if (fullScan) src = src.replace('    rebuildWallIndex();', '    wallIndex = null;');
   const root = {
     _wallVisits: 0,
+    _wallCollections: 0,
+    _queryCacheClears: 0,
     GTLog() {},
     GTMath: {
       clamp(v, lo, hi) {
@@ -28,7 +31,13 @@ function navigation(fullScan) {
       }
     }
   };
-  new Function('window', 'globalThis', 'location', src)(root, root, { search: '' });
+  class ObservedMap extends Map {
+    clear() {
+      root._queryCacheClears++;
+      return super.clear();
+    }
+  }
+  new Function('window', 'globalThis', 'location', 'Map', src)(root, root, { search: '' }, ObservedMap);
   return { root, nav: root.BattleNavigation };
 }
 const fast = navigation(false);
@@ -96,6 +105,51 @@ for (const offset of [0, 57, -85]) {
     compare(a, a);
   }
 }
+// Different exact rays in one cell range share only the ordered candidate list.
+// Native movement and aperture tests must still run for each query.
+fast.nav.installScenario(scene(0));
+slow.nav.installScenario(scene(0));
+compare({ x: -181, z: -172 }, { x: -163, z: -172 });
+const collectionsBefore = fast.root._wallCollections,
+  visitsBefore = fast.root._wallVisits,
+  answers = new Set();
+for (let i = 0; i < 100; i++) {
+  const a = { x: -181 + i * 0.01, z: -172 + i * 0.01 },
+    b = i % 2 ? { ...a } : { x: -163, z: -172 - i * 0.01 };
+  const clear = fast.nav.movementClear(a, b);
+  answers.add(clear);
+  assert.equal(clear, slow.nav.movementClear(a, b));
+  assert.equal(!!fast.nav.lineOfSightBlocked(a, b, 1.5, 1.5), !!slow.nav.lineOfSightBlocked(a, b, 1.5, 1.5));
+}
+assert.equal(answers.size, 2, 'cached candidate lists must still allow both clear and blocked answers');
+assert.equal(
+  fast.root._wallCollections - collectionsBefore,
+  0,
+  'unchanged cell ranges do not gather/sort the same wall IDs again'
+);
+assert.ok(fast.root._wallVisits > visitsBefore, 'actual wall intersection tests remain live on every query');
+const doorA = { x: -172.5, z: -167.5 },
+  doorB = { x: -172.5, z: -163.5 },
+  north = fast.nav.walls.find(w => w.building.id === 'test-0-0' && w.side === 'north'),
+  openings = north.openings;
+assert.equal(fast.nav.movementClear(doorA, doorB), true, 'native door initially admits the segment');
+north.openings = [];
+assert.equal(fast.nav.movementClear(doorA, doorB), false, 'cached IDs still read the live aperture rules');
+north.openings = openings;
+assert.equal(fast.nav.movementClear(doorA, doorB), true, 'restored aperture is authoritative immediately');
+// Exercise more distinct cell rectangles than the bounded cache retains.
+for (let x = -5; x < 5; x++)
+  for (let z = -5; z < 5; z++)
+    for (let span = 0; span < 16; span++) {
+      const a = { x: x * 32 + 0.5, z: z * 32 + 10.5 },
+        b = { x: (x + span) * 32 + 10.5, z: a.z };
+      assert.equal(fast.nav.movementClear(a, b), slow.nav.movementClear(a, b));
+      assert.equal(
+        !!fast.nav.lineOfSightBlocked(a, b, 1.5, 1.5),
+        !!slow.nav.lineOfSightBlocked(a, b, 1.5, 1.5)
+      );
+    }
+assert.ok(fast.root._queryCacheClears > 0, 'bounded collection cache eviction was exercised');
 // Replacing a populated scenario must invalidate the old grid completely.
 fast.nav.installScenario({ buildings: [], profile: 'default' });
 slow.nav.installScenario({ buildings: [], profile: 'default' });
