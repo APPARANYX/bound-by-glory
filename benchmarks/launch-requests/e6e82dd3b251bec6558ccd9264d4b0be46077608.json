@@ -1,0 +1,17 @@
+{
+  "branch": "work/benchmark-launch/pacing4-causal-20261030",
+  "launch_parent_sha": "946eaa95cce45fba2b3ea4085034ff2832e0a0c7",
+  "launch_sha": "e6e82dd3b251bec6558ccd9264d4b0be46077608",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/946eaa95cce45fba2b3ea4085034ff2832e0a0c7",
+  "request": {
+    "benchmark": "causal",
+    "query": "strategicInterception=0&tacticalController=new",
+    "ref": "work/pin/pacing-946eaa95",
+    "seconds": 600,
+    "seeds": 20
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/pacing-946eaa95",
+  "source_sha_at_archive": "946eaa95cce45fba2b3ea4085034ff2832e0a0c7"
+}
