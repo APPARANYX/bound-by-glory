@@ -120,6 +120,41 @@ test('stance concealment is 100/60/35 percent at rest, with an 18 point movement
   );
 });
 
+test('one target scan reads detection range once and new scans retain live inputs', () => {
+  const ctx = setup([
+    { id: 'us-0', faction: 'us', x: 0, z: 0 },
+    { id: 'ge-0', faction: 'ge', x: 0, z: 300 }
+  ]);
+  const me = lone(ctx.out[0]),
+    foe = lone(ctx.out[1]);
+  me.root.position.x = me.root.position.z = 0;
+  me.root.rotation.y = 0;
+  me.moving = true;
+  const base = ctx.S.detectionRange(ctx.S.ROLES[me.role], foe);
+  place(foe, 90, base * (ctx.P.PERIPHERAL_RANGE - 0.05));
+  let reads = 0,
+    scale = 1;
+  ctx.r.PhaseCCombatLab = {
+    get rangeScale() {
+      reads++;
+      return scale;
+    }
+  };
+  assert.ok(sees(ctx, me, foe), 'peripheral target uses the same native range and reach');
+  assert.equal(reads, 1, 'initial range and peripheral range gates share one computation');
+  scale = 0.1;
+  assert.ok(!sees(ctx, me, foe), 'new scan reads changed lab range immediately');
+  assert.equal(reads, 2);
+  scale = 1;
+  foe.prone = true;
+  assert.ok(!sees(ctx, me, foe), 'new scan reads changed target stance immediately');
+  assert.equal(reads, 3);
+  foe.prone = false;
+  foe.moving = true;
+  assert.ok(sees(ctx, me, foe), 'new scan reads movement visibility immediately');
+  assert.equal(reads, 4);
+});
+
 test('he looks toward the known threat of his squad when a head turn reaches it', () => {
   const ctx = setup([
     { id: 'us-0', faction: 'us', x: 0, z: 0 },

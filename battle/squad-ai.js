@@ -989,11 +989,13 @@
       if (!threatDisposition(e).combatThreat) continue;
       var ex = e.root.position.x,
         ez = e.root.position.z,
-        d = dist2(p.x, p.z, ex, ez);
-      if (d > detectionRange(role, e) * sight) continue;
+        d = dist2(p.x, p.z, ex, ez),
+        range = detectionRange(role, e);
+      if (d > range * sight) continue;
       if (PERCEPTION_ON && d > BEHIND_RANGE) {
         var reach = viewReach(angleBetween(Math.atan2(ex - p.x, ez - p.z), look), e);
-        if (!reach || d > detectionRange(role, e) * reach * sight) continue;
+        // Both gates inspect this target in the same scan; the next scan reads it anew.
+        if (!reach || d > range * reach * sight) continue;
       }
       scanBuffer.push({ unit: e, d: d });
     }
