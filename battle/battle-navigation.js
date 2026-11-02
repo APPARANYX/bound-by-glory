@@ -35,7 +35,8 @@
   /* Fixed building-wall geometry only. Preserve encounter order, exact intersection,
      doorway/LOS decisions and short-segment start-skin semantics. */
   var WALL_CELL = 32,
-    WALL_MAX_QUERY_CELLS = 64;
+    WALL_MAX_QUERY_CELLS = 64,
+    WALL_CACHED_QUERIES = 1024;
   var PORT = !(typeof location !== 'undefined' && /[?&]windowPort=0\b/.test(location.search || ''));
   /* Firing port (metres). The wall is drawn .32 thick around its plane, so its inner face is .16 behind
      it; a man's body is ~.25 in radius, so .45 is the closest anchor that keeps him off the wall. The old
@@ -145,25 +146,31 @@
       maxZ: maxZ,
       stamp: new Uint32Array(walls.length),
       epoch: 0,
-      scratch: []
+      empty: [],
+      queries: new Map()
     };
   }
   /* Returning null deliberately uses the original complete wall scan for long
      or anomalous queries; never cap search distance or omit a safety check.
-     The scratch array cannot escape blocked(), and the final numeric sort
+     Candidate arrays cannot escape blocked(), and the final numeric sort
      preserves which first blocking wall resolveStep() will use. */
   function wallCandidates(minX, maxX, minZ, maxZ) {
     var idx = wallIndex;
     if (!idx) return null;
     if (!Number.isFinite(minX + maxX + minZ + maxZ)) return null;
-    var out = idx.scratch;
-    out.length = 0;
-    if (maxX < idx.minX || minX > idx.maxX || maxZ < idx.minZ || minZ > idx.maxZ) return out;
+    if (maxX < idx.minX || minX > idx.maxX || maxZ < idx.minZ || minZ > idx.maxZ) return idx.empty;
     var c0 = Math.floor(minX / WALL_CELL),
       c1 = Math.floor(maxX / WALL_CELL),
       r0 = Math.floor(minZ / WALL_CELL),
       r1 = Math.floor(maxZ / WALL_CELL);
     if ((c1 - c0 + 1) * (r1 - r0 + 1) > WALL_MAX_QUERY_CELLS) return null;
+    /* The same cell rectangle always collects the same fixed wall IDs. Keep
+       their sorted list per installed index; each exact ray still performs
+       native AABB/intersection/aperture/start-skin checks in blocked(). */
+    var key = c0 + ',' + c1 + ',' + r0 + ',' + r1,
+      cached = idx.queries.get(key);
+    if (cached) return cached;
+    var out = [];
     if (++idx.epoch >= 4294967295) {
       idx.stamp.fill(0);
       idx.epoch = 1;
@@ -183,6 +190,9 @@
       out.sort(function (a, b) {
         return a - b;
       });
+    // Bound retained collection lists, without limiting any query or wall test.
+    if (idx.queries.size >= WALL_CACHED_QUERIES) idx.queries.clear();
+    idx.queries.set(key, out);
     return out;
   }
   function blocked(a, b, mode, ay, by) {
