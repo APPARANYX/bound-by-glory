@@ -1,0 +1,21 @@
+{
+  "branch": "work/benchmark-launch/roundstats-meeting-20261030",
+  "launch_parent_sha": "a018ab1b14e0db31c63f7b1635df533c2a570261",
+  "launch_sha": "c7d855a0243a430fc0a0d45488f5dcd2b1952468",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/a018ab1b14e0db31c63f7b1635df533c2a570261",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "standard",
+    "purpose": "#693 roundStats flag pair",
+    "query_off": "strategicInterception=0&roundStats=0",
+    "query_on": "strategicInterception=0",
+    "ref": "work/pin/roundstats-a018ab1b",
+    "seed": "roundstats-20261030",
+    "seeds": 60,
+    "sim_seconds": 600
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/roundstats-a018ab1b",
+  "source_sha_at_archive": "a018ab1b14e0db31c63f7b1635df533c2a570261"
+}
