@@ -1,0 +1,22 @@
+{
+  "branch": "work/benchmark-launch/698-supportwait-ge-defend",
+  "launch_parent_sha": "58bef7c1a82a4f7f514fb74e2636cac15c552f9f",
+  "launch_sha": "13d6e8cdbe2a64982e5fa8a80e2b08efdf36afc4",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/58bef7c1a82a4f7f514fb74e2636cac15c552f9f",
+  "request": {
+    "battle_type": "ge-defend",
+    "benchmark": "standard",
+    "origin_agent": "claude",
+    "purpose": "PR698 supportWait pair, controller on",
+    "query_off": "tacticalController=new&strategicInterception=0&supportWait=0",
+    "query_on": "tacticalController=new&strategicInterception=0",
+    "ref": "claude/project-thread-jxet0c",
+    "seed": "pr698-sw",
+    "seeds": "60",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "claude/project-thread-jxet0c",
+  "source_sha_at_archive": null
+}
