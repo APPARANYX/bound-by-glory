@@ -270,8 +270,8 @@
     return occupied;
   }
 
-  function toLocal(fp, p) {
-    var a = axes(fp),
+  function toLocal(fp, p, basis) {
+    var a = basis || axes(fp),
       dx = p.x - (+fp.x || 0),
       dz = p.z - (+fp.z || 0);
     return { x: dx * a.ux + dz * a.uz, z: dx * a.vx + dz * a.vz };
@@ -328,8 +328,11 @@
   }
   function segmentObb(a, b, fp, margin) {
     margin = shapeMargin(fp, margin || 0);
-    var A = toLocal(fp, a),
-      B = toLocal(fp, b),
+    /* Both endpoints belong to one synchronous segment query. Normalize the live
+       basis once for that query; retain nothing across calls or world changes. */
+    var basis = axes(fp),
+      A = toLocal(fp, a, basis),
+      B = toLocal(fp, b, basis),
       hx = (+fp.hx || 0.5) + margin,
       hz = (+fp.hz || 0.5) + margin,
       dx = B.x - A.x,
