@@ -1,0 +1,17 @@
+{
+  "branch": "work/benchmark-launch/rk-causal-20261031",
+  "launch_parent_sha": "68505ba8018cb9a8b5d2a2063a65eb626a46d817",
+  "launch_sha": "c355d4e7462c6c0621287793ae387dd55200c9cd",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "benchmark": "causal",
+    "query": "strategicInterception=0&tacticalController=new",
+    "ref": "work/pin/rosterkeep-f3e1bfa2",
+    "seconds": 600,
+    "seeds": 20
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/rosterkeep-f3e1bfa2",
+  "source_sha_at_archive": "f3e1bfa2cec52f787c6e4de558c49a74ded549b7"
+}
