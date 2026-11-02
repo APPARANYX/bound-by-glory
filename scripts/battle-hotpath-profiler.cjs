@@ -35,6 +35,7 @@
       failedFinalReasons: Object.create(null),
       edgeRejections: Object.create(null),
       freshTerminals: Object.create(null),
+      queryRepetition: Object.create(null),
       totals: {
         candidateQueries: 0,
         candidatesReturned: 0,
@@ -98,6 +99,81 @@
     } else if (label === 'squad.hasLineOfSight') totals.sightQueries++;
     else if (label === 'navigation.movementClear') totals.movementQueries++;
   }
+  /* Observe exact explicit query inputs within ONE synchronous pick. These are
+     repetition candidates, not cache hits: every native query still executes.
+     World mutation is not encoded by this diagnostic; result disagreements
+     explicitly disqualify reuse. Bound diagnostic memory, never gameplay work. */
+  function recordQueryRepetition(label, args, result, elapsed) {
+    if (!routeActive || typeof result !== 'boolean') return;
+    var movement = label === 'navigation.movementClear',
+      sight = label === 'obstacle.sightBlocked';
+    if (!movement && !sight) return;
+    var a = args[movement ? 0 : 1],
+      b = args[movement ? 1 : 2],
+      options = args[movement ? 2 : 3];
+    if (!a || !b) return;
+    var kind = movement ? 'movementClear' : 'sightBlocked',
+      rows = routePlanning.queryRepetition,
+      row =
+        rows[kind] ||
+        (rows[kind] = {
+          calls: 0,
+          repeated: 0,
+          distinctTracked: 0,
+          resultDisagreements: 0,
+          untracked: 0,
+          repeatedMs: 0,
+          byProducer: Object.create(null)
+        }),
+      producer = routeActive.producer || 'route-graph',
+      by = row.byProducer[producer] || (row.byProducer[producer] = { calls: 0, repeated: 0 });
+    row.calls++;
+    by.calls++;
+    // Only the declared native option is classified. Do not silently equate
+    // unsupported query options or round coordinates (including signed zero).
+    if (
+      (options &&
+        Object.keys(options).some(function (k) {
+          return k !== 'ignoreDynamicId';
+        })) ||
+      (options &&
+        options.ignoreDynamicId != null &&
+        (typeof options.ignoreDynamicId === 'object' || typeof options.ignoreDynamicId === 'function'))
+    ) {
+      row.untracked++;
+      return;
+    }
+    function scalar(v) {
+      return typeof v + ':' + (Object.is(v, -0) ? '-0' : String(v));
+    }
+    var values = [a.x, a.z, b.x, b.z];
+    if (sight) values.push(a.y, b.y);
+    values.push(options && options.ignoreDynamicId);
+    var key = values.map(scalar).join('|'),
+      queries = routeActive.queries[kind];
+    if (!queries) queries = routeActive.queries[kind] = new Map();
+    // Obstacle-array identity matters even within one pick. Do not inspect or
+    // serialize live geometry/getters merely to construct a diagnostic key.
+    if (sight) {
+      var identities = routeActive.obstacleIds,
+        source = args[0];
+      if (!source || (typeof source !== 'object' && typeof source !== 'function')) {
+        row.untracked++;
+        return;
+      }
+      if (!identities.has(source)) identities.set(source, ++routeActive.nextObstacleId);
+      key += '|source:' + identities.get(source);
+    }
+    if (queries.has(key)) {
+      row.repeated++;
+      by.repeated++;
+      row.repeatedMs += elapsed;
+      if (queries.get(key) !== result) row.resultDisagreements++;
+    } else if (queries.size < 10000) {
+      queries.set(key, result);
+      row.distinctTracked++;
+    } else row.untracked++;
+  }
   function wrapRoutePick() {
     var obj = root.BattleTacticalContactRoute,
       key = 'pick';
@@ -108,7 +184,11 @@
         previous = s && routeLast.get(s),
         observed = routeInputs(s, sim, reports, goal, taken),
         sample = {
-          totals: { candidateQueries: 0, candidatesReturned: 0, sightQueries: 0, movementQueries: 0 }
+          totals: { candidateQueries: 0, candidatesReturned: 0, sightQueries: 0, movementQueries: 0 },
+          queries: Object.create(null),
+          obstacleIds: new WeakMap(),
+          nextObstacleId: 0,
+          producer: null
         },
         start = clock(),
         result;
@@ -213,14 +293,21 @@
     var fn = obj[key];
     if (fn.__battleHotpathWrapped) return false;
     function profiled() {
-      var start = clock();
+      var start = clock(),
+        active = routeActive,
+        previousProducer = active && active.producer;
+      if (active && (label === 'navigation.findPath' || label.indexOf('cover-positions.') === 0))
+        active.producer = label;
       var result;
       try {
         result = fn.apply(this, arguments);
         return result;
       } finally {
-        record(label, clock() - start);
+        var elapsed = clock() - start;
+        record(label, elapsed);
+        recordQueryRepetition(label, arguments, result, elapsed);
         recordRouteCheck(label, result);
+        if (active) active.producer = previousProducer;
       }
     }
     profiled.__battleHotpathWrapped = true;
@@ -263,13 +350,16 @@
     var label = 'obstacle.' + key;
     function profiled() {
       var parent = currentScope(),
-        start = clock();
+        start = clock(),
+        result;
       try {
-        return fn.apply(this, arguments);
+        result = fn.apply(this, arguments);
+        return result;
       } finally {
         var elapsed = clock() - start;
         record(label, elapsed);
         record(label + '@' + parent, elapsed);
+        recordQueryRepetition(label, arguments, result, elapsed);
       }
     }
     profiled.__battleHotpathWrapped = true;
@@ -470,7 +560,7 @@
     });
     if (limit > 0) rows = rows.slice(0, limit);
     return {
-      version: '1.6',
+      version: '1.7',
       wallMs: +wallMs.toFixed(3),
       rows: rows,
       routePlanning: {
@@ -485,6 +575,7 @@
         failedFinalReasons: Object.assign({}, routePlanning.failedFinalReasons),
         edgeRejections: Object.assign({}, routePlanning.edgeRejections),
         freshTerminals: Object.assign({}, routePlanning.freshTerminals),
+        queryRepetition: JSON.parse(JSON.stringify(routePlanning.queryRepetition)),
         totals: Object.assign({}, routePlanning.totals)
       }
     };
@@ -499,5 +590,5 @@
   }
 
   install();
-  root.BattleHotpathProfiler = { version: '1.6', reset: reset, snapshot: snapshot, restore: restore };
+  root.BattleHotpathProfiler = { version: '1.7', reset: reset, snapshot: snapshot, restore: restore };
 })(typeof window !== 'undefined' ? window : globalThis);

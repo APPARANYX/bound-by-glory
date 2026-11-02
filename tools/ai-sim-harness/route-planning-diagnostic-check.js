@@ -92,3 +92,81 @@ assert.equal(P.snapshot().routePlanning.calls, 0, 'restored calls are no longer 
 console.log(
   'PASS opt-in route planning diagnostic: fresh, retained, negative cache, causes, native checks and restore'
 );
+
+// Repetition is evidence about explicit inputs, never permission to skip native
+// calls. Include contradictory results, options, signed zero and source identity.
+const geometry = [],
+  otherGeometry = [];
+let nativeCalls = 0,
+  pickCalls = 0;
+const ordinaryResult = { point: null, stats: {} };
+const Q = {
+  performance: { now: () => ++ticks },
+  BattleObstacleField: {
+    sightBlocked() {
+      nativeCalls++;
+      return false;
+    }
+  },
+  BattleNavigation: {
+    movementClear(a, b) {
+      nativeCalls++;
+      return nativeCalls % 2 === 0;
+    },
+    findPath(a, b) {
+      Q.BattleNavigation.movementClear(a, b);
+      return [];
+    }
+  },
+  BattleTacticalContactRoute: {
+    pick() {
+      pickCalls++;
+      const a = { x: 1, z: 2 },
+        b = { x: 3, z: 4 },
+        eye = { ...a, y: 1 },
+        target = { ...b, y: 2 };
+      Q.BattleNavigation.movementClear(a, b);
+      Q.BattleNavigation.movementClear(a, b); // contradictory same inputs
+      Q.BattleNavigation.findPath(a, b); // cross-producer repeat
+      Q.BattleNavigation.movementClear(a, b, { ignoreDynamicId: 'carrier' });
+      Q.BattleNavigation.movementClear(a, b, { unknown: true });
+      Q.BattleNavigation.movementClear({ x: 0, z: 2 }, b);
+      Q.BattleNavigation.movementClear({ x: -0, z: 2 }, b);
+      Q.BattleObstacleField.sightBlocked(geometry, eye, target);
+      Q.BattleObstacleField.sightBlocked(geometry, eye, target);
+      Q.BattleObstacleField.sightBlocked(otherGeometry, eye, target);
+      Q.BattleObstacleField.sightBlocked(geometry, { ...eye, y: 1.1 }, target);
+      return ordinaryResult;
+    }
+  }
+};
+loadModule(Q, 'scripts/battle-hotpath-profiler.cjs');
+for (let i = 0; i < 2; i++) {
+  assert.equal(Q.BattleTacticalContactRoute.pick(s, sim, reports, { x: 0, z: 8 }, []), ordinaryResult);
+}
+assert.equal(nativeCalls, 22, 'every native query executes, including every repeated query');
+const repeats = Q.BattleHotpathProfiler.snapshot().routePlanning.queryRepetition;
+assert.equal(repeats.movementClear.calls, 14);
+assert.equal(repeats.movementClear.repeated, 4, 'counts reset between individual picks');
+assert.equal(repeats.movementClear.distinctTracked, 8, 'options and signed zero remain distinct');
+assert.equal(repeats.movementClear.untracked, 2, 'unsupported options are explicit omissions');
+assert.equal(repeats.movementClear.resultDisagreements, 2, 'same inputs can still have changed results');
+assert.equal(repeats.movementClear.byProducer['navigation.findPath'].repeated, 2);
+assert.equal(repeats.sightBlocked.calls, 8);
+assert.equal(repeats.sightBlocked.repeated, 2);
+assert.equal(repeats.sightBlocked.distinctTracked, 6, 'height and obstacle source identity remain distinct');
+assert.equal(repeats.sightBlocked.resultDisagreements, 0);
+repeats.movementClear.calls = -1;
+assert.equal(
+  Q.BattleHotpathProfiler.snapshot().routePlanning.queryRepetition.movementClear.calls,
+  14,
+  'diagnostic snapshots are detached'
+);
+Q.BattleHotpathProfiler.reset();
+assert.deepEqual(Q.BattleHotpathProfiler.snapshot().routePlanning.queryRepetition, {});
+Q.BattleHotpathProfiler.restore();
+Q.BattleTacticalContactRoute.pick();
+assert.equal(nativeCalls, 33);
+assert.equal(pickCalls, 3);
+assert.deepEqual(Q.BattleHotpathProfiler.snapshot().routePlanning.queryRepetition, {});
+console.log('PASS exact per-pick query repetitions, producer attribution, disagreements and restore');
