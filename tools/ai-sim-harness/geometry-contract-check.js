@@ -5,8 +5,10 @@
    N.movementClear/findPath at load time, then pins what they promise together: moving and static
    OBBs, move versus sight query modes, the truck self-ignore, and replay determinism. */
 const assert = require('node:assert/strict'),
+  fs = require('node:fs'),
+  path = require('node:path'),
   H = require('./harness'),
-  { loadModule, quietConsole } = require('./module-loader');
+  { loadModule, loadSource, quietConsole } = require('./module-loader');
 let n = 0;
 function test(name, fn) {
   fn();
@@ -19,7 +21,10 @@ function world(opts) {
   loadModule(r, 'battle/modules/14-z-ballistic-raycast.js', { console: quietConsole });
   r.BattleModules = { registerSystem() {}, unitsFor: () => [] };
   loadModule(r, 'battle/battle-navigation.js', { console: quietConsole });
-  loadModule(r, 'battle/modules/39-navigation-physicality-debug.js', { console: quietConsole });
+  const file = 'battle/modules/39-navigation-physicality-debug.js',
+    bindings = { console: quietConsole, ...(opts.math ? { Math: opts.math } : {}) };
+  if (opts.physicalSource) loadSource(r, opts.physicalSource, bindings, file);
+  else loadModule(r, file, bindings);
   assert.ok(r.BattleNavigationPhysicality, 'physicality layer installed');
   const obstacles = [];
   obstacles.__physicalFootprints = opts.statics || [];
@@ -49,6 +54,70 @@ function truckFootprint(v) {
   return fp;
 }
 const P = (x, z) => ({ x, z });
+
+test('physical OBB segment normalizes one basis per query, with live geometry on the next query', () => {
+  const countedMath = Object.create(Math);
+  let normalizations = 0;
+  countedMath.hypot = (...args) => {
+    normalizations++;
+    return Math.hypot(...args);
+  };
+  const { r } = world({ math: countedMath }),
+    fp = wall('counted', 0, 0, 5, 0.4, 0.3),
+    G = r.BattleNavigationPhysicality,
+    a = P(0, -8),
+    b = P(0, 8);
+  assert.notEqual(G.shapeHit(a, b, fp, 0.45), null);
+  assert.equal(normalizations, 2, 'each of the two axes is normalized only once for both endpoints');
+  for (let i = 0; i < 200; i++) G.shapeHit(a, b, fp, 0.45);
+  assert.equal(normalizations, 402, 'each new query still reads and normalizes current axes');
+  fp.x = 40;
+  assert.equal(G.shapeHit(a, b, fp, 0.45), null, 'same-time translated shape is live');
+  fp.x = 3;
+  Object.assign(fp, { ux: 1, uz: 0, vx: 0, vz: 1 });
+  assert.notEqual(G.shapeHit(a, b, fp, 0.45), null);
+  Object.assign(fp, { ux: 0, uz: 1, vx: -1, vz: 0 });
+  assert.equal(G.shapeHit(a, b, fp, 0.45), null, 'same-time rotated shape is live');
+});
+
+test('call-local physical basis matches independent endpoint normalization across exact geometry cases', () => {
+  const source = fs.readFileSync(
+      path.join(__dirname, '../../battle/modules/39-navigation-physicality-debug.js'),
+      'utf8'
+    ),
+    optimized = 'var basis = axes(fp),\n      A = toLocal(fp, a, basis),\n      B = toLocal(fp, b, basis),',
+    original = 'var A = toLocal(fp, a),\n      B = toLocal(fp, b),';
+  assert.ok(source.includes(optimized), 'negative-control source anchor remains explicit');
+  const fast = world().r.BattleNavigationPhysicality,
+    control = world({ physicalSource: source.replace(optimized, original) }).r.BattleNavigationPhysicality,
+    variants = [
+      [1, 0, 0, 1],
+      [2, 3, -3, 2],
+      [0, 0, 0, 0],
+      [undefined, undefined, undefined, undefined],
+      [NaN, Infinity, NaN, Infinity],
+      ['2', '3', '-3', '2'],
+      [null, null, null, null],
+      [1, -0, -0, 1],
+      [1, 0, 1, 1],
+      [1, 0, 1, -1]
+    ];
+  let queries = 0;
+  for (const [ux, uz, vx, vz] of variants) {
+    const fp = { ...wall('parity', 1, -2, 5, 0.4, 0), ux, uz, vx, vz };
+    for (let i = 0; i < 300; i++) {
+      const t = i * 0.19,
+        a = P(Math.sin(t) * 9, Math.cos(t) * 7),
+        b = i % 7 ? P(Math.cos(t * 0.7) * 11, Math.sin(t * 0.7) * 9) : a,
+        margin = [0, 0.45, 1.15][i % 3];
+      fp.x = Math.sin(i * 0.01);
+      fp.z = Math.cos(i * 0.01);
+      assert.deepEqual(fast.shapeHit(a, b, fp, margin), control.shapeHit(a, b, fp, margin));
+      queries++;
+    }
+  }
+  assert.equal(queries, 3000);
+});
 
 test('obstacle sight reuses unchanged axes without caching ray answers', () => {
   const r = { GTMath: { clamp: (v, lo, hi) => Math.max(lo, Math.min(hi, v)) }, GTLog() {} },
