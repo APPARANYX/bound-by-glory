@@ -1,0 +1,22 @@
+{
+  "branch": "work/benchmark-launch/698-probes",
+  "launch_parent_sha": "58bef7c1a82a4f7f514fb74e2636cac15c552f9f",
+  "launch_sha": "15542a4d2494a393609f77f703641a134aa1d6e1",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/58bef7c1a82a4f7f514fb74e2636cac15c552f9f",
+  "request": {
+    "benchmark": "probe-pack",
+    "map": "tactical",
+    "origin_agent": "claude",
+    "purpose": "PR698 probe pack",
+    "query_off": "tacticalController=new&strategicInterception=0&supportWait=0&releasedOrder=0",
+    "query_on": "tacticalController=new&strategicInterception=0",
+    "ref": "claude/project-thread-jxet0c",
+    "seed": "pr698-pp",
+    "seeds": "20",
+    "sim_seconds": "600"
+  },
+  "schema_version": 1,
+  "source_ref": "claude/project-thread-jxet0c",
+  "source_sha_at_archive": null
+}
