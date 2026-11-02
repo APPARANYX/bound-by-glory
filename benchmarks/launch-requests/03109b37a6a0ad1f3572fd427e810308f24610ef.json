@@ -1,0 +1,23 @@
+{
+  "branch": "work/benchmark-launch/p698-off-main-ge-defend-20261031",
+  "launch_parent_sha": "bc23ab80d93928e5092ad7a57bc84ebbaf420c26",
+  "launch_sha": "03109b37a6a0ad1f3572fd427e810308f24610ef",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/bc23ab80d93928e5092ad7a57bc84ebbaf420c26",
+  "request": {
+    "battle_type": "ge-defend",
+    "benchmark": "standard",
+    "correlation_id": "pr-698-bc23ab80",
+    "origin_agent": "claude-code",
+    "purpose": "698 controller-off proof (main-9db774e1, controller off, identical arms): must equal main",
+    "query_off": "strategicInterception=0&localPlan=1&localTasks=1&localStructures=1&localEntry=1&localEntryGate=1&localSurvey=1&localWatch=1&localContactResume=1&localContinuity=1&localStructureOrders=1",
+    "query_on": "strategicInterception=0&localPlan=1&localTasks=1&localStructures=1&localEntry=1&localEntryGate=1&localSurvey=1&localWatch=1&localContactResume=1&localContinuity=1&localStructureOrders=1",
+    "ref": "work/pin/main-9db774e1",
+    "seed": "p698",
+    "seeds": "60",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/main-9db774e1",
+  "source_sha_at_archive": "9db774e127487c75bb20e2e4f11e420f14340d5c"
+}
