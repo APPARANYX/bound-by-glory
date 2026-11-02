@@ -1,0 +1,20 @@
+{
+  "branch": "work/benchmark-launch/pacing4-probe-20261030",
+  "launch_parent_sha": "946eaa95cce45fba2b3ea4085034ff2832e0a0c7",
+  "launch_sha": "08335b76eb975fb01eae9aa650638af8c8166db2",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/946eaa95cce45fba2b3ea4085034ff2832e0a0c7",
+  "request": {
+    "benchmark": "probe-pack",
+    "map": "tactical",
+    "query_off": "strategicInterception=0",
+    "query_on": "strategicInterception=0&tacticalController=new",
+    "ref": "work/pin/pacing-946eaa95",
+    "seed": "pacing4-probe-20261030",
+    "seeds": 20,
+    "sim_seconds": 600
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/pacing-946eaa95",
+  "source_sha_at_archive": "946eaa95cce45fba2b3ea4085034ff2832e0a0c7"
+}
