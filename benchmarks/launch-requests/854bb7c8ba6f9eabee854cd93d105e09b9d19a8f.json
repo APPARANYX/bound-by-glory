@@ -1,0 +1,23 @@
+{
+  "branch": "work/benchmark-launch/s697-ge-defend-20261031",
+  "launch_parent_sha": "d1f3035f52a93da77adf5ce260ef855dd4829759",
+  "launch_sha": "854bb7c8ba6f9eabee854cd93d105e09b9d19a8f",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/d1f3035f52a93da77adf5ce260ef855dd4829759",
+  "request": {
+    "battle_type": "ge-defend",
+    "benchmark": "standard",
+    "correlation_id": "pr-697",
+    "origin_agent": "claude-code",
+    "purpose": "697 structure chain under the controller: controllerStructure=0 vs on, chain flags on both",
+    "query_off": "tacticalController=new&strategicInterception=0&localPlan=1&localTasks=1&localStructures=1&localEntry=1&localEntryGate=1&localSurvey=1&localWatch=1&localContactResume=1&localContinuity=1&localStructureOrders=1&controllerStructure=0",
+    "query_on": "tacticalController=new&strategicInterception=0&localPlan=1&localTasks=1&localStructures=1&localEntry=1&localEntryGate=1&localSurvey=1&localWatch=1&localContactResume=1&localContinuity=1&localStructureOrders=1",
+    "ref": "claude/project-thread-ngjdqx",
+    "seed": "s697",
+    "seeds": "60",
+    "windows": "contact+120"
+  },
+  "schema_version": 1,
+  "source_ref": "claude/project-thread-ngjdqx",
+  "source_sha_at_archive": null
+}
