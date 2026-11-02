@@ -1,0 +1,20 @@
+{
+  "branch": "work/benchmark-launch/rk-probe-20261031",
+  "launch_parent_sha": "68505ba8018cb9a8b5d2a2063a65eb626a46d817",
+  "launch_sha": "3cd1296656def41bd1962647ba67bb8d8cd63a30",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "benchmark": "probe-pack",
+    "map": "tactical",
+    "query_off": "strategicInterception=0&tacticalController=new&rosterKeep=0",
+    "query_on": "strategicInterception=0&tacticalController=new",
+    "ref": "work/pin/rosterkeep-f3e1bfa2",
+    "seed": "rk-probe-20261031",
+    "seeds": 20,
+    "sim_seconds": 600
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/rosterkeep-f3e1bfa2",
+  "source_sha_at_archive": "f3e1bfa2cec52f787c6e4de558c49a74ded549b7"
+}
