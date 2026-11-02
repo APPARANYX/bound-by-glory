@@ -66,4 +66,6 @@ P.restore();
 assert.equal(root.BattleTacticalContactRoute.pick, originalPick);
 assert.equal(pick({ x: 0, z: 8 }), success);
 assert.equal(P.snapshot().routePlanning.calls, 0, 'restored calls are no longer instrumented');
-console.log('PASS opt-in route planning diagnostic: fresh, retained, negative cache, causes, native checks and restore');
+console.log(
+  'PASS opt-in route planning diagnostic: fresh, retained, negative cache, causes, native checks and restore'
+);
