@@ -176,10 +176,24 @@
     }
     var here = point(start),
       target = point(goal);
+    /* Share only this search's pre-existing exact point filters with the
+       native candidate owner. Admission precedes its physical stand query,
+       after live claims/bodies; the graph applies the same filters below. */
+    function routePointAllowed(p) {
+      return !!(
+        p &&
+        Number.isFinite(p.x) &&
+        Number.isFinite(p.z) &&
+        !(taken || []).some(function (q) {
+          return distance(q, p) < 2;
+        }) &&
+        !(crossTrack(p, here, target) > MAX_DETOUR)
+      );
+    }
     var horizon = Math.min(450, Math.max(100, distance(here, target) + 65)),
       candidates =
         (C.routeCandidates
-          ? C.routeCandidates(s, sim, threat, horizon)
+          ? C.routeCandidates(s, sim, threat, horizon, routePointAllowed)
           : C.candidates(s, sim, threat, horizon)) || [];
     /* Cover nodes come from real obstacle-backed slots. Never project imaginary
        virtual cover spots, and never reserve a future waypoint in advance. */
