@@ -17,7 +17,122 @@
   var startedAt = clock(),
     stats = Object.create(null),
     wrapped = [],
-    scope = [];
+    scope = [],
+    routeActive = null,
+    routeLast = new WeakMap(),
+    routePlanning = routeStats();
+
+  function routeStats() {
+    return {
+      calls: 0,
+      fresh: 0,
+      retained: 0,
+      negativeCache: 0,
+      failedFresh: 0,
+      retainedRejected: 0,
+      missingContact: 0,
+      freshReasons: Object.create(null),
+      totals: {
+        candidateQueries: 0,
+        candidatesReturned: 0,
+        sightQueries: 0,
+        movementQueries: 0,
+        edgeQueries: 0,
+        graphNodes: 0,
+        detourQueries: 0
+      }
+    };
+  }
+  function routeInputs(s, sim, reports, goal, taken) {
+    var p = s && s.root && s.root.position;
+    return {
+      x: p && p.x,
+      z: p && p.z,
+      goalX: goal && goal.x,
+      goalZ: goal && goal.z,
+      reports: (reports || [])
+        .map(function (r) {
+          return [r.x, r.z, r.at, r.confidence].join(',');
+        })
+        .join(';'),
+      suppressed: !!(s && sim && +s.suppressedUntil > sim.time),
+      navVersion: root.BattleNavigation && root.BattleNavigation.version,
+      taken: (taken || []).map(function (v) {
+        return [v.x, v.z].join(',');
+      }).join(';')
+    };
+  }
+  function routeReason(prev, now) {
+    if (!prev) return 'first-observation';
+    if (prev.goalX !== now.goalX || prev.goalZ !== now.goalZ) return 'goal-changed';
+    if (prev.reports !== now.reports) return 'reports-changed';
+    if (prev.navVersion !== now.navVersion) return 'navigation-version-changed';
+    if (prev.suppressed !== now.suppressed) return 'suppression-changed';
+    if (prev.taken !== now.taken) return 'squad-claims-changed';
+    if (prev.x !== now.x || prev.z !== now.z) return 'soldier-moved';
+    return 'same-observed-inputs';
+  }
+  function recordRouteCheck(label, result) {
+    if (!routeActive) return;
+    var totals = routeActive.totals;
+    if (label === 'cover-positions.candidates' || label === 'cover-positions.routeCandidates') {
+      totals.candidateQueries++;
+      if (Array.isArray(result)) totals.candidatesReturned += result.length;
+    } else if (label === 'squad.hasLineOfSight') totals.sightQueries++;
+    else if (label === 'navigation.movementClear') totals.movementQueries++;
+  }
+  function wrapRoutePick() {
+    var obj = root.BattleTacticalContactRoute,
+      key = 'pick';
+    if (!obj || typeof obj[key] !== 'function') return;
+    var fn = obj[key];
+    function profiled(s, sim, reports, goal, taken, retained) {
+      var prevScope = routeActive,
+        previous = s && routeLast.get(s),
+        observed = routeInputs(s, sim, reports, goal, taken),
+        sample = { totals: { candidateQueries: 0, candidatesReturned: 0, sightQueries: 0, movementQueries: 0 } },
+        start = clock(),
+        result;
+      routeActive = sample;
+      try {
+        result = fn.apply(this, arguments);
+        return result;
+      } finally {
+        routeActive = prevScope;
+        record('contact-route.pick', clock() - start);
+        if (result) {
+          routePlanning.calls++;
+          var hasRetained = !!(retained && retained.waypoints && retained.waypoints[retained.cursor]),
+            negativeCache =
+              previous && previous.result === result && !result.point && previous.negative;
+          if (result.reused) routePlanning.retained++;
+          else if (negativeCache) routePlanning.negativeCache++;
+          else {
+            routePlanning.fresh++;
+            if (!result.point) routePlanning.failedFresh++;
+            if (hasRetained) routePlanning.retainedRejected++;
+            var reason = routeReason(previous && previous.inputs, observed);
+            routePlanning.freshReasons[reason] = (routePlanning.freshReasons[reason] || 0) + 1;
+            if (result.stats && result.stats.rejected && result.stats.rejected['missing-world-or-contact'])
+              routePlanning.missingContact++;
+          }
+          Object.keys(sample.totals).forEach(function (k) {
+            routePlanning.totals[k] += sample.totals[k];
+          });
+          if (!negativeCache && !result.reused && result.stats) {
+            routePlanning.totals.edgeQueries += +result.stats.evaluatedEdges || 0;
+            routePlanning.totals.graphNodes += +result.stats.graphNodes || 0;
+            routePlanning.totals.detourQueries += +result.stats.nativePathQueries || 0;
+          }
+          if (s) routeLast.set(s, { inputs: observed, result: result, negative: !result.point });
+        }
+      }
+    }
+    profiled.__battleHotpathWrapped = true;
+    profiled.__battleHotpathOriginal = fn;
+    obj[key] = profiled;
+    wrapped.push({ obj: obj, key: key, fn: fn });
+  }
 
   function bucket(label) {
     return stats[label] || (stats[label] = { label: label, calls: 0, totalMs: 0, maxMs: 0 });
@@ -61,10 +176,13 @@
     if (fn.__battleHotpathWrapped) return false;
     function profiled() {
       var start = clock();
+      var result;
       try {
-        return fn.apply(this, arguments);
+        result = fn.apply(this, arguments);
+        return result;
       } finally {
         record(label, clock() - start);
+        recordRouteCheck(label, result);
       }
     }
     profiled.__battleHotpathWrapped = true;
@@ -239,8 +357,9 @@
     wrapScoped(root.BattleTacticalCoveredManeuver, 'update', 'covered-maneuver.update');
     wrapMany(root.BattleTacticalCoveredManeuver, 'covered-maneuver', ['summary']);
     wrapScoped(root.BattleTacticalFlankAssault, 'update', 'flank-assault.update');
-    wrapMany(root.BattleTacticalContactRoute, 'contact-route', ['pick', 'pickDefense', 'evaluate']);
-    wrapMany(root.BattleCoverPositions, 'cover-positions', ['boundThreats', 'candidates']);
+    wrapRoutePick();
+    wrapMany(root.BattleTacticalContactRoute, 'contact-route', ['pickDefense', 'evaluate']);
+    wrapMany(root.BattleCoverPositions, 'cover-positions', ['boundThreats', 'candidates', 'routeCandidates']);
     wrapMany(root.BattleGrenades, 'grenades', ['assaultAssessment']);
 
     wrapSightQuery('sightBlocked');
@@ -291,6 +410,9 @@
     stats = Object.create(null);
     startedAt = clock();
     scope.length = 0;
+    routeActive = null;
+    routeLast = new WeakMap();
+    routePlanning = routeStats();
   }
   function snapshot(limit) {
     var wallMs = Math.max(0, clock() - startedAt),
@@ -309,7 +431,22 @@
       return b.totalMs - a.totalMs || b.calls - a.calls;
     });
     if (limit > 0) rows = rows.slice(0, limit);
-    return { version: '1.5', wallMs: +wallMs.toFixed(3), rows: rows };
+    return {
+      version: '1.6',
+      wallMs: +wallMs.toFixed(3),
+      rows: rows,
+      routePlanning: {
+        calls: routePlanning.calls,
+        fresh: routePlanning.fresh,
+        retained: routePlanning.retained,
+        negativeCache: routePlanning.negativeCache,
+        failedFresh: routePlanning.failedFresh,
+        retainedRejected: routePlanning.retainedRejected,
+        missingContact: routePlanning.missingContact,
+        freshReasons: Object.assign({}, routePlanning.freshReasons),
+        totals: Object.assign({}, routePlanning.totals)
+      }
+    };
   }
   function restore() {
     for (var i = wrapped.length - 1; i >= 0; i--) {
@@ -321,5 +458,5 @@
   }
 
   install();
-  root.BattleHotpathProfiler = { version: '1.5', reset: reset, snapshot: snapshot, restore: restore };
+  root.BattleHotpathProfiler = { version: '1.6', reset: reset, snapshot: snapshot, restore: restore };
 })(typeof window !== 'undefined' ? window : globalThis);
