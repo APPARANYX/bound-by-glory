@@ -4,7 +4,11 @@ const assert = require('node:assert/strict');
 const { loadModule } = require('./module-loader');
 
 let ticks = 0;
-const s = { squad: {}, root: { position: { x: 1, z: 2 } }, suppressedUntil: 0 };
+const s = {
+  squad: {},
+  root: { position: { x: 1, z: 2 } },
+  suppressedUntil: 0
+};
 const windowState = { pendingCover: false, phase: 'idle', movingCount: 0 };
 const sim = { time: 10 };
 const success = { point: { x: 4, z: 6 }, stats: { graphNodes: 5, evaluatedEdges: 9, nativePathQueries: 2 } };
@@ -25,7 +29,12 @@ const root = {
   performance: { now: () => ++ticks },
   BattleNavigation: { version: 1, movementClear: () => true },
   SquadAI: { hasLineOfSight: () => true },
-  BattleTacticalCoveredManeuver: { summary: sq => { assert.equal(sq, s.squad); return windowState; } },
+  BattleTacticalCoveredManeuver: {
+    summary: sq => {
+      assert.equal(sq, s.squad);
+      return windowState;
+    }
+  },
   BattleCoverPositions: {
     routeCandidates: () => [{ x: 4, z: 6 }],
     candidates: () => [{ x: 4, z: 6 }]
