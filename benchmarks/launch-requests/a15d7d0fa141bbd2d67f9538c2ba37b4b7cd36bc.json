@@ -1,0 +1,20 @@
+{
+  "branch": "work/benchmark-launch/fin-probe-20261031",
+  "launch_parent_sha": "68505ba8018cb9a8b5d2a2063a65eb626a46d817",
+  "launch_sha": "a15d7d0fa141bbd2d67f9538c2ba37b4b7cd36bc",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "benchmark": "probe-pack",
+    "map": "tactical",
+    "query_off": "strategicInterception=0&tacticalController=new&rosterKeep=0&noHopStall=0",
+    "query_on": "strategicInterception=0&tacticalController=new",
+    "ref": "work/pin/final662-31f9d9e5",
+    "seed": "fin-probe-20261031",
+    "seeds": 20,
+    "sim_seconds": 600
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/final662-31f9d9e5",
+  "source_sha_at_archive": "31f9d9e53296918fb46d79303a703e13186e4f1b"
+}
