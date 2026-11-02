@@ -56,7 +56,8 @@
       straight = distance(from, to),
       path = null;
     if (!N || !N.movementClear) return { ok: false, reason: 'navigation-unavailable' };
-    if (N.movementClear(from, to)) path = [point(to)];
+    var direct = N.movementClear(from, to);
+    if (direct) path = [point(to)];
     else {
       if (!N.findPath) return { ok: false, reason: 'no-native-ingress-egress' };
       if (budget && budget.left <= 0) return { ok: false, reason: 'nav-detour-budget' };
@@ -78,7 +79,10 @@
         return { ok: false, reason: 'invalid-physical-detour' };
       p = point(p);
       var length = distance(cursor, p);
-      if (!N.movementClear(cursor, p)) return { ok: false, reason: 'blocked-physical-segment' };
+      /* A clear direct path contains exactly the segment already checked above.
+         Every navigator-supplied detour segment still needs its own query. No
+         geometry result survives this synchronous leg evaluation. */
+      if (!direct && !N.movementClear(cursor, p)) return { ok: false, reason: 'blocked-physical-segment' };
       total += length;
       if (total > maxTravel) return { ok: false, reason: 'overlong-physical-detour' };
       if (length > 0.01) points.push(p);

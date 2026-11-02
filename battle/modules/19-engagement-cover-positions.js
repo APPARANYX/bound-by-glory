@@ -264,6 +264,8 @@
           bySoldier: new Map(),
           claims: new Map(),
           bodies: new Map(),
+          bodyBuckets: [],
+          neighborhoods: new WeakMap(),
           bodyTime: null
         };
         var physical = obs.__physicalFootprints || [];
@@ -454,6 +456,7 @@
         all = [],
         seen = new Set();
       c.slots = new Map();
+      c.slotQuality = new Map();
       var outsideMargins = F
         ? marginIndex(F, c, slotPad())
         : function () {
@@ -479,7 +482,11 @@
         for (var j = 0; j < raw.length; j++) {
           var slot = raw[j];
           if (!outsideMargins(slot.x, slot.z) || !standable(slot)) continue;
-          if (F.coverPotentialAt(c.source, slot.x, slot.z) > USEFUL_COVER) continue;
+          // The slot's shelter quality depends only on the versioned obstacle geometry.
+          // Keep it alongside the slots; claims and moving bodies are still checked live.
+          var quality = F.coverPotentialAt(c.source, slot.x, slot.z);
+          if (quality > USEFUL_COVER) continue;
+          c.slotQuality.set(slot, quality);
           all.push(slot);
         }
       }
@@ -510,7 +517,10 @@
         bucket.push(slot);
         kept.push(slot);
       }
-      for (i = kept.length - 1; i >= 0; i--) c.slots.get(kept[i].shape).push(kept[i]);
+      for (i = kept.length - 1; i >= 0; i--) {
+        c.slots.get(kept[i].shape).push(kept[i]);
+        coverNeighborhood(c, kept[i]);
+      }
       c.slotCount = kept.length;
       c.slotsPruned = all.length - kept.length;
     }
@@ -518,10 +528,32 @@
       if (!c.slots) buildCoverSlots(c);
       return c.slots.get(c.shapes.get(String(ob.physicalId)) || ob) || [];
     }
+    /* Only the addresses of a slot's nine cells are static. Keep their arrays stable:
+       claims still expire/prune live, and body contents refill on the existing tick.
+       Custom reservation points may move, so their coordinates must still match. */
+    function coverNeighborhood(c, slot) {
+      var prior = c.neighborhoods.get(slot);
+      if (prior && prior.x === slot.x && prior.z === slot.z) return prior.cells;
+      var cx = Math.floor(slot.x / COVER_CELL),
+        cz = Math.floor(slot.z / COVER_CELL),
+        cells = [];
+      for (var x = -1; x <= 1; x++)
+        for (var z = -1; z <= 1; z++) {
+          var key = cx + x + ',' + (cz + z),
+            claims = c.claims.get(key),
+            bodies = c.bodies.get(key);
+          if (!claims) c.claims.set(key, (claims = []));
+          if (!bodies) c.bodies.set(key, (bodies = []));
+          cells.push({ claims: claims, bodies: bodies });
+        }
+      c.neighborhoods.set(slot, { x: slot.x, z: slot.z, cells: cells });
+      return cells;
+    }
     function coverBodies(c, battle) {
       if (c.bodyTime === battle.time) return;
       c.bodyTime = battle.time;
-      c.bodies.clear();
+      for (var i = 0; i < c.bodyBuckets.length; i++) c.bodyBuckets[i].length = 0;
+      c.bodyBuckets.length = 0;
       var roster = battle._roster || {};
       ['us', 'ge'].forEach(function (f) {
         (roster[f] || []).forEach(function (s) {
@@ -531,6 +563,7 @@
             var k = coverKey(p),
               list = c.bodies.get(k);
             if (!list) c.bodies.set(k, (list = []));
+            if (!list.length) c.bodyBuckets.push(list);
             list.push({ soldier: s, point: { x: p.x, z: p.z } });
           });
         });
@@ -538,32 +571,29 @@
     }
     function coverAvailable(c, slot, s, battle) {
       coverBodies(c, battle);
-      var cx = Math.floor(slot.x / COVER_CELL),
-        cz = Math.floor(slot.z / COVER_CELL);
-      for (var x = -1; x <= 1; x++)
-        for (var z = -1; z <= 1; z++) {
-          var key = cx + x + ',' + (cz + z),
-            list = c.claims.get(key) || [];
-          for (var i = list.length - 1; i >= 0; i--) {
-            var e = list[i];
-            if (!coverLive(e, battle)) {
-              dropCover(c, e);
-              continue;
-            }
-            if (e.soldier !== s && dist(e.slot.x, e.slot.z, slot.x, slot.z) < COVER_SPACING - 0.001)
-              return false;
+      var cells = coverNeighborhood(c, slot);
+      for (var cell = 0; cell < cells.length; cell++) {
+        var list = cells[cell].claims;
+        for (var i = list.length - 1; i >= 0; i--) {
+          var e = list[i];
+          if (!coverLive(e, battle)) {
+            dropCover(c, e);
+            continue;
           }
-          var bodies = c.bodies.get(key) || [];
-          for (i = 0; i < bodies.length; i++) {
-            var body = bodies[i];
-            if (
-              body.soldier !== s &&
-              !body.soldier.dead &&
-              dist(body.point.x, body.point.z, slot.x, slot.z) < 0.9
-            )
-              return false;
-          }
+          if (e.soldier !== s && dist(e.slot.x, e.slot.z, slot.x, slot.z) < COVER_SPACING - 0.001)
+            return false;
         }
+        var bodies = cells[cell].bodies;
+        for (i = 0; i < bodies.length; i++) {
+          var body = bodies[i];
+          if (
+            body.soldier !== s &&
+            !body.soldier.dead &&
+            dist(body.point.x, body.point.z, slot.x, slot.z) < 0.9
+          )
+            return false;
+        }
+      }
       var N = root.BattleNavigation;
       return !N || N.movementClear(slot, slot);
     }
@@ -607,7 +637,7 @@
           // The sheltering physical volume must actually lie between this slot and the threat.
           if (P && P.shapeHit && !P.shapeHit(slot, t, slot.shape, 0)) continue;
           if (!coverAvailable(c, slot, s, battle)) continue;
-          var quality = F.coverPotentialAt(battle.obstacles, slot.x, slot.z);
+          var quality = c.slotQuality.get(slot);
           if (quality > USEFUL_COVER) continue;
           out.push({
             x: slot.x,

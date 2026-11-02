@@ -255,6 +255,7 @@ try {
   );
 
   const top = (result.profile?.rows || []).slice(0, 25);
+  const route = result.profile?.routePlanning;
   const md = [
     '# Battle Sim hot-path profile',
     '',
@@ -264,6 +265,34 @@ try {
     `- Simulated: **${result.simulatedSeconds}s** in **${result.wallSeconds}s wall** (${result.realtimeMultiplier}× real-time)`,
     `- Fixed step: **${fixedDt}s** · snapshots every **${snapshotSeconds}s simulated**`,
     `- Policy: ${policy.source}, revision ${result.policyRevision}${policy.warning ? ` · ${policy.warning}` : ''}`,
+    '',
+    '## Route-planning diagnostic (profiler-only)',
+    '',
+    `- Calls: ${route?.calls || 0}; fresh searches: ${route?.fresh || 0}; retained: ${route?.retained || 0}; cached failures: ${route?.negativeCache || 0}; failed fresh: ${route?.failedFresh || 0}.`,
+    `- Retained checkpoints rejected before a fresh search: ${route?.retainedRejected || 0}.`,
+    `- Native requests inside contact-route.pick: ${route?.totals?.candidateQueries || 0} cover queries (${route?.totals?.candidatesReturned || 0} returned slots), ${route?.totals?.sightQueries || 0} line-of-sight calls, ${route?.totals?.movementQueries || 0} movement-clear calls.`,
+    `- Fresh graph totals: ${route?.totals?.graphNodes || 0} candidate nodes, ${route?.totals?.edgeQueries || 0} evaluated edges, ${route?.totals?.detourQueries || 0} detour requests.`,
+    '',
+    '| Reason for fresh search vs this soldier’s preceding observed request | Count |',
+    '|---|---:|',
+    ...Object.entries(route?.freshReasons || {})
+      .sort((a, b) => b[1] - a[1])
+      .map(([reason, count]) => `| ${reason} | ${count} |`),
+    '',
+    '### Fresh search outcomes and rejected edges',
+    '',
+    `- Failed search terminal reasons: ${JSON.stringify(route?.failedFinalReasons || {})}.`,
+    `- Fresh search terminal states: ${JSON.stringify(route?.freshTerminals || {})}.`,
+    '| Native graph rejection code | Rejected edges |',
+    '|---|---:|',
+    ...Object.entries(route?.edgeRejections || {})
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([reason, count]) => `| ${reason} | ${count} |`),
+    '',
+    '> Edge rejection counts are evaluations, not distinct failed plans; they can exceed the number of requests.',
+    '',
+    '> Reasons are exclusive differences between successive observed requests, not proof of tactical invalidation. “same-observed-inputs” means the recorded inputs matched; live occupancy and visibility can still change. Native counts include checks during retained-route validation. Both timing and counters are affected by profiler instrumentation.',
     '',
     '## Inclusive hot paths',
     '',
@@ -296,6 +325,7 @@ try {
   console.log(
     `PROFILE_SUMMARY ${JSON.stringify({ seed, battleType, wallSeconds: result.wallSeconds, simulatedSeconds: result.simulatedSeconds, realtimeMultiplier: result.realtimeMultiplier, top: top.slice(0, 12) })}`
   );
+  console.log('PROFILE_ROUTE_PLANNING ' + JSON.stringify(route));
   console.log(md.join('\n'));
 } finally {
   await browser.close();
