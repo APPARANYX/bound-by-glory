@@ -1,0 +1,20 @@
+{
+  "branch": "work/benchmark-launch/roundstats-probe-20261030",
+  "launch_parent_sha": "a018ab1b14e0db31c63f7b1635df533c2a570261",
+  "launch_sha": "ac7ad19091e00e8e7835ee85a53ec841fcde6e90",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/a018ab1b14e0db31c63f7b1635df533c2a570261",
+  "request": {
+    "benchmark": "probe-pack",
+    "map": "tactical",
+    "query_off": "strategicInterception=0&roundStats=0",
+    "query_on": "strategicInterception=0",
+    "ref": "work/pin/roundstats-a018ab1b",
+    "seed": "roundstats-probe-20261030",
+    "seeds": 20,
+    "sim_seconds": 600
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/roundstats-a018ab1b",
+  "source_sha_at_archive": "a018ab1b14e0db31c63f7b1635df533c2a570261"
+}
