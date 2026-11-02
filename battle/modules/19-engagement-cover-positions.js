@@ -569,7 +569,7 @@
         });
       });
     }
-    function coverAvailable(c, slot, s, battle) {
+    function coverAvailable(c, slot, s, battle, routePointAllowed) {
       coverBodies(c, battle);
       var cells = coverNeighborhood(c, slot);
       for (var cell = 0; cell < cells.length; cell++) {
@@ -594,6 +594,10 @@
             return false;
         }
       }
+      /* A route may discard this exact point by its existing corridor/taken
+         rules. Keep the live claim/body validation and expiry pruning above,
+         but do not query physical clearance for a point that cannot be used. */
+      if (routePointAllowed && !routePointAllowed(slot)) return false;
       var N = root.BattleNavigation;
       return !N || N.movementClear(slot, slot);
     }
@@ -612,6 +616,9 @@
       return e;
     }
     function coverCandidates(s, battle, threat, maxRange) {
+      return collectCoverCandidates(s, battle, threat, maxRange, null);
+    }
+    function collectCoverCandidates(s, battle, threat, maxRange, routePointAllowed) {
       var F = field();
       if (!F || !threat) return [];
       var c = coverRegistry(battle),
@@ -636,7 +643,7 @@
             continue;
           // The sheltering physical volume must actually lie between this slot and the threat.
           if (P && P.shapeHit && !P.shapeHit(slot, t, slot.shape, 0)) continue;
-          if (!coverAvailable(c, slot, s, battle)) continue;
+          if (!coverAvailable(c, slot, s, battle, routePointAllowed)) continue;
           var quality = c.slotQuality.get(slot);
           if (quality > USEFUL_COVER) continue;
           out.push({
@@ -814,8 +821,14 @@
       coverCandidates: coverCandidates,
       /* Same native obstacle/cover-slot eligibility at tactical graph radius.
          No new cover geometry and no independent claim or destination writer. */
-      routeCandidates: function (s, battle, threat, radius) {
-        return coverCandidates(s, battle, threat, Math.min(450, Math.max(26, radius || 180)));
+      routeCandidates: function (s, battle, threat, radius, routePointAllowed) {
+        return collectCoverCandidates(
+          s,
+          battle,
+          threat,
+          Math.min(450, Math.max(26, radius || 180)),
+          routePointAllowed
+        );
       },
       coverSnapshot: coverSnapshot,
       findCover: findCover,

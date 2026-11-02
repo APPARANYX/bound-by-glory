@@ -2456,6 +2456,9 @@
   root.BattleCoverPositions = {
     warm: warmCover,
     candidates: coverCandidates,
+    routeCandidates: function (s, battle, threat, radius, routePointAllowed) {
+      return coverImpl().routeCandidates(s, battle, threat, radius, routePointAllowed);
+    },
     reserve: reserveCover,
     release: releaseCover,
     current: currentCover,

@@ -170,6 +170,117 @@ test('owner cover discovery padding retains valid short slots and exact hop limi
   }
 });
 
+test('route-only admission skips irrelevant physical checks after live claim/body validation', () => {
+  const f = fixture([hedge()]),
+    api = f.r._engagementCoverPositions(f.r._engagementCoverCtx()),
+    threat = { x: 0, z: 60 };
+  api.warm(f.b);
+  const all = api.routeCandidates(f.s, f.b, threat, 26),
+    native = f.r.BattleNavigation.movementClear;
+  assert.ok(all.length > 2);
+  let calls = 0;
+  f.r.BattleNavigation.movementClear = function (...args) {
+    calls++;
+    return native.apply(this, args);
+  };
+  const none = api.routeCandidates(f.s, f.b, threat, 26, () => false);
+  assert.deepEqual(none, []);
+  assert.equal(calls, 0, 'rejected route points need no physical query');
+  assert.deepEqual(api.coverCandidates(f.s, f.b, threat, 26), all, 'ordinary candidate API is unchanged');
+  assert.ok(calls > 0, 'ordinary candidate API retains physical checks');
+  const pick = all[0],
+    other = f.q.members[1],
+    registry = api.coverRegistry(f.b);
+  assert.ok(api.reserveCover(other, f.b, pick.slot, 'route'));
+  other.dead = true;
+  api.routeCandidates(f.s, f.b, threat, 26, () => false);
+  assert.equal(registry.bySoldier.has(other), false, 'excluded route points still prune dead claims');
+  other.dead = false;
+  assert.ok(api.reserveCover(other, f.b, pick.slot, 'route'));
+  let seenClaimed = false;
+  api.routeCandidates(f.s, f.b, threat, 26, p => {
+    if (p.id === pick.slotId) seenClaimed = true;
+    return true;
+  });
+  assert.equal(seenClaimed, false, 'predicate never bypasses a live competing claim');
+  api.releaseCover(other, f.b);
+  Object.assign(other.root.position, { x: pick.x, z: pick.z });
+  f.b.time++;
+  let seenBody = false;
+  api.routeCandidates(f.s, f.b, threat, 26, p => {
+    if (p.id === pick.slotId) seenBody = true;
+    return true;
+  });
+  assert.equal(seenBody, false, 'predicate never bypasses body occupancy');
+  Object.assign(other.root.position, { x: 30, z: -8 });
+  f.b.time++;
+  const truck = { id: 'late-route-truck', type: 'truck', shape: 'circle', radius: 1, x: pick.x, z: pick.z };
+  f.b.obstacles.__dynamicFootprints = [truck];
+  const has = () => api.routeCandidates(f.s, f.b, threat, 26, () => true).some(p => p.slotId === pick.slotId);
+  assert.equal(has(), false, 'admitted point still checks a newly attached truck');
+  truck.x += 100;
+  assert.equal(has(), true, 'same-time moving geometry stays live');
+});
+
+test('native route admission removes only discarded point queries with identical plans and lifecycle state', () => {
+  function run(unfiltered, goal, taken) {
+    const obstacles = [];
+    for (const x of [-130, 0, 130])
+      for (const z of [0, 22, 44, 66])
+        obstacles.push({ ...hedge(), id: x + ':' + z, physicalId: x + ':' + z, x, z });
+    const f = fixture(obstacles),
+      C = f.C,
+      original = C.routeCandidates,
+      threat = { x: 0, z: 140 };
+    load(f.r, 'battle/modules/13g-tactical-contact-route.js');
+    // Controlled geometry fixture: isolate route membership and native clearance,
+    // rather than claiming spontaneous shelter/contact success.
+    f.r.SquadAI.hasLineOfSight = () => false;
+    C.warm(f.b);
+    if (unfiltered) C.routeCandidates = (s, b, t, radius) => original(s, b, t, radius);
+    const native = f.r.BattleNavigation.movementClear;
+    let calls = 0;
+    f.r.BattleNavigation.movementClear = function (...args) {
+      calls++;
+      return native.apply(this, args);
+    };
+    const result = f.r.BattleTacticalContactRoute.pick(f.s, f.b, [threat], goal, taken),
+      snapshots = C.snapshot(f.b),
+      state = JSON.stringify(
+        f.q.members.map(s => ({ id: s.id, pos: s.root.position, destination: s.destination }))
+      );
+    return { result, snapshots, state, calls };
+  }
+  let saved = 0,
+    before = 0,
+    after = 0;
+  for (const [goal, taken] of [
+    [{ x: 0, z: 80 }, []],
+    [{ x: 0, z: 80 }, [{ x: 0, z: -2.2 }]],
+    [{ x: 5, z: 70 }, [{ x: -5, z: -2.2 }]]
+  ]) {
+    const actual = run(false, goal, taken),
+      control = run(true, goal, taken);
+    assert.ok(actual.result.point, 'native fixture must exercise a successful physical route');
+    assert.deepEqual(
+      actual.result,
+      control.result,
+      'complete native route, scores, budgets, rejection counters'
+    );
+    assert.deepEqual(
+      actual.snapshots,
+      control.snapshots,
+      'same claim/reservation lifecycle state and slot order'
+    );
+    assert.equal(actual.state, control.state, 'planning issues no movement/command changes');
+    assert.ok(actual.calls < control.calls, 'irrelevant native stand queries removed before graph work');
+    saved += control.calls - actual.calls;
+    before += control.calls;
+    after += actual.calls;
+  }
+  console.log('native route admission clearance queries', JSON.stringify({ before, after, saved }));
+});
+
 test('static cover quality is reused, but claims and map-version changes remain live', () => {
   const f = fixture([hedge()]),
     F = f.r.BattleObstacleField,
@@ -294,6 +405,8 @@ test('the parent seam keeps the pre-split names, arities and the spacing export'
   assert.equal(C.release.length, 3, 'BattleCoverPositions.release(s, battle, kind)');
   assert.equal(C.current.length, 2, 'BattleCoverPositions.current(s, battle)');
   assert.equal(C.candidates.length, 4, 'BattleCoverPositions.candidates(s, battle, threat, maxRange)');
+  assert.equal(typeof C.routeCandidates, 'function', 'route-only candidate seam reaches the installed owner');
+  assert.equal(C.routeCandidates.length, 5, 'route candidate seam forwards its optional admission predicate');
   assert.equal(C.snapshot.length, 1, 'BattleCoverPositions.snapshot(battle)');
   assert.equal(C.warm.length, 1, 'BattleCoverPositions.warm(battle)');
   assert.equal(C.spacing, 1.8, 'the claim spacing export still reads the parent constant');

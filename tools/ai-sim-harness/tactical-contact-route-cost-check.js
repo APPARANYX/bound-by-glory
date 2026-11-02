@@ -13,7 +13,7 @@ const uncached = source.replace(hit, '/* Deliberately query every sample in the 
 const clearance = '!direct && !N.movementClear(cursor, p)';
 assert.equal(source.split(clearance).length, 2, 'control restores exactly one duplicate clearance');
 const rechecking = source.replace(clearance, '!N.movementClear(cursor, p)');
-function world(text, exposure, detour) {
+function world(text, exposure, detour, coverOverride) {
   let calls = 0,
     nativeCalls = 0;
   const root = {
@@ -35,13 +35,15 @@ function world(text, exposure, detour) {
     },
     BattleEngagement: { underFireNow: () => false },
     BattleCoverPositions: {
-      routeCandidates: () => cover,
+      routeCandidates: (_s, _sim, _threat, _radius, pointAllowed) =>
+        cover.filter(p => (!pointAllowed || pointAllowed(p)) && root.BattleNavigation.movementClear(p, p)),
       candidates: () => cover
     }
   };
   const cover = [];
   for (let x = -16; x <= 16; x += 8)
     for (let z = 8; z <= 64; z += 8) cover.push({ x, z, slotId: `${x}:${z}`, quality: 0.1 });
+  if (coverOverride) cover.splice(0, cover.length, ...coverOverride);
   loadSource(root, text, { console: quietConsole }, file);
   return {
     root,
@@ -114,6 +116,40 @@ assert.equal(
   'blocked-physical-segment',
   'a navigator path cannot bypass segment clearance'
 );
+// The native candidate owner can skip a stand query only for points the
+// existing exact route filters discard. Control restores those queries and
+// leaves every subsequent graph decision, budget and diagnostic intact.
+const admissionCall = 'C.routeCandidates(s, sim, threat, horizon, routePointAllowed)';
+assert.equal(source.split(admissionCall).length, 2, 'control restores one route-only admission boundary');
+const unfiltered = source.replace(admissionCall, 'C.routeCandidates(s, sim, threat, horizon)'),
+  filteredCover = [
+    { x: 0, z: 12, slotId: 'taken', quality: 0.1 },
+    { x: -12, z: 8, slotId: 'first', quality: 0.1 },
+    { x: -8, z: 28, slotId: 'middle', quality: 0.1 },
+    { x: 0, z: 48, slotId: 'last', quality: 0.1 },
+    ...Array.from({ length: 40 }, (_, i) => ({
+      x: (i % 2 ? -1 : 1) * (112 + (i % 8)),
+      z: (i % 6) * 3,
+      slotId: 'outside-corridor:' + i,
+      quality: 0.1
+    }))
+  ];
+let admissionSaved = 0;
+for (const detour of [false, true]) {
+  const fast = world(source, () => false, detour, filteredCover),
+    control = world(unfiltered, () => false, detour, filteredCover),
+    taken = [{ x: 0, z: 12 }],
+    run = w => w.root.BattleTacticalContactRoute.pick(w.soldier, w.sim, reports, goal, taken),
+    actual = run(fast);
+  assert.deepEqual(actual, run(control), 'admission preserves complete route, score, exposure and counters');
+  assert.equal(
+    control.nativeCalls() - fast.nativeCalls(),
+    41,
+    '40 outside-corridor and one taken point query removed'
+  );
+  admissionSaved += control.nativeCalls() - fast.nativeCalls();
+}
+
 let saved = 0,
   total = 0,
   nativeBefore = 0,
@@ -175,6 +211,7 @@ console.log(
     avoidedSightCalls: saved,
     avoidedPercent: +((saved / total) * 100).toFixed(1),
     nativeClearanceQueriesBefore: nativeBefore,
-    avoidedNativeClearanceQueries: nativeSaved
+    avoidedNativeClearanceQueries: nativeSaved,
+    avoidedIrrelevantStandQueries: admissionSaved
   })
 );
