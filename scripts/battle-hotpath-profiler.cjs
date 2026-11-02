@@ -32,6 +32,9 @@
       retainedRejected: 0,
       missingContact: 0,
       freshReasons: Object.create(null),
+      failedFinalReasons: Object.create(null),
+      edgeRejections: Object.create(null),
+      freshTerminals: Object.create(null),
       totals: {
         candidateQueries: 0,
         candidatesReturned: 0,
@@ -50,11 +53,15 @@
       z: p && p.z,
       goalX: goal && goal.x,
       goalZ: goal && goal.z,
-      reports: (reports || [])
-        .map(function (r) {
-          return [r.x, r.z, r.at, r.confidence].join(',');
-        })
-        .join(';'),
+      reportsExact: (reports || []).map(function (r) {
+        return [r.x, r.z].join(',');
+      }).join(';'),
+      reportsRounded: (reports || []).map(function (r) {
+        return [Math.round(r.x), Math.round(r.z)].join(',');
+      }).join(';'),
+      reportsMetadata: (reports || []).map(function (r) {
+        return [r.at, r.confidence].join(',');
+      }).join(';'),
       suppressed: !!(s && sim && +s.suppressedUntil > sim.time),
       navVersion: root.BattleNavigation && root.BattleNavigation.version,
       taken: (taken || []).map(function (v) {
@@ -65,7 +72,9 @@
   function routeReason(prev, now) {
     if (!prev) return 'first-observation';
     if (prev.goalX !== now.goalX || prev.goalZ !== now.goalZ) return 'goal-changed';
-    if (prev.reports !== now.reports) return 'reports-changed';
+    if (prev.reportsRounded !== now.reportsRounded) return 'contact-rounded-location-changed';
+    if (prev.reportsExact !== now.reportsExact) return 'contact-precise-location-changed';
+    if (prev.reportsMetadata !== now.reportsMetadata) return 'contact-observation-metadata-changed';
     if (prev.navVersion !== now.navVersion) return 'navigation-version-changed';
     if (prev.suppressed !== now.suppressed) return 'suppression-changed';
     if (prev.taken !== now.taken) return 'squad-claims-changed';
@@ -111,6 +120,23 @@
             routePlanning.fresh++;
             if (!result.point) routePlanning.failedFresh++;
             if (hasRetained) routePlanning.retainedRejected++;
+            if (result.stats) {
+              var terminal = result.stats.terminal || 'unknown';
+              routePlanning.freshTerminals[terminal] = (routePlanning.freshTerminals[terminal] || 0) + 1;
+              var rejected = result.stats.rejected || {};
+              Object.keys(rejected).forEach(function (code) {
+                routePlanning.edgeRejections[code] =
+                  (routePlanning.edgeRejections[code] || 0) + (+rejected[code] || 0);
+              });
+              if (!result.point) {
+                var finalReason =
+                  rejected['no-connected-progress-route'] ? 'no-connected-progress-route' :
+                  rejected['missing-world-or-contact'] ? 'missing-world-or-contact' :
+                  rejected['invalid-path-chain'] ? 'invalid-path-chain' : 'other';
+                routePlanning.failedFinalReasons[finalReason] =
+                  (routePlanning.failedFinalReasons[finalReason] || 0) + 1;
+              }
+            }
             var reason = routeReason(previous && previous.inputs, observed);
             routePlanning.freshReasons[reason] = (routePlanning.freshReasons[reason] || 0) + 1;
             if (result.stats && result.stats.rejected && result.stats.rejected['missing-world-or-contact'])
@@ -444,6 +470,9 @@
         retainedRejected: routePlanning.retainedRejected,
         missingContact: routePlanning.missingContact,
         freshReasons: Object.assign({}, routePlanning.freshReasons),
+        failedFinalReasons: Object.assign({}, routePlanning.failedFinalReasons),
+        edgeRejections: Object.assign({}, routePlanning.edgeRejections),
+        freshTerminals: Object.assign({}, routePlanning.freshTerminals),
         totals: Object.assign({}, routePlanning.totals)
       }
     };
