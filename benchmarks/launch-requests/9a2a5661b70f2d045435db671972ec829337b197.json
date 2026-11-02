@@ -1,0 +1,22 @@
+{
+  "branch": "work/benchmark-launch/698-releasedorder-off-meeting",
+  "launch_parent_sha": "58bef7c1a82a4f7f514fb74e2636cac15c552f9f",
+  "launch_sha": "9a2a5661b70f2d045435db671972ec829337b197",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/58bef7c1a82a4f7f514fb74e2636cac15c552f9f",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "standard",
+    "origin_agent": "claude",
+    "purpose": "PR698 releasedOrder pair, controller off (legacy)",
+    "query_off": "strategicInterception=0&releasedOrder=0",
+    "query_on": "strategicInterception=0",
+    "ref": "claude/project-thread-jxet0c",
+    "seed": "pr698-rl",
+    "seeds": "60",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "claude/project-thread-jxet0c",
+  "source_sha_at_archive": null
+}
