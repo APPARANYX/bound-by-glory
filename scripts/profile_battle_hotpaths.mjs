@@ -279,6 +279,19 @@ try {
       .sort((a, b) => b[1] - a[1])
       .map(([reason, count]) => `| ${reason} | ${count} |`),
     '',
+    '### Fresh search outcomes and rejected edges',
+    '',
+    `- Failed search terminal reasons: ${JSON.stringify(route?.failedFinalReasons || {})}.`,
+    `- Fresh search terminal states: ${JSON.stringify(route?.freshTerminals || {})}.`,
+    '| Native graph rejection code | Rejected edges |',
+    '|---|---:|',
+    ...Object.entries(route?.edgeRejections || {})
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([reason, count]) => `| ${reason} | ${count} |`),
+    '',
+    '> Edge rejection counts are evaluations, not distinct failed plans; they can exceed the number of requests.',
+    '',
     '> Reasons are exclusive differences between successive observed requests, not proof of tactical invalidation. “same-observed-inputs” means the recorded inputs matched; live occupancy and visibility can still change. Native counts include checks during retained-route validation. Both timing and counters are affected by profiler instrumentation.',
     '',
     '## Inclusive hot paths',
