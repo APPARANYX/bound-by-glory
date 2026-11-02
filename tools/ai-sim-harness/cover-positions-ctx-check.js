@@ -209,6 +209,82 @@ test('static cover quality is reused, but claims and map-version changes remain 
   }
 });
 
+test('slot neighborhoods reuse bucket addresses while reading live contents and clearance', () => {
+  const f = fixture([hedge()]),
+    api = f.r._engagementCoverPositions(f.r._engagementCoverCtx()),
+    threat = { x: 0, z: 60 };
+  api.warm(f.b);
+  const original = api.coverCandidates(f.s, f.b, threat, 26),
+    c = api.coverRegistry(f.b),
+    claimsGet = c.claims.get,
+    bodiesGet = c.bodies.get;
+  assert.ok(original.length > 2, 'native cover required');
+  let lookups = 0;
+  c.claims.get = function (key) {
+    lookups++;
+    return claimsGet.call(this, key);
+  };
+  c.bodies.get = function (key) {
+    lookups++;
+    return bodiesGet.call(this, key);
+  };
+  for (let i = 0; i < 4; i++)
+    assert.deepEqual(api.coverCandidates(f.s, f.b, threat, 26), original, 'same candidate order and values');
+  assert.equal(lookups, 0, 'unchanged slot neighborhoods need no repeated bucket lookups');
+
+  const pick = original[0],
+    other = f.q.members[1],
+    has = () => api.coverCandidates(f.s, f.b, threat, 26).some(p => p.slotId === pick.slotId);
+  assert.ok(api.reserveCover(other, f.b, pick.slot, 'route'));
+  assert.equal(has(), false, 'a new claim is visible in the already cached neighborhood');
+  api.releaseCover(other, f.b);
+  assert.equal(has(), true, 'release is immediately visible');
+  assert.ok(api.reserveCover(other, f.b, pick.slot, 'route'));
+  other.dead = true;
+  assert.equal(has(), true, 'dead claimant is pruned live');
+  other.dead = false;
+
+  const before = { x: other.root.position.x, z: other.root.position.z };
+  Object.assign(other.root.position, { x: pick.x, z: pick.z });
+  f.b.time++;
+  assert.equal(has(), false, 'body buckets refill in place on the existing tick cadence');
+  Object.assign(other.root.position, before);
+  other.destination = { x: pick.x, z: pick.z };
+  f.b.time++;
+  assert.equal(has(), false, 'live destination occupies the same cached neighborhood');
+  other.destination = null;
+  f.b.time++;
+  assert.equal(has(), true, 'cleared bodies do not remain in cached buckets');
+
+  const vehicle = { x: pick.x, z: pick.z },
+    truck = { id: 'late-truck', type: 'truck', shape: 'circle', radius: 1 };
+  Object.defineProperties(truck, { x: { get: () => vehicle.x }, z: { get: () => vehicle.z } });
+  f.b.obstacles.__dynamicFootprints = [truck];
+  assert.equal(has(), false, 'a newly attached truck blocks without a tick/version change');
+  vehicle.x += 100;
+  assert.equal(has(), true, 'moving truck is rechecked without a tick/version change');
+
+  const oldRegistry = c;
+  f.b.obstacles.__physicalVersion++;
+  api.coverCandidates(f.s, f.b, threat, 26);
+  assert.notEqual(api.coverRegistry(f.b), oldRegistry, 'geometry revision replaces all cached neighborhoods');
+});
+
+test('custom mutable reservation slots retain exact neighborhood and claim behavior', () => {
+  const f = fixture([]),
+    api = f.r._engagementCoverPositions(f.r._engagementCoverCtx()),
+    slot = { id: 'custom', x: -4.01, z: -4.01 },
+    other = f.q.members[1];
+  assert.ok(api.reserveCover(f.s, f.b, slot, 'route'));
+  assert.equal(api.reserveCover(other, f.b, { ...slot }, 'route'), null, 'equal point is claimed');
+  api.releaseCover(f.s, f.b);
+  Object.assign(slot, { x: 50.01, z: 50.01 });
+  assert.ok(api.reserveCover(f.s, f.b, slot, 'route'), 'mutated slot refreshes its neighborhood');
+  assert.equal(api.reserveCover(other, f.b, { ...slot }, 'route'), null);
+  api.releaseCover(f.s, f.b);
+  assert.ok(api.reserveCover(other, f.b, { ...slot }, 'route'));
+});
+
 test('the parent seam keeps the pre-split names, arities and the spacing export', () => {
   const r = H.bootstrap({ modules: false }),
     E = r.BattleEngagement,
