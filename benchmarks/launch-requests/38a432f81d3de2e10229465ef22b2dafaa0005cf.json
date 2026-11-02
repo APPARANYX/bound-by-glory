@@ -1,0 +1,23 @@
+{
+  "branch": "work/benchmark-launch/v697-ge-defend-20261031",
+  "launch_parent_sha": "3e7df6e1c9ccb70579856922eec5c10e578d6b76",
+  "launch_sha": "38a432f81d3de2e10229465ef22b2dafaa0005cf",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/3e7df6e1c9ccb70579856922eec5c10e578d6b76",
+  "request": {
+    "battle_type": "ge-defend",
+    "benchmark": "standard",
+    "correlation_id": "pr-697-3e7df6e1",
+    "origin_agent": "claude-code",
+    "purpose": "697 merged with main 90def3a8: structure chain under the controller, controllerStructure=0 vs on",
+    "query_off": "tacticalController=new&strategicInterception=0&localPlan=1&localTasks=1&localStructures=1&localEntry=1&localEntryGate=1&localSurvey=1&localWatch=1&localContactResume=1&localContinuity=1&localStructureOrders=1&controllerStructure=0",
+    "query_on": "tacticalController=new&strategicInterception=0&localPlan=1&localTasks=1&localStructures=1&localEntry=1&localEntryGate=1&localSurvey=1&localWatch=1&localContactResume=1&localContinuity=1&localStructureOrders=1",
+    "ref": "work/pin/s697-3e7df6e1",
+    "seed": "v697",
+    "seeds": "60",
+    "windows": "contact+120"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/s697-3e7df6e1",
+  "source_sha_at_archive": "3e7df6e1c9ccb70579856922eec5c10e578d6b76"
+}
