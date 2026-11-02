@@ -92,3 +92,102 @@ assert.equal(P.snapshot().routePlanning.calls, 0, 'restored calls are no longer 
 console.log(
   'PASS opt-in route planning diagnostic: fresh, retained, negative cache, causes, native checks and restore'
 );
+
+// Native-style candidate pipeline: observe actual gates without rerunning a
+// predicate, substituting results, or turning a discarded point into movement.
+const slots = [
+  { id: 'shelter', x: 1, z: 1, shelter: false },
+  { id: 'occupied', x: 2, z: 2, occupied: true },
+  { id: 'route', x: 3, z: 3, routeRejected: true },
+  { id: 'blocked', x: 4, z: 4, blocked: true },
+  { id: 'first', x: 5, z: 5 },
+  { id: 'second', x: 6, z: 6 }
+];
+const receiver = {},
+  token = {};
+let shapes = 0,
+  clearances = 0,
+  predicates = 0;
+const D = {
+  performance: { now: () => ++ticks },
+  BattleNavigationPhysicality: {
+    shapeHit(slot) {
+      assert.equal(this, D.BattleNavigationPhysicality);
+      shapes++;
+      return slot.shelter === false ? null : { obstacle: slot };
+    }
+  },
+  BattleNavigation: {
+    movementClear(a, b) {
+      assert.equal(this, D.BattleNavigation);
+      assert.equal(a, b);
+      clearances++;
+      return !a.blocked;
+    }
+  },
+  BattleCoverPositions: {
+    routeCandidates(actor, battle, threat, radius, predicate) {
+      assert.equal(this, D.BattleCoverPositions);
+      const out = [];
+      for (const slot of slots) {
+        if (!D.BattleNavigationPhysicality.shapeHit(slot)) continue;
+        if (slot.occupied) continue;
+        if (!predicate.call(receiver, slot, token)) continue;
+        if (!D.BattleNavigation.movementClear(slot, slot)) continue;
+        out.push(slot);
+      }
+      return out;
+    }
+  },
+  BattleTacticalContactRoute: {
+    pick(actor, battle) {
+      const choices = D.BattleCoverPositions.routeCandidates(actor, battle, {}, 100, function (slot, value) {
+        assert.equal(this, receiver, 'predicate receiver retained');
+        assert.equal(value, token, 'all predicate arguments retained');
+        predicates++;
+        return !slot.routeRejected;
+      });
+      return { point: choices[0], stats: { total: choices.length, graphNodes: 1 } };
+    }
+  }
+};
+const plain = D.BattleTacticalContactRoute.pick(s, sim);
+assert.equal(shapes, 6);
+assert.equal(clearances, 3);
+assert.equal(predicates, 4);
+loadModule(D, 'scripts/battle-hotpath-profiler.cjs');
+const observed = D.BattleTacticalContactRoute.pick(s, sim);
+assert.deepEqual(observed, plain, 'same candidate identities and complete result');
+assert.equal(observed.point, slots[4]);
+assert.equal(shapes, 12, 'no native geometry query suppressed or duplicated');
+assert.equal(clearances, 6, 'no native clearance query suppressed or duplicated');
+assert.equal(predicates, 8, 'each predicate runs exactly once');
+const stages = D.BattleHotpathProfiler.snapshot().routePlanning.candidateStages;
+for (const [name, expected] of Object.entries({
+  'shelter-tested': 6,
+  'shelter-rejected': 1,
+  'ownership-or-occupancy-rejected': 1,
+  'route-filter-tested': 4,
+  'route-filter-rejected': 1,
+  'point-clearance-tested': 3,
+  'point-clearance-rejected': 1,
+  returned: 2,
+  'graph-eligible': 2,
+  'graph-admitted': 1,
+  'graph-rank-discarded': 1,
+  'rejected-prefix-span': 1,
+  'rejected-prefix-shelter': 1
+}))
+  assert.equal(stages[name].count, expected, name);
+assert.ok(
+  stages['rejected-prefix-span'].measuredMs >= stages['rejected-prefix-shelter'].measuredMs,
+  'span includes the native shelter test; overlapping timings must not be summed'
+);
+stages.returned.count = -1;
+assert.equal(D.BattleHotpathProfiler.snapshot().routePlanning.candidateStages.returned.count, 2);
+D.BattleHotpathProfiler.reset();
+assert.deepEqual(D.BattleHotpathProfiler.snapshot().routePlanning.candidateStages, {});
+D.BattleHotpathProfiler.restore();
+assert.deepEqual(D.BattleTacticalContactRoute.pick(s, sim), plain);
+assert.deepEqual(D.BattleHotpathProfiler.snapshot().routePlanning.candidateStages, {});
+console.log('PASS discard-stage observations preserve native gates, predicate calls, state and restoration');

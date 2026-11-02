@@ -19,6 +19,7 @@
     wrapped = [],
     scope = [],
     routeActive = null,
+    admissionActive = null,
     routeLast = new WeakMap(),
     routePlanning = routeStats();
 
@@ -35,6 +36,7 @@
       failedFinalReasons: Object.create(null),
       edgeRejections: Object.create(null),
       freshTerminals: Object.create(null),
+      candidateStages: Object.create(null),
       totals: {
         candidateQueries: 0,
         candidatesReturned: 0,
@@ -98,6 +100,105 @@
     } else if (label === 'squad.hasLineOfSight') totals.sightQueries++;
     else if (label === 'navigation.movementClear') totals.movementQueries++;
   }
+  function candidateStage(name, count, elapsed) {
+    var rows = routePlanning.candidateStages,
+      row = rows[name] || (rows[name] = { count: 0, measuredMs: 0 });
+    row.count += count;
+    row.measuredMs += elapsed || 0;
+  }
+  function finishCandidate() {
+    if (!admissionActive || !admissionActive.pending) return;
+    // In the native owner, between a successful shelter test and the route
+    // predicate, the only rejecting gate is live claim/body availability.
+    candidateStage(
+      admissionActive.pending.filterSeen
+        ? 'unclassified-after-route-filter'
+        : 'ownership-or-occupancy-rejected',
+      1
+    );
+    admissionActive.pending = null;
+  }
+  function wrapCandidateShelter() {
+    var obj = root.BattleNavigationPhysicality,
+      fn = obj && obj.shapeHit;
+    if (typeof fn !== 'function') return;
+    function profiled(slot) {
+      if (!admissionActive) return fn.apply(this, arguments);
+      finishCandidate();
+      var start = clock(),
+        result = fn.apply(this, arguments),
+        elapsed = clock() - start;
+      candidateStage('shelter-tested', 1, elapsed);
+      if (!result) candidateStage('shelter-rejected', 1, elapsed);
+      else admissionActive.pending = { slot: slot, startedAt: start, shelterMs: elapsed };
+      return result;
+    }
+    profiled.__battleHotpathWrapped = true;
+    profiled.__battleHotpathOriginal = fn;
+    obj.shapeHit = profiled;
+    wrapped.push({ obj: obj, key: 'shapeHit', fn: fn });
+  }
+  function recordCandidateClearance(args, result, elapsed) {
+    var pending = admissionActive && admissionActive.pending;
+    if (!pending || args[0] !== pending.slot || args[1] !== pending.slot) return;
+    if (typeof result !== 'boolean') {
+      candidateStage('point-clearance-no-boolean-result', 1, elapsed);
+      admissionActive.pending = null;
+      return;
+    }
+    candidateStage('point-clearance-tested', 1, elapsed);
+    if (!result) candidateStage('point-clearance-rejected', 1, elapsed);
+    admissionActive.pending = null;
+  }
+  function wrapRouteCandidates() {
+    var obj = root.BattleCoverPositions,
+      fn = obj && obj.routeCandidates;
+    if (typeof fn !== 'function') return;
+    function profiled() {
+      var start = clock(),
+        prior = admissionActive,
+        args = arguments,
+        result;
+      if (routeActive && typeof args[4] === 'function') {
+        admissionActive = { pending: null };
+        args = Array.prototype.slice.call(args);
+        var predicate = args[4];
+        args[4] = function () {
+          var at = clock(),
+            allowed = predicate.apply(this, arguments),
+            elapsed = clock() - at;
+          candidateStage('route-filter-tested', 1, elapsed);
+          if (admissionActive.pending) admissionActive.pending.filterSeen = true;
+          if (!allowed) {
+            candidateStage('route-filter-rejected', 1, elapsed);
+            var pending = admissionActive.pending;
+            if (pending && pending.slot === arguments[0]) {
+              candidateStage('rejected-prefix-span', 1, clock() - pending.startedAt);
+              candidateStage('rejected-prefix-shelter', 1, pending.shelterMs);
+              admissionActive.pending = null;
+            }
+          }
+          return allowed;
+        };
+      }
+      try {
+        result = fn.apply(this, args);
+        return result;
+      } finally {
+        if (admissionActive !== prior) {
+          finishCandidate();
+          if (Array.isArray(result)) candidateStage('returned', result.length);
+        }
+        admissionActive = prior;
+        record('cover-positions.routeCandidates', clock() - start);
+        recordRouteCheck('cover-positions.routeCandidates', result);
+      }
+    }
+    profiled.__battleHotpathWrapped = true;
+    profiled.__battleHotpathOriginal = fn;
+    obj.routeCandidates = profiled;
+    wrapped.push({ obj: obj, key: 'routeCandidates', fn: fn });
+  }
   function wrapRoutePick() {
     var obj = root.BattleTacticalContactRoute,
       key = 'pick';
@@ -158,6 +259,14 @@
             routePlanning.totals[k] += sample.totals[k];
           });
           if (!negativeCache && !result.reused && result.stats) {
+            if (Number.isFinite(result.stats.total) && Number.isFinite(result.stats.graphNodes)) {
+              candidateStage('graph-eligible', result.stats.total);
+              candidateStage('graph-admitted', result.stats.graphNodes);
+              candidateStage(
+                'graph-rank-discarded',
+                Math.max(0, result.stats.total - result.stats.graphNodes)
+              );
+            }
             routePlanning.totals.edgeQueries += +result.stats.evaluatedEdges || 0;
             routePlanning.totals.graphNodes += +result.stats.graphNodes || 0;
             routePlanning.totals.detourQueries += +result.stats.nativePathQueries || 0;
@@ -219,7 +328,9 @@
         result = fn.apply(this, arguments);
         return result;
       } finally {
-        record(label, clock() - start);
+        var elapsed = clock() - start;
+        record(label, elapsed);
+        if (label === 'navigation.movementClear') recordCandidateClearance(arguments, result, elapsed);
         recordRouteCheck(label, result);
       }
     }
@@ -397,7 +508,9 @@
     wrapScoped(root.BattleTacticalFlankAssault, 'update', 'flank-assault.update');
     wrapRoutePick();
     wrapMany(root.BattleTacticalContactRoute, 'contact-route', ['pickDefense', 'evaluate']);
-    wrapMany(root.BattleCoverPositions, 'cover-positions', ['boundThreats', 'candidates', 'routeCandidates']);
+    wrapMany(root.BattleCoverPositions, 'cover-positions', ['boundThreats', 'candidates']);
+    wrapRouteCandidates();
+    wrapCandidateShelter();
     wrapMany(root.BattleGrenades, 'grenades', ['assaultAssessment']);
 
     wrapSightQuery('sightBlocked');
@@ -449,6 +562,7 @@
     startedAt = clock();
     scope.length = 0;
     routeActive = null;
+    admissionActive = null;
     routeLast = new WeakMap();
     routePlanning = routeStats();
   }
@@ -470,7 +584,7 @@
     });
     if (limit > 0) rows = rows.slice(0, limit);
     return {
-      version: '1.6',
+      version: '1.8',
       wallMs: +wallMs.toFixed(3),
       rows: rows,
       routePlanning: {
@@ -485,6 +599,7 @@
         failedFinalReasons: Object.assign({}, routePlanning.failedFinalReasons),
         edgeRejections: Object.assign({}, routePlanning.edgeRejections),
         freshTerminals: Object.assign({}, routePlanning.freshTerminals),
+        candidateStages: JSON.parse(JSON.stringify(routePlanning.candidateStages)),
         totals: Object.assign({}, routePlanning.totals)
       }
     };
@@ -499,5 +614,5 @@
   }
 
   install();
-  root.BattleHotpathProfiler = { version: '1.6', reset: reset, snapshot: snapshot, restore: restore };
+  root.BattleHotpathProfiler = { version: '1.8', reset: reset, snapshot: snapshot, restore: restore };
 })(typeof window !== 'undefined' ? window : globalThis);
