@@ -1,0 +1,18 @@
+{
+  "branch": "work/benchmark-launch/p698-causal-20261031",
+  "launch_parent_sha": "bc23ab80d93928e5092ad7a57bc84ebbaf420c26",
+  "launch_sha": "3b6b5c26105f177decaff44bd9c02bff45ace6d3",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/bc23ab80d93928e5092ad7a57bc84ebbaf420c26",
+  "request": {
+    "benchmark": "causal",
+    "query": "tacticalController=new&strategicInterception=0&localPlan=1&localTasks=1&localStructures=1&localEntry=1&localEntryGate=1&localSurvey=1&localWatch=1&localContactResume=1&localContinuity=1&localStructureOrders=1",
+    "ref": "work/pin/s698-bc23ab80",
+    "seconds": "600",
+    "seeds": "20",
+    "side": "all"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/s698-bc23ab80",
+  "source_sha_at_archive": "bc23ab80d93928e5092ad7a57bc84ebbaf420c26"
+}
