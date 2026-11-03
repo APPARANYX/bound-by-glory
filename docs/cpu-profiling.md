@@ -7,15 +7,15 @@ through a localhost reverse proxy.
 
 ## What exists
 
-| Script | Profiles | Output |
-|---|---|---|
-| `scripts/profile_battle_hotpaths.mjs` | Deterministic battle (trainer-stepped, fixed dt) | `reports/profile/` |
-| `scripts/profile_skills_lab.mjs` | 120 m skills-range lab (fixed-step clock) | `reports/profile-skills-lab-<controller>/` |
-| `scripts/lib/cpu-profile-summary.cjs` | `.cpuprofile` → per-function self/inclusive µs | `*-cpu-summary.json` |
-| `scripts/lib/cpu-profile-chains.cjs` | `.cpuprofile` → top call chains, flame tree, per-interval splits | `*-cpu-chains.json`, `intervals/` |
-| `scripts/lib/cpu-flamegraph.cjs` | flame tree → self-contained SVG flamegraph | `*-flamegraph.svg` |
-| `scripts/lib/preview-proxy.cjs` | localhost reverse proxy to the deployed preview | (used by the lab profiler) |
-| `scripts/battle-hotpath-profiler.cjs` | Inclusive wall-time wrapper profiler (injected into the page) | counters in the report JSON |
+| Script                                | Profiles                                                         | Output                                     |
+| ------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------ |
+| `scripts/profile_battle_hotpaths.mjs` | Deterministic battle (trainer-stepped, fixed dt)                 | `reports/profile/`                         |
+| `scripts/profile_skills_lab.mjs`      | 120 m skills-range lab (fixed-step clock)                        | `reports/profile-skills-lab-<controller>/` |
+| `scripts/lib/cpu-profile-summary.cjs` | `.cpuprofile` → per-function self/inclusive µs                   | `*-cpu-summary.json`                       |
+| `scripts/lib/cpu-profile-chains.cjs`  | `.cpuprofile` → top call chains, flame tree, per-interval splits | `*-cpu-chains.json`, `intervals/`          |
+| `scripts/lib/cpu-flamegraph.cjs`      | flame tree → self-contained SVG flamegraph                       | `*-flamegraph.svg`                         |
+| `scripts/lib/preview-proxy.cjs`       | localhost reverse proxy to the deployed preview                  | (used by the lab profiler)                 |
+| `scripts/battle-hotpath-profiler.cjs` | Inclusive wall-time wrapper profiler (injected into the page)    | counters in the report JSON                |
 
 The wall-time wrapper profiler and the CDP sampler measure different
 things. The wrappers give call counts and inclusive wall time per named
@@ -135,6 +135,40 @@ can; the proxy forwards each request to
 it byte-for-byte.
 
 ## Reading the results
+
+### Exact argument / native-answer census (Muse execution only)
+
+Set `BATTLE_PROFILE_EXACT_QUERIES=1` with wrappers enabled in either existing
+profiling driver. This loads `scripts/lib/exact-query-census.cjs` before the
+wrapper profiler; otherwise it is not loaded. The JSON profile adds
+`queryExactCensus`. No native call is skipped, replaced or answered from memory.
+The existing rounded `queryPairs` counters remain separate coarse observations.
+
+The census captures arguments **before** native invocation and snapshots the
+answer afterward. Exact typed numbers (including signed zero), endpoint Y,
+options, original function and receiver identities are distinguished. Observed
+`_frame` invocations, not `floor(time/0.15)`, delimit its bounded per-frame table.
+Calls outside an observed frame are counted explicitly. Per-frame storage is
+limited to 4,096 keys / 8,192 encoded characters per key; dropped/unsupported
+observations are counted rather than inferred as repeats. Up to eight answer
+disagreement examples retain detached entry/answer representations.
+
+**These are argument/context repeats, not safe cache hits.** Live geometry is
+always `uncertified`, phase is `unclassified`, and generation is unavailable;
+`certifiedReuse` is always zero. Navigation version, obstacle-list identity and
+time are observations, not dynamic-state invalidation certificates. Private
+`hasLineOfSight` eye/terrain/carrier computation is marked unknown; its computed
+rays are observed at nested low-level boundaries where possible. Accessor-based
+coordinates/options and opaque values are marked unknown without invoking
+getters. Mutable blocker answers are copied by data value; unsupported answers
+and thrown calls are reported separately. Reset clears the observations.
+
+Muse must check observer neutrality, exact source/build, actual coverage and
+complete CPU/JIT/GC overhead before interpreting natural data. Repeated answers
+are not proof of complete state equivalence or permission to cache. No cached
+speedup or new benchmark acceptance is established by this diagnostic.
+
+Offline regression only: `node tools/ai-sim-harness/exact-query-census-check.js`.
 
 - `*.cpuprofile` — raw V8 profile. Open in Chrome DevTools → Performance
   → Load profile, or in Speedscope (https://www.speedscope.app).

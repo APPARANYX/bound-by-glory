@@ -59,9 +59,7 @@ const seconds = Math.max(30, Math.min(900, Number(process.env.SKILLS_LAB_SECONDS
 const pinSeed = String(process.env.SKILLS_LAB_PINSEED || '1');
 const useWrappers = process.env.SKILLS_LAB_WRAPPERS !== '0';
 const useHeapSampling = process.env.SKILLS_LAB_HEAP === '1';
-const outputDir = path.resolve(
-  process.env.SKILLS_LAB_OUTPUT || `reports/profile-skills-lab-${controller}`
-);
+const outputDir = path.resolve(process.env.SKILLS_LAB_OUTPUT || `reports/profile-skills-lab-${controller}`);
 const commit = process.env.BATTLE_BENCHMARK_SOURCE_SHA || process.env.GITHUB_SHA || 'local';
 const babylonLocalPath = process.env.SKILLS_LAB_BABYLON_LOCAL || '';
 let babylonJs = null;
@@ -90,7 +88,13 @@ const browserErrors = [],
 const startedWall = Date.now();
 const browser = await chromium.launch({
   headless: true,
-  args: ['--disable-dev-shm-usage', '--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--no-sandbox']
+  args: [
+    '--disable-dev-shm-usage',
+    '--use-gl=swiftshader',
+    '--enable-webgl',
+    '--ignore-gpu-blocklist',
+    '--no-sandbox'
+  ]
 });
 
 try {
@@ -111,9 +115,7 @@ try {
       try {
         const isBabylon = /\/npm\/babylonjs@[^/]+\/babylon\.js/.test(reqUrl);
         const body =
-          isBabylon && babylonJs
-            ? babylonJs
-            : Buffer.from(await (await fetch(reqUrl)).arrayBuffer());
+          isBabylon && babylonJs ? babylonJs : Buffer.from(await (await fetch(reqUrl)).arrayBuffer());
         return route.fulfill({ status: 200, contentType: 'application/javascript', body });
       } catch (error) {
         browserWarnings.push(`CDN bridge failed for ${reqUrl}: ${error?.message || error}`);
@@ -161,6 +163,9 @@ try {
   }
 
   if (useWrappers) {
+    if (process.env.BATTLE_PROFILE_EXACT_QUERIES === '1') {
+      await page.addScriptTag({ path: path.resolve('scripts/lib/exact-query-census.cjs') });
+    }
     await page.addScriptTag({ path: path.resolve('scripts/battle-hotpath-profiler.cjs') });
   }
 
@@ -244,9 +249,11 @@ try {
         stepBoundaries.push({ simTime: r.time, perfNowMs: await page.evaluate(() => performance.now()) });
         nextBoundary += snapshotSeconds;
       }
-      if (r.advanced < 0.05) throw new Error(`Lab stopped advancing at t=${r.time}s (advanced ${r.advanced}s in 60 steps)`);
+      if (r.advanced < 0.05)
+        throw new Error(`Lab stopped advancing at t=${r.time}s (advanced ${r.advanced}s in 60 steps)`);
       if (r.winner || r.capReached || r.time >= seconds) break;
-      if (batches > Math.ceil(seconds / 0.15 / 60) + 5) throw new Error(`Lab did not finish in ${batches} batches (t=${r.time}s)`);
+      if (batches > Math.ceil(seconds / 0.15 / 60) + 5)
+        throw new Error(`Lab did not finish in ${batches} batches (t=${r.time}s)`);
     }
     const wallSeconds = (Date.now() - wallStart) / 1000;
     const finalProfile = await page.evaluate(useWrappers => {
@@ -300,7 +307,10 @@ try {
   let intervals = [];
   if (cpuProfile) {
     chains = topChains(cpuProfile, 25);
-    fs.writeFileSync(path.join(outputDir, 'skills-lab-cpu-chains.json'), JSON.stringify(chains, null, 2) + '\n');
+    fs.writeFileSync(
+      path.join(outputDir, 'skills-lab-cpu-chains.json'),
+      JSON.stringify(chains, null, 2) + '\n'
+    );
     fs.writeFileSync(
       path.join(outputDir, 'skills-lab-flamegraph.svg'),
       renderFlamegraph(
@@ -326,7 +336,11 @@ try {
       });
       fs.writeFileSync(
         path.join(outputDir, 'skills-lab-step-boundaries.json'),
-        JSON.stringify({ anchorPerfNowMs: profileStartPerfNowMs, boundaries: drive.stepBoundaries }, null, 2) + '\n'
+        JSON.stringify(
+          { anchorPerfNowMs: profileStartPerfNowMs, boundaries: drive.stepBoundaries },
+          null,
+          2
+        ) + '\n'
       );
     }
   }
@@ -386,10 +400,12 @@ try {
     '',
     '| Rank | Chain (root → leaf) | Samples | Sampled µs | % |',
     '|---:|---|---:|---:|---:|',
-    ...chains.chains.slice(0, 10).map(
-      (c, i) =>
-        `| ${i + 1} | ${c.frames.join(' → ').replaceAll('|', '\\|')} | ${c.samples} | ${c.us} | ${c.percent}% |`
-    ),
+    ...chains.chains
+      .slice(0, 10)
+      .map(
+        (c, i) =>
+          `| ${i + 1} | ${c.frames.join(' → ').replaceAll('|', '\\|')} | ${c.samples} | ${c.us} | ${c.percent}% |`
+      ),
     '',
     '> Chains aggregate full stacks: a sample counts once per chain. Full list: `skills-lab-cpu-chains.json`. Flamegraph: `skills-lab-flamegraph.svg` (raw `.cpuprofile` also loads in Chrome DevTools / Speedscope).',
     '',

@@ -103,9 +103,7 @@ try {
     if (babylonJs && /^https:\/\/cdn\.jsdelivr\.net\//.test(reqUrl)) {
       try {
         const isBabylon = /\/npm\/babylonjs@[^/]+\/babylon\.js/.test(reqUrl);
-        const body = isBabylon
-          ? babylonJs
-          : Buffer.from(await (await fetch(reqUrl)).arrayBuffer());
+        const body = isBabylon ? babylonJs : Buffer.from(await (await fetch(reqUrl)).arrayBuffer());
         return route.fulfill({ status: 200, contentType: 'application/javascript', body });
       } catch (error) {
         browserWarnings.push(`CDN bridge failed for ${reqUrl}: ${error?.message || error}`);
@@ -133,6 +131,9 @@ try {
     { timeout: 120_000 }
   );
   if (useWrappers) {
+    if (process.env.BATTLE_PROFILE_EXACT_QUERIES === '1') {
+      await page.addScriptTag({ path: path.resolve('scripts/lib/exact-query-census.cjs') });
+    }
     await page.addScriptTag({ path: path.resolve('scripts/battle-hotpath-profiler.cjs') });
   }
 
@@ -282,10 +283,7 @@ try {
         try {
           const { profile: heap } = await cpuSession.send('HeapProfiler.stopSampling');
           heapProfile = heap;
-          fs.writeFileSync(
-            path.join(outputDir, 'battle-hotpath-heap-profile.json'),
-            JSON.stringify(heap)
-          );
+          fs.writeFileSync(path.join(outputDir, 'battle-hotpath-heap-profile.json'), JSON.stringify(heap));
         } catch (error) {
           browserWarnings.push(`Heap sampling stop failed: ${error?.message || error}`);
         }
@@ -333,7 +331,11 @@ try {
       });
       fs.writeFileSync(
         path.join(outputDir, 'battle-hotpath-step-boundaries.json'),
-        JSON.stringify({ anchorPerfNowMs: profileStartPerfNowMs, boundaries: result.stepBoundaries }, null, 2) + '\n'
+        JSON.stringify(
+          { anchorPerfNowMs: profileStartPerfNowMs, boundaries: result.stepBoundaries },
+          null,
+          2
+        ) + '\n'
       );
     }
   }
@@ -399,10 +401,12 @@ try {
     '',
     '| Rank | Chain (root → leaf) | Samples | Sampled µs | % |',
     '|---:|---|---:|---:|---:|',
-    ...chains.chains.slice(0, 10).map(
-      (c, i) =>
-        `| ${i + 1} | ${c.frames.join(' → ').replaceAll('|', '\\|')} | ${c.samples} | ${c.us} | ${c.percent}% |`
-    ),
+    ...chains.chains
+      .slice(0, 10)
+      .map(
+        (c, i) =>
+          `| ${i + 1} | ${c.frames.join(' → ').replaceAll('|', '\\|')} | ${c.samples} | ${c.us} | ${c.percent}% |`
+      ),
     '',
     '> Chains aggregate full stacks: a sample counts once per chain, so chain percentages do not double-count nested frames. Full list: `battle-hotpath-cpu-chains.json`. Flamegraph: `battle-hotpath-flamegraph.svg` (open in a browser; the raw `.cpuprofile` also loads in Chrome DevTools / Speedscope).',
     '',

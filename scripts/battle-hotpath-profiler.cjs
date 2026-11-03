@@ -41,6 +41,91 @@
     pairCurrent = Object.create(null),
     pairTotals = Object.create(null);
 
+  // Opt-in observation only. No result is ever reused to answer a native query.
+  var exactCensus = root.BattleExactQueryCensus ? root.BattleExactQueryCensus.create() : null;
+  function dataField(obj, key) {
+    if (obj == null) return undefined;
+    for (var p = obj; p; p = Object.getPrototypeOf(p)) {
+      var d = Object.getOwnPropertyDescriptor(p, key);
+      if (!d) continue;
+      if (!Object.prototype.hasOwnProperty.call(d, 'value')) throw new Error('opaque accessor');
+      return d.value;
+    }
+    return undefined;
+  }
+  function exactPoint(p) {
+    return p == null ? p : { x: dataField(p, 'x'), y: dataField(p, 'y'), z: dataField(p, 'z') };
+  }
+  function exactOptions(options) {
+    if (options == null) return options;
+    if (Object.getPrototypeOf(options) !== Object.prototype && Object.getPrototypeOf(options) !== null)
+      throw new Error('opaque options prototype');
+    var out = Object.create(null);
+    Reflect.ownKeys(options).forEach(function (key) {
+      if (typeof key !== 'string') throw new Error('symbol option');
+      out[key] = dataField(options, key);
+    });
+    return out;
+  }
+  function exactEnter(kind, fn, receiver, args) {
+    if (!exactCensus) return null;
+    var inputs,
+      context,
+      reason,
+      complete = true;
+    try {
+      var sim = root.__battle__,
+        N = root.BattleNavigation,
+        obstacles;
+      if (kind === 'hasLineOfSight') {
+        // Actual computed eyes/rays are captured at the nested native boundaries.
+        // IDs/objects alone do not describe the private eye-height/terrain/carrier computation.
+        complete = false;
+        reason = 'private-los-inputs';
+      } else if (kind === 'sightBlocked' || kind === 'sightBlocker') {
+        obstacles = args[0];
+        inputs = [
+          exactCensus.ref(obstacles),
+          exactPoint(args[1]),
+          exactPoint(args[2]),
+          exactOptions(args[3])
+        ];
+      } else if (kind === 'lineOfSightBlocked') {
+        inputs = [exactPoint(args[0]), exactPoint(args[1]), args[2], args[3]];
+      } else inputs = [exactPoint(args[0]), exactPoint(args[1]), exactOptions(args[2])];
+      context = {
+        battle: exactCensus.ref(sim),
+        time: dataField(sim, 'time'),
+        navigation: exactCensus.ref(N),
+        navigationVersion: dataField(N, 'version'),
+        physicalVersion: dataField(obstacles, '__physicalVersion'),
+        dynamicList: exactCensus.ref(dataField(obstacles, '__dynamicFootprints')),
+        phase: 'unclassified',
+        liveGeometry: 'uncertified',
+        generation: 'unavailable'
+      };
+    } catch (_) {
+      complete = false;
+      reason = 'opaque-input-or-context';
+    }
+    return exactCensus.enter(kind, fn, receiver, pairScope(), inputs, context, complete, reason);
+  }
+  function wrapExactFrame() {
+    var obj = root.__battle__;
+    if (!exactCensus || !obj || typeof obj._frame !== 'function') return;
+    var fn = obj._frame;
+    obj._frame = function () {
+      exactCensus.beginFrame();
+      try {
+        return fn.apply(this, arguments);
+      } finally {
+        exactCensus.endFrame();
+      }
+    };
+    obj._frame.__battleHotpathWrapped = false;
+    wrapped.push({ obj: obj, key: '_frame', fn: fn, exactBoundary: obj._frame });
+  }
+
   function pairStepIndex() {
     var t = root.__battle__ && +root.__battle__.time;
     if (!isFinite(t)) return -1;
@@ -380,11 +465,15 @@
     if (fn.__battleHotpathWrapped) return false;
     function profiled() {
       var start = clock();
-      var result;
+      var token = exactCensus ? exactEnter(kind, fn, this, arguments) : null,
+        result,
+        threw = true;
       try {
         result = fn.apply(this, arguments);
+        threw = false;
         return result;
       } finally {
+        if (exactCensus) exactCensus.leave(token, result, threw);
         record(label, clock() - start);
         recordRouteCheck(label, result);
         recordPair(kind, keyFn(arguments));
@@ -410,10 +499,16 @@
     var label = 'obstacle.' + key;
     function profiled() {
       var parent = currentScope(),
-        start = clock();
+        start = clock(),
+        token = exactCensus ? exactEnter(key, fn, this, arguments) : null,
+        result,
+        threw = true;
       try {
-        return fn.apply(this, arguments);
+        result = fn.apply(this, arguments);
+        threw = false;
+        return result;
       } finally {
+        if (exactCensus) exactCensus.leave(token, result, threw);
         var elapsed = clock() - start;
         record(label, elapsed);
         record(label + '@' + parent, elapsed);
@@ -506,9 +601,10 @@
         var timingClass = 'other';
         if (afterPhysical !== beforePhysical) timingClass = 'physical-rebuild';
         else if (beforePhysical && beforePhysical.points && beforePhysical.points.length) {
-          timingClass = beforeFirst === beforePhysical.points[0]
-            ? 'populated-same-waypoint'
-            : 'populated-advanced-waypoint';
+          timingClass =
+            beforeFirst === beforePhysical.points[0]
+              ? 'populated-same-waypoint'
+              : 'populated-advanced-waypoint';
         } else if (beforePhysical && beforePhysical.blocked) timingClass = 'blocked-empty-reuse';
         else if (beforePhysical) timingClass = 'unblocked-empty-reuse';
         record('navigation.nextWaypoint.class.' + timingClass, elapsed);
@@ -537,8 +633,7 @@
           }
           if (beforePhysical && sim) {
             var currentGoal =
-              Math.hypot(+dest.x - beforePhysical.finalGoalX, +dest.z - beforePhysical.finalGoalZ) <=
-              1.4;
+              Math.hypot(+dest.x - beforePhysical.finalGoalX, +dest.z - beforePhysical.finalGoalZ) <= 1.4;
             bump(
               navigationPlanning.nearGoalGoalStates,
               !currentGoal
@@ -620,6 +715,7 @@
     }
   }
   function install() {
+    wrapExactFrame();
     /* Parent timings first: these make it possible to reconcile expensive leaves against the
        enclosing simulation/command work without changing production scheduling. */
     wrapMany(root.__battle__, 'simulation', ['step', '_frame', '_checkWinner']);
@@ -680,15 +776,9 @@
     wrapMany(root.BattleMovementResolver, 'movement-resolver', ['proposeOrder', 'proposeCombat', 'resolve']);
     wrapScoped(root.SquadAI, 'updateSoldier', 'squad.updateSoldier');
     wrapScoped(root.SquadAI, 'updateSquad', 'squad.updateSquad');
-    wrapPair(
-      root.SquadAI,
-      'hasLineOfSight',
-      'squad.hasLineOfSight',
-      'hasLineOfSight',
-      function (args) {
-        return pairKeySoldiers(args[0], args[1]);
-      }
-    );
+    wrapPair(root.SquadAI, 'hasLineOfSight', 'squad.hasLineOfSight', 'hasLineOfSight', function (args) {
+      return pairKeySoldiers(args[0], args[1]);
+    });
     wrapMany(root.SquadAI, 'squad', ['findTarget', 'canSuppress', 'areaFire', 'resolveFire']);
     wrapMany(root.BattleTacticalPositions, 'tactical-position', [
       'claim',
@@ -725,6 +815,7 @@
     pairStep = -1;
     pairCurrent = Object.create(null);
     pairTotals = Object.create(null);
+    if (exactCensus) exactCensus.reset();
   }
   function snapshot(limit) {
     var wallMs = Math.max(0, clock() - startedAt),
@@ -744,11 +835,12 @@
     });
     if (limit > 0) rows = rows.slice(0, limit);
     return {
-      version: '1.7',
+      version: '1.8',
       wallMs: +wallMs.toFixed(3),
       rows: rows,
       queryPairs: pairSnapshot(),
       queryPairsCurrent: pairCurrentSnapshot(),
+      queryExactCensus: exactCensus ? exactCensus.snapshot() : null,
       navigationPlanning: {
         requests: navigationPlanning.requests,
         nearGoalRequests: navigationPlanning.nearGoalRequests,
@@ -789,12 +881,13 @@
   function restore() {
     for (var i = wrapped.length - 1; i >= 0; i--) {
       var w = wrapped[i];
-      if (w.obj && w.obj[w.key] && w.obj[w.key].__battleHotpathWrapped) w.obj[w.key] = w.fn;
+      if (w.obj && w.obj[w.key] && (w.obj[w.key].__battleHotpathWrapped || w.obj[w.key] === w.exactBoundary))
+        w.obj[w.key] = w.fn;
     }
     wrapped = [];
     scope.length = 0;
   }
 
   install();
-  root.BattleHotpathProfiler = { version: '1.7', reset: reset, snapshot: snapshot, restore: restore };
+  root.BattleHotpathProfiler = { version: '1.8', reset: reset, snapshot: snapshot, restore: restore };
 })(typeof window !== 'undefined' ? window : globalThis);
