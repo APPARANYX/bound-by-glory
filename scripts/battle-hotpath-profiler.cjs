@@ -53,6 +53,9 @@
       nearGoalRequests: 0,
       nearGoalPhysicalReuses: 0,
       nearGoalPhysicalReplans: 0,
+      nearGoalRouteStates: Object.create(null),
+      nearGoalStandStates: Object.create(null),
+      nearGoalGoalStates: Object.create(null),
       stoppedRequests: 0,
       stoppedPhysicalReuses: 0,
       physicalReplans: 0,
@@ -378,7 +381,44 @@
           afterPhysical = soldier && soldier._physicalPath;
         record('navigation.nextWaypoint', elapsed);
         navigationPlanning.requests++;
-        if (nearGoal) navigationPlanning.nearGoalRequests++;
+        if (nearGoal) {
+          navigationPlanning.nearGoalRequests++;
+          bump(
+            navigationPlanning.nearGoalRouteStates,
+            !beforePhysical
+              ? 'no-plan'
+              : beforePhysical.blocked
+                ? 'blocked'
+                : beforePhysical.points && beforePhysical.points.length
+                  ? 'populated'
+                  : 'empty-unblocked'
+          );
+          if (beforePhysical && beforePhysical.standGoal) {
+            var standDistance = Math.hypot(
+              at.x - beforePhysical.standGoal.x,
+              at.z - beforePhysical.standGoal.z
+            );
+            bump(
+              navigationPlanning.nearGoalStandStates,
+              standDistance <= 0.35 ? 'physically-at-stand-goal' : 'stand-goal-different'
+            );
+          }
+          if (beforePhysical && sim) {
+            var currentGoal =
+              Math.hypot(+dest.x - beforePhysical.finalGoalX, +dest.z - beforePhysical.finalGoalZ) <=
+              1.4;
+            bump(
+              navigationPlanning.nearGoalGoalStates,
+              !currentGoal
+                ? 'destination-changed'
+                : beforePhysical.version !== physicalVersion(sim)
+                  ? 'geometry-changed'
+                  : sim.time >= beforePhysical.replanAt
+                    ? 'periodic-refresh-due'
+                    : 'goal-and-version-stable'
+            );
+          }
+        }
         if (stopped) navigationPlanning.stoppedRequests++;
         if (
           beforePhysical &&
@@ -546,6 +586,9 @@
         nearGoalRequests: navigationPlanning.nearGoalRequests,
         nearGoalPhysicalReuses: navigationPlanning.nearGoalPhysicalReuses,
         nearGoalPhysicalReplans: navigationPlanning.nearGoalPhysicalReplans,
+        nearGoalRouteStates: Object.assign({}, navigationPlanning.nearGoalRouteStates),
+        nearGoalStandStates: Object.assign({}, navigationPlanning.nearGoalStandStates),
+        nearGoalGoalStates: Object.assign({}, navigationPlanning.nearGoalGoalStates),
         stoppedRequests: navigationPlanning.stoppedRequests,
         stoppedPhysicalReuses: navigationPlanning.stoppedPhysicalReuses,
         physicalReplans: navigationPlanning.physicalReplans,
