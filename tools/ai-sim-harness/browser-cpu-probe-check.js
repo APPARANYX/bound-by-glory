@@ -12,25 +12,54 @@ function fixture(search, opts = {}) {
   let elapsed = 0;
   function element(tag) {
     return {
-      tagName: tag.toUpperCase(), style: {}, children: [], textContent: '', disabled: false,
-      appendChild(child) { this.children.push(child); },
-      addEventListener(name, callback) { this[name] = callback; },
+      tagName: tag.toUpperCase(),
+      style: {},
+      children: [],
+      textContent: '',
+      disabled: false,
+      appendChild(child) {
+        this.children.push(child);
+      },
+      addEventListener(name, callback) {
+        this[name] = callback;
+      },
       remove() {},
       click() {}
     };
   }
   const document = { body: element('body'), hidden: !!opts.hidden, createElement: element };
   const engine = {
-    stopped: false, stopRenderLoop() { this.stopped = true; },
-    runRenderLoop() { this.stopped = false; }
+    stopped: false,
+    stopRenderLoop() {
+      this.stopped = true;
+    },
+    runRenderLoop() {
+      this.stopped = false;
+    }
   };
   const sim = {
-    time: 0, timeScale: 4, paused: true, winner: null,
-    scene: { getEngine() { return engine; }, render() {} },
-    setTimeScale(value) { this.timeScale = value; },
-    resume() { this.paused = false; },
-    pause() { this.paused = true; },
-    step(delta) { this.time += delta; },
+    time: 0,
+    timeScale: 4,
+    paused: true,
+    winner: null,
+    scene: {
+      getEngine() {
+        return engine;
+      },
+      render() {}
+    },
+    setTimeScale(value) {
+      this.timeScale = value;
+    },
+    resume() {
+      this.paused = false;
+    },
+    pause() {
+      this.paused = true;
+    },
+    step(delta) {
+      this.time += delta;
+    },
     _liveCommanderTick() {}
   };
   const originalStep = sim.step;
@@ -47,18 +76,42 @@ function fixture(search, opts = {}) {
     __battle__: sim,
     __scenario__: { seed: 'skills-range-0001' },
     BATTLE_REF: 'abcdef1234567890',
-    BattleLoading: { timings() { return { finishedAt: 1 }; } },
+    BattleLoading: {
+      timings() {
+        return { finishedAt: 1 };
+      }
+    },
     BattleModules: { runHook() {} },
-    BattleNavigation: { findPath() { return []; } },
-    BattleObstacleField: { sightBlocked() { return false; } },
+    BattleNavigation: {
+      findPath() {
+        return [];
+      }
+    },
+    BattleObstacleField: {
+      sightBlocked() {
+        return false;
+      }
+    },
     SquadAI: { updateSquad() {}, updateSoldier() {} }
   };
   const sandbox = {
-    window, document, navigator: { userAgent: 'offline-check', hardwareConcurrency: 8 },
+    window,
+    document,
+    navigator: { userAgent: 'offline-check', hardwareConcurrency: 8 },
     location: { search, href: 'https://example.test/battle_sim.php' + search },
-    performance: { now() { elapsed += 0.02; return elapsed; } },
-    setTimeout(fn) { queue.push(fn); return queue.length; },
-    URLSearchParams, URL, Blob,
+    performance: {
+      now() {
+        elapsed += 0.02;
+        return elapsed;
+      }
+    },
+    setTimeout(fn) {
+      queue.push(fn);
+      return queue.length;
+    },
+    URLSearchParams,
+    URL,
+    Blob,
     console
   };
   vm.runInNewContext(source, sandbox, { filename: '97a-browser-cpu-probe.js' });
@@ -70,7 +123,11 @@ function fixture(search, opts = {}) {
 }
 
 const disabled = fixture('?tacticalController=new');
-assert.equal(disabled.window.BattleBrowserCpuProbe, undefined, 'probe must be completely inert without opt-in');
+assert.equal(
+  disabled.window.BattleBrowserCpuProbe,
+  undefined,
+  'probe must be completely inert without opt-in'
+);
 assert.equal(disabled.sim.step, disabled.originalStep);
 
 const normal = fixture('?cpuBench=1&cpuSeconds=15&tacticalController=new');
