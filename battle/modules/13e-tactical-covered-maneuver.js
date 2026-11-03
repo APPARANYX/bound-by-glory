@@ -660,6 +660,8 @@
         return String(s.id);
       });
   }
+  /* Diagnostic-only exact-source experiment: avoid formatting unrelated tactical branches. */
+  // prettier-ignore
   function update(ctx) {
     var __p = root.BattleCoveredManeuverBranchProbe,
       __t = __p ? __p.clock() : 0,
