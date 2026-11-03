@@ -267,12 +267,7 @@
       bz = b.z;
     /* Non-finite or non-number coordinates keep the original uncached gather.
        The cache key does not round: neighbouring rays must never alias. */
-    if (
-      !Number.isFinite(ax) ||
-      !Number.isFinite(az) ||
-      !Number.isFinite(bx) ||
-      !Number.isFinite(bz)
-    )
+    if (!Number.isFinite(ax) || !Number.isFinite(az) || !Number.isFinite(bx) || !Number.isFinite(bz))
       return gatherCrossed(field, ax, az, bx, bz);
     var key = ax + '|' + az + '|' + bx + '|' + bz,
       cache = field.sightRayCandidates,
