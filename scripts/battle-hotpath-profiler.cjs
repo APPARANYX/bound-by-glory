@@ -65,7 +65,7 @@
       if (typeof key !== 'string') throw new Error('symbol option');
       out[key] = dataField(options, key);
     });
-    return out;
+    return { own: out, effectiveIgnoreDynamicId: dataField(options, 'ignoreDynamicId') };
   }
   function exactEnter(kind, fn, receiver, args) {
     if (!exactCensus) return null;

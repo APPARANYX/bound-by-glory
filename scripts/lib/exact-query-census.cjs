@@ -73,7 +73,7 @@
       }
       try {
         var key = JSON.stringify(
-          encode([epoch, depth ? frame : null, ref(source), ref(receiver), inputs, context], 0)
+          encode([epoch, depth ? frame : null, kind, scope, ref(source), ref(receiver), inputs, context], 0)
         );
         if (key.length > 8192) throw new Error('oversized key');
         var previous = seen.get(key);

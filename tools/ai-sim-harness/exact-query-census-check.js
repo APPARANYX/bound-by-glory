@@ -202,4 +202,27 @@ test('disabled census preserves existing native calls and returns no exact obser
   assert.equal(e.run('calls'), 2);
   assert.equal(e.snapshot().queryExactCensus, null);
 });
+test('query kinds and call sites keep separate repetition tables', () => {
+  const f = fixture();
+  for (const [kind, scope] of [
+    ['ray', 'a'],
+    ['ray', 'b'],
+    ['other', 'a']
+  ]) {
+    f.c.leave(f.c.enter(kind, f.source, f.receiver, scope, [1], {}, true), true, false);
+  }
+  for (const r of Object.values(f.c.snapshot().rows)) assert.equal(r.argumentRepeats, 0);
+});
+test('effective inherited carrier option is captured without reading an accessor', () => {
+  const e = engine(true);
+  e.run(`Object.prototype.ignoreDynamicId = 'first';
+    BattleNavigation.movementClear({x:0},{x:1},{});
+    Object.prototype.ignoreDynamicId = 'second';
+    BattleNavigation.movementClear({x:0},{x:1},{});
+    delete Object.prototype.ignoreDynamicId;`);
+  const r = e.snapshot().queryExactCensus.rows['movementClear@unscoped'];
+  assert.equal(r.calls, 2);
+  assert.equal(r.argumentRepeats, 0);
+  assert.equal(e.run('calls'), 2);
+});
 console.log(`${passed}/${passed} exact-query census checks passed (offline Node/VM).`);
