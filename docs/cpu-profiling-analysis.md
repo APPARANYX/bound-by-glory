@@ -371,16 +371,22 @@ benefit is the smallest and the safety case needs work.
 ## 10. Validation
 
 - **Determinism (600 s meeting, branch vs baseline): exact.**
-  Navigation counters identical (317,199 requests; 11,133 replans;
-  306,066 reuses; 121,815 near-goal; 165,775 same-waypoint). Route
-  counters identical (8,970 calls; 3,862 fresh; 3,320 failed fresh;
-  5,105 negative-cache; identical freshReasons, freshTerminals,
-  edgeRejections). Final state identical (winner `ge`, time limit
-  objective score, usAlive 20, geAlive 34, personalSpace 1,242
-  pairCorrections, 119/119 destination conflicts/resolutions). All 20
-  per-30 s snapshots match (wall, alive counts). Policy revision 14
-  in both. Wall 50.411 s vs baseline 48.658 s (+3.6% — CI machine
-  variance plus the new profiler code; not a behaviour change).
+  A deep diff of the entire `finalState` object finds **0
+  differences** (winner, alive counts, personalSpace, tactical
+  positions, assignments, receipts — byte-identical). All 20
+  per-30 s snapshots match (0 mismatches). Navigation counters
+  identical (317,199 requests; 11,133 replans; 306,066 reuses;
+  121,815 near-goal; 165,775 same-waypoint). Route counters
+  identical (8,970 calls; 3,862 fresh; 3,320 failed fresh; 5,105
+  negative-cache; identical freshReasons, freshTerminals,
+  edgeRejections). Browser errors identical as multisets (676 in
+  both — 674 × 404 asset loads + 2 failed resources, pre-existing
+  non-fatal noise). Policy revision 14 in both. The only differences
+  are 8 of 84 wrapper-row labels, which are profiler-version
+  differences (the branch profiler splits `nextWaypoint` by class
+  and drops 4 rows the old profiler emitted), not behaviour.
+  Wall 50.411 s vs baseline 48.658 s (+3.6% — CI machine variance
+  plus the new profiler code; not a behaviour change).
 - **Lab determinism:** new, legacy and wrappers-off new all end with
   `usAlive` 20, `geAlive` 10, no winner; nav requests 28,000 in both
   arms (1,400 steps × 20 soldiers).
