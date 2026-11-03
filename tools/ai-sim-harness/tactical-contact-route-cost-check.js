@@ -16,6 +16,7 @@ const rechecking = source.replace(clearance, '!N.movementClear(cursor, p)');
 function world(text, exposure, detour, coverOverride) {
   let calls = 0,
     nativeCalls = 0;
+  const nativeTrace = [];
   const root = {
     SquadAI: {
       hasLineOfSight: (a, b) => {
@@ -26,7 +27,9 @@ function world(text, exposure, detour, coverOverride) {
     BattleNavigation: {
       movementClear: (a, b) => {
         nativeCalls++;
-        return !detour || a.x === b.x || a.z === b.z;
+        const clear = !detour || a.x === b.x || a.z === b.z;
+        nativeTrace.push([a.x, a.z, b.x, b.z, clear]);
+        return clear;
       },
       findPath: (a, b) => [
         { x: a.x, z: b.z },
@@ -51,6 +54,7 @@ function world(text, exposure, detour, coverOverride) {
     sim: { time: 5, obstacles: [], heightAt: (x, z) => Math.sin(x / 20) + Math.cos(z / 20) },
     calls: () => calls,
     nativeCalls: () => nativeCalls,
+    nativeTrace: () => nativeTrace,
     reset: () => {
       calls = 0;
     }
@@ -61,6 +65,55 @@ const reports = [
   { x: 32, z: 100 }
 ];
 const goal = { x: 0, z: 70 };
+// Restoring exposure on every physical edge is the pre-optimization control.
+// This must retain physical checks and their detour budgets, even when an
+// already-known route makes the edge incapable of improving a node's cost.
+const boundedExposure = /\bvisibility,\s*cannotImprove\s*\n/g;
+assert.equal((source.match(boundedExposure) || []).length, 1, 'one graph-only lower-bound gate');
+const fullExposure = source.replace(boundedExposure, 'visibility\n');
+let dominatedSightSaved = 0,
+  dominatedSightBefore = 0;
+for (const detour of [false, true]) {
+  for (const exposure of [() => false, p => p.x > 7 && p.z < 48, p => p.z > 25 && p.z < 35]) {
+    const fast = world(source, exposure, detour),
+      control = world(fullExposure, exposure, detour),
+      run = w => w.root.BattleTacticalContactRoute.pick(w.soldier, w.sim, reports, goal, []);
+    assert.deepEqual(
+      run(fast),
+      run(control),
+      'dominated-edge pruning preserves full result and graph counters'
+    );
+    assert.equal(
+      fast.nativeCalls(),
+      control.nativeCalls(),
+      'all live physical queries and detour work remain'
+    );
+    assert.deepEqual(
+      fast.nativeTrace(),
+      control.nativeTrace(),
+      'ordered live physical arguments and answers'
+    );
+    dominatedSightBefore += control.calls();
+    dominatedSightSaved += control.calls() - fast.calls();
+  }
+}
+assert.ok(dominatedSightSaved > 0, 'non-improving edges must avoid actual native sight work');
+// Dense graphs reach the existing edge/detour budgets. Mixed numeric quality
+// and tiny coordinate changes exercise floating cost ties without a new epsilon.
+for (const detour of [false, true]) {
+  const dense = Array.from({ length: 170 }, (_, i) => ({
+    x: (i % 13) * 2.01 - 12.06,
+    z: Math.floor(i / 13) * 2.03 + 2,
+    slotId: 'dense-' + i,
+    quality: [0, 0.1, -0.2, 0.00001, '0.3', NaN, Infinity][i % 7]
+  }));
+  const fast = world(source, p => p.x > 9, detour, dense),
+    control = world(fullExposure, p => p.x > 9, detour, dense),
+    run = w => w.root.BattleTacticalContactRoute.pick(w.soldier, w.sim, reports, goal, []);
+  assert.deepEqual(run(fast), run(control), 'dense graph selection, rejection counts and native budgets');
+  assert.equal(fast.nativeCalls(), control.nativeCalls(), 'dense graph physical work is unchanged');
+  assert.deepEqual(fast.nativeTrace(), control.nativeTrace(), 'dense graph live physical transcript');
+}
 // A straight leg has already passed its native clearance query. Rechecking
 // that identical segment during this synchronous evaluation buys no safety.
 const direct = world(source, () => false, false);
@@ -212,6 +265,8 @@ console.log(
     avoidedPercent: +((saved / total) * 100).toFixed(1),
     nativeClearanceQueriesBefore: nativeBefore,
     avoidedNativeClearanceQueries: nativeSaved,
-    avoidedIrrelevantStandQueries: admissionSaved
+    avoidedIrrelevantStandQueries: admissionSaved,
+    dominatedEdgeSightQueriesBefore: dominatedSightBefore,
+    avoidedDominatedEdgeSightQueries: dominatedSightSaved
   })
 );

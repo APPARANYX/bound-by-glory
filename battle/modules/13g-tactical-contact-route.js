@@ -94,7 +94,7 @@
     if (straight > MAX_HOP || total < MIN_HOP) return { ok: false, reason: 'outside-contact-hop' };
     return { ok: true, distance: total, points: points, detour: points.length > 2 };
   }
-  function edge(sim, from, to, reports, underFire, strict, budget, stance, visibility) {
+  function edge(sim, from, to, reports, underFire, strict, budget, stance, visibility, cannotImprove) {
     var out = { eligible: false, reason: 'unknown', distance: distance(from, to), exposure: 1 };
     if (!reports || !reports.length) {
       out.reason = 'missing-reported-contact';
@@ -113,16 +113,21 @@
       exposed = 0;
     /* Measure exposure ALONG the actual traversable route, including B1
        egress and C ingress, not through the solid obstacle between B and C. */
-    for (var k = 1; k < transit.points.length; k++) {
-      var a = transit.points[k - 1],
-        b = transit.points[k],
-        leg = distance(a, b),
-        steps = Math.max(1, Math.ceil(leg / SAMPLE));
-      for (var i = k === 1 ? 0 : 1; i <= steps; i++) {
-        var t = i / steps,
-          at = { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t };
-        samples++;
-        if (visibility ? visibility(at) : threatVisible(sim, at, reports, stance)) exposed++;
+    /* Only later graph edges can be unable to relax their destination even at
+       zero exposure. Physical validity and detour-budget consumption above
+       still run; first hops and independent execution always measure sight. */
+    if (!cannotImprove) {
+      for (var k = 1; k < transit.points.length; k++) {
+        var a = transit.points[k - 1],
+          b = transit.points[k],
+          leg = distance(a, b),
+          steps = Math.max(1, Math.ceil(leg / SAMPLE));
+        for (var i = k === 1 ? 0 : 1; i <= steps; i++) {
+          var t = i / steps,
+            at = { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t };
+          samples++;
+          if (visibility ? visibility(at) : threatVisible(sim, at, reports, stance)) exposed++;
+        }
       }
     }
     out.distance = transit.distance;
@@ -267,17 +272,23 @@
         var leg = distance(nodes[from], nodes[k]);
         if (leg < MIN_HOP || leg > MAX_HOP) continue;
         if (++stats.evaluatedEdges > MAX_EDGE_QUERIES) break;
-        var result = edge(
-          sim,
-          nodes[from],
-          nodes[k],
-          reports,
-          underFire,
-          from === 0,
-          detourBudget,
-          undefined,
-          visibility
-        );
+        /* Exposure only adds nonnegative cost. Use the original grouping and
+           relaxation tolerance: if even zero exposure cannot improve d[k],
+           no real exposure can. Retain physical work for identical budgets. */
+        var cannotImprove =
+            from !== 0 && d[from] + (leg + Math.max(0, +nodes[k].quality || 0) * 5) >= d[k] - 0.0001,
+          result = edge(
+            sim,
+            nodes[from],
+            nodes[k],
+            reports,
+            underFire,
+            from === 0,
+            detourBudget,
+            undefined,
+            visibility,
+            cannotImprove
+          );
         if (result.detour && result.eligible) stats.admittedDetours++;
         if (!result.eligible) {
           stats.rejected[result.reason] = (stats.rejected[result.reason] || 0) + 1;
