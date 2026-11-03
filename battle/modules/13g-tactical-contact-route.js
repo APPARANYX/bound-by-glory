@@ -203,6 +203,8 @@
     /* Cover nodes come from real obstacle-backed slots. Never project imaginary
        virtual cover spots, and never reserve a future waypoint in advance. */
     var chosen = [],
+      ranks = [],
+      order = [],
       seen = new Set();
     candidates.forEach(function (p) {
       if (
@@ -217,19 +219,22 @@
       )
         return;
       if (p.slotId) seen.add(String(p.slotId));
+      /* Fixed coordinates/endpoints make this exact rank invariant during
+         the synchronous sort. Primitive arrays avoid per-point wrappers. */
+      order.push(chosen.length);
+      ranks.push(crossTrack(p, here, target) + 0.12 * distance(p, here));
       chosen.push(p);
     });
     stats.total = chosen.length;
-    chosen.sort(function (a, b) {
-      return (
-        crossTrack(a, here, target) +
-          0.12 * distance(a, here) -
-          (crossTrack(b, here, target) + 0.12 * distance(b, here)) ||
-        String(a.slotId).localeCompare(String(b.slotId))
-      );
+    order.sort(function (a, b) {
+      return ranks[a] - ranks[b] || String(chosen[a].slotId).localeCompare(String(chosen[b].slotId));
     });
-    chosen.length = Math.min(chosen.length, MAX_NODES);
-    var nodes = [{ x: here.x, z: here.z, slotId: 'start', quality: 0 }].concat(chosen);
+    order.length = Math.min(order.length, MAX_NODES);
+    var nodes = [{ x: here.x, z: here.z, slotId: 'start', quality: 0 }].concat(
+      order.map(function (index) {
+        return chosen[index];
+      })
+    );
     stats.graphNodes = nodes.length - 1;
     var d = Array(nodes.length).fill(Infinity),
       prev = Array(nodes.length).fill(-1),

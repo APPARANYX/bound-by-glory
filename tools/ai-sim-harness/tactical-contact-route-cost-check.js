@@ -13,7 +13,7 @@ const uncached = source.replace(hit, '/* Deliberately query every sample in the 
 const clearance = '!direct && !N.movementClear(cursor, p)';
 assert.equal(source.split(clearance).length, 2, 'control restores exactly one duplicate clearance');
 const rechecking = source.replace(clearance, '!N.movementClear(cursor, p)');
-function world(text, exposure, detour, coverOverride) {
+function world(text, exposure, detour, coverOverride, mathCounts) {
   let calls = 0,
     nativeCalls = 0;
   const nativeTrace = [];
@@ -47,7 +47,13 @@ function world(text, exposure, detour, coverOverride) {
   for (let x = -16; x <= 16; x += 8)
     for (let z = 8; z <= 64; z += 8) cover.push({ x, z, slotId: `${x}:${z}`, quality: 0.1 });
   if (coverOverride) cover.splice(0, cover.length, ...coverOverride);
-  loadSource(root, text, { console: quietConsole }, file);
+  const math = Object.create(Math);
+  if (mathCounts)
+    math.hypot = (...args) => {
+      mathCounts.hypot++;
+      return Math.hypot(...args);
+    };
+  loadSource(root, text, { console: quietConsole, Math: math }, file);
   return {
     root,
     soldier: { root: { position: { x: 0, z: 0 } }, suppressedUntil: 0 },
@@ -65,6 +71,53 @@ const reports = [
   { x: 32, z: 100 }
 ];
 const goal = { x: 0, z: 70 };
+// Restore the original comparator-only rank calculation as a geometry control.
+// Sorting is synchronous: candidate coordinates/endpoints do not change, and
+// equal ranks must still use the original slot-ID ordering and stable ties.
+const rankedPush =
+    /order\.push\(chosen\.length\);\s*ranks\.push\(crossTrack\(p, here, target\) \+ 0\.12 \* distance\(p, here\)\);\s*chosen\.push\(p\);/,
+  rankedSort = /order\.sort\(function \(a, b\) \{[\s\S]*?\n    \}\);/,
+  rankedNodes = /order\.map\(function \(index\) \{\s*return chosen\[index\];\s*\}\)/,
+  rankedCap = 'order.length = Math.min(order.length, MAX_NODES);';
+assert.ok(rankedPush.test(source), 'one search-local primitive rank construction');
+assert.ok(rankedSort.test(source), 'one original-order index comparator');
+assert.ok(rankedNodes.test(source), 'select only the capped original graph points');
+assert.equal(source.split(rankedCap).length, 2, 'the existing cap applies to sorted indices');
+const repeatedRank = source
+  .replace(rankedPush, 'chosen.push(p);')
+  .replace(
+    rankedSort,
+    'chosen.sort(function (a, b) { return crossTrack(a, here, target) + 0.12 * distance(a, here) - ' +
+      '(crossTrack(b, here, target) + 0.12 * distance(b, here)) || ' +
+      'String(a.slotId).localeCompare(String(b.slotId)); });'
+  )
+  .replace(rankedCap, 'chosen.length = Math.min(chosen.length, MAX_NODES);')
+  .replace(rankedNodes, 'chosen');
+let rankHypotBefore = 0,
+  rankHypotAfter = 0;
+for (const detour of [false, true]) {
+  // More than MAX_NODES, equal-rank mirrored points, duplicate IDs, missing
+  // IDs and tiny perturbations exercise ordering, stability and graph clipping.
+  const cover = Array.from({ length: 192 }, (_, i) => ({
+    x: (i % 2 ? -1 : 1) * ((Math.floor(i / 2) % 11) + 1) * 1.01,
+    z: 3 + Math.floor(i / 22) * 2.04 + (Math.floor(i / 2) % 17 === 0 ? 1e-9 : 0),
+    slotId: i % 19 === 0 ? undefined : 'rank-' + (i % 181),
+    quality: [0, 0.1, -0.2, '0.3'][i % 4]
+  }));
+  const before = { hypot: 0 },
+    after = { hypot: 0 },
+    fast = world(source, p => p.x > 8, detour, cover, after),
+    control = world(repeatedRank, p => p.x > 8, detour, cover, before),
+    original = JSON.stringify(cover),
+    run = w => w.root.BattleTacticalContactRoute.pick(w.soldier, w.sim, reports, goal, []);
+  assert.deepEqual(run(fast), run(control), 'rank reuse preserves full routes, ties, exposure and budgets');
+  assert.deepEqual(fast.nativeTrace(), control.nativeTrace(), 'same ordered live physical queries');
+  assert.equal(fast.calls(), control.calls(), 'same ordered-search sight workload');
+  assert.equal(JSON.stringify(cover), original, 'candidate records are not decorated or mutated');
+  assert.ok(after.hypot < before.hypot, 'the complete search makes fewer real hypot calls');
+  rankHypotBefore += before.hypot;
+  rankHypotAfter += after.hypot;
+}
 // Restoring exposure on every physical edge is the pre-optimization control.
 // This must retain physical checks and their detour budgets, even when an
 // already-known route makes the edge incapable of improving a node's cost.
@@ -266,6 +319,8 @@ console.log(
     nativeClearanceQueriesBefore: nativeBefore,
     avoidedNativeClearanceQueries: nativeSaved,
     avoidedIrrelevantStandQueries: admissionSaved,
+    rankHypotBefore,
+    rankHypotAfter,
     dominatedEdgeSightQueriesBefore: dominatedSightBefore,
     avoidedDominatedEdgeSightQueries: dominatedSightSaved
   })
