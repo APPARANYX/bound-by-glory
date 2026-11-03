@@ -40,7 +40,7 @@ N.movementClear = function (a, b) {
   checks++;
   return originalClear(a, b);
 };
-root.BattleTacticalPositions = { revision: () => revision, station: () => null };
+root.BattleTacticalPositions = { revision: () => revision, station: () => null, current: () => null };
 load(root, 'battle/modules/39-navigation-physicality-debug.js');
 const scenario = { buildings: [] };
 N.installScenario(scenario);
