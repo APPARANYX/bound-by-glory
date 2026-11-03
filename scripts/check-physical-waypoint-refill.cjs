@@ -27,4 +27,36 @@ for(let i=0;i<4;i++){
 assert(Math.abs(soldier.root.position.z-startZ)>35,'probe must consume enough lookahead to cross the old low-queue rebuild threshold');
 assert(sim.time<plan.replanAt,'probe must exercise queue refill before the bounded periodic replan');
 assert.equal(plan.finalGoalX,goal.x);assert.equal(plan.finalGoalZ,goal.z);
+/* A completed empty physical queue is not an active route: a fixed five-second
+   refresh must not rebuild it unless the destination, geometry, claims or
+   moving-obstacle fallback says the same position needs reconsideration. */
+const arrived={id:'settled-probe',root:{position:{x:40,y:0,z:40}}},stop={x:40,z:40};
+sim.time=1;
+N.nextWaypoint(sim,arrived,stop);
+let completed=arrived._physicalPath;
+assert(completed&&!completed.blocked&&completed.points.length===0,'arrived soldier owns a settled empty route');
+sim.time=61;
+N.nextWaypoint(sim,arrived,stop);
+assert.strictEqual(arrived._physicalPath,completed,'elapsed time alone cannot replan an already completed empty route');
+const other={x:41,z:40};
+N.nextWaypoint(sim,arrived,other);
+assert.notStrictEqual(arrived._physicalPath,completed,'new destination must invalidate completed route');
+let revision=5;
+r.BattleTacticalPositions={revision(){return revision;},station(){return null;}};
+sim.time=62;
+N.nextWaypoint(sim,arrived,stop);
+completed=arrived._physicalPath;
+sim.time=90;
+N.nextWaypoint(sim,arrived,stop);
+assert.strictEqual(arrived._physicalPath,completed,'unchanged station revision retains an arrived route');
+revision++;
+N.nextWaypoint(sim,arrived,stop);
+assert.notStrictEqual(arrived._physicalPath,completed,'station claim changes must reconsider an arrived stand goal');
+completed=arrived._physicalPath;
+sim.obstacles.__dynamicFootprints=[{id:'distant-hull',shape:'circle',x:1000,z:1000,radius:2}];
+sim.time=97;
+N.nextWaypoint(sim,arrived,stop);
+assert.notStrictEqual(arrived._physicalPath,completed,'moving-hull presence retains bounded periodic replan');
+delete sim.obstacles.__dynamicFootprints;
+console.log('PASS: completed empty waypoint queues skip periodic rebuild, but invalidate on goal, station and moving obstacles');
 console.log('PASS: low rolling waypoint queues refill in place without a full physical replan');
