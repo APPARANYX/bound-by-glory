@@ -222,6 +222,46 @@ test('route-only admission skips irrelevant physical checks after live claim/bod
   assert.equal(has(), true, 'same-time moving geometry stays live');
 });
 
+// prettier-ignore
+test('versioned route stand-clearance reuse does not cache claims, bodies or owner adoption', () => {
+  const f = fixture([hedge()]),
+    api = f.r._engagementCoverPositions(f.r._engagementCoverCtx()),
+    N = f.r.BattleNavigation,
+    threat = { x: 0, z: 60 };
+  api.warm(f.b);
+  const original = N.movementClear,
+    previousVersion = N.version;
+  let calls = 0;
+  N.movementClear = function (...args) {
+    calls++;
+    return original.apply(this, args);
+  };
+  try {
+    const choose = () => api.routeCandidates(f.s, f.b, threat, 26, () => true);
+    const first = choose();
+    const warmCalls = calls;
+    assert.ok(first.length > 2 && warmCalls > 0, 'first admitted route pass asks native clearance');
+    const again = choose();
+    assert.deepEqual(again, first, 'reused static clearance cannot change route candidate list');
+    assert.equal(calls, warmCalls, 'second identical route pass avoids native static wall queries');
+    api.coverCandidates(f.s, f.b, threat, 26);
+    assert.ok(calls > warmCalls, 'ordinary candidate API still performs fresh native clearance');
+    const beforeSwap = calls;
+    N.movementClear = function (...args) {
+      calls++;
+      return original.apply(this, args);
+    };
+    assert.deepEqual(choose(), first, 'replacing clearance function leaves candidate results intact');
+    assert.ok(calls > beforeSwap, 'clearance function identity change invalidates private route cache');
+    const beforeNativeAdoption = calls;
+    assert.ok(api.reserveCover(f.s, f.b, first[0].slot, 'route'));
+    assert.ok(calls > beforeNativeAdoption, 'live owner claim still performs native clearance');
+    api.releaseCover(f.s, f.b);
+  } finally {
+    N.movementClear = original;
+    assert.equal(N.version, previousVersion);
+  }
+});
 test('native route admission removes only discarded point queries with identical plans and lifecycle state', () => {
   function run(unfiltered, goal, taken) {
     const obstacles = [];
