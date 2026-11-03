@@ -661,11 +661,18 @@
       });
   }
   function update(ctx) {
+    var __p = root.BattleCoveredManeuverBranchProbe,
+      __t = __p ? __p.clock() : 0,
+      __pre = 0,
+      __basisUsed = false,
+      __branch = 'prelude';
+    if (__p) __p.enter(ctx);
+    try {
     var st = state(ctx),
       Q = root.BattleSquadStability,
       C = root.BattleCoverPositions,
-      rs = reports(ctx),
-      b = basis(ctx, rs),
+      rs = __p ? __p.timed('reports', function () { return reports(ctx); }) : reports(ctx),
+      b = __p ? __p.timed('basis', function () { return basis(ctx, rs); }) : basis(ctx, rs),
       a = men(ctx.squad),
       defense = defenseBrief(ctx, rs),
       back = ctx.squad.state === 'retreat' || ctx.squad.commandPhase === 'retreat',
@@ -681,17 +688,21 @@
               ctx.squad._macroMission &&
               ctx.squad._macroMission.action === 'assault') ||
             !!flank(ctx.squad));
+    if (__p) __pre = __p.clock() - __t;
+    __branch = st.window ? 'window-precheck' : 'no-window-precheck';
     if (st.window) {
       var stage = ctx.stage(st.window);
       if (!eligible || !stage || stage.stage === 'cancelled') {
+        __branch = 'window-invalid';
         end(ctx, st, 'window-ended', false);
-        st.blocked = b;
+        (__basisUsed = true, st.blocked = b);
         return;
       }
       /* Confirm a genuine discharge only to START the bound. During motion,
          preserve that receipt and the live covering assignment instead of
          dropping visible supporters after the three-second shot evidence age. */
       if (st.phase === 'moving') {
+        __branch = 'window-moving';
         st.supporters = (st.confirmedSupporters || []).filter(function (id) {
           return men(ctx.squad).some(function (s) {
             return String(s.id) === id && !s.incapacitated && s.hp > 0 && s.weapon && !s.outOfAmmo;
@@ -734,11 +745,13 @@
           );
         });
         if (holders.length < 2) {
+          __branch = 'moving-cover-incapable';
           end(ctx, st, 'cover-team-incapable', false);
-          st.blocked = b;
+          (__basisUsed = true, st.blocked = b);
           return;
         }
         if (st.arrived.size + st.interrupted.size === st.plan.length) {
+          __branch = 'moving-resolved';
           /* The Meso cover lease and remaining supporter roles end only after
              every personal arrival/check-in or explicit interruption. */
           end(
@@ -748,13 +761,20 @@
             st.arrived.size > 0
           );
           st.blocked = null;
-        } else replenish(ctx, st, rs);
+        } else {
+          __branch = 'moving-refill';
+          var __r = __p ? __p.clock() : 0;
+          replenish(ctx, st, rs);
+          if (__p) __p.detail('replenish', __p.clock() - __r);
+        }
         return;
       }
       if (st.supporters.length < (st.supportRelocation ? 2 : 1)) {
+        __branch = 'window-support-wait';
         st.reason = 'await-independent-support-discharge';
         return;
       }
+      __branch = 'window-support-adoption';
       for (var i = 0; i < st.plan.length; i++) {
         var p = st.plan[i];
         if (
@@ -768,7 +788,7 @@
           ).eligible
         ) {
           end(ctx, st, 'route-or-mover-revoked', false);
-          st.blocked = b;
+          (__basisUsed = true, st.blocked = b);
           return;
         }
         root.BattleTacticalContactSkills.release(ctx, p.man);
@@ -783,7 +803,7 @@
       }
       if (!st.actions.size) {
         end(ctx, st, 'all-personal-orders-refused', false);
-        st.blocked = b;
+        (__basisUsed = true, st.blocked = b);
         return;
       }
       st.confirmedSupporters = st.supporters.slice();
@@ -792,12 +812,14 @@
     }
     /* No new covered bound while nobody commands the squad (succession, 15d): the reason says so. */
     if (Q.controllerSuccession && Q.controllerSuccession(ctx.sim, ctx.squad)) {
+      __branch = 'no-window-succession';
       st.reason = 'succession';
       st.blocked = null;
       st.stall = null;
       return;
     }
     if (!eligible) {
+      __branch = 'no-window-ineligible';
       st.reason = back ? 'ordinary-retreat' : 'no-authorized-contact';
       st.blocked = null;
       st.stall = null;
@@ -821,13 +843,19 @@
       st.blocked = null;
     }
     if (STALL_ON && st.stall && st.stall.released && !newGoal) {
+      __branch = 'no-window-stall-released';
       st.reason = 'stall-released:no-hop';
       return;
     }
-    if (st.blocked === b && !(STALL_ON && st.stall && cycle !== st.stall.cycle)) return;
+    if ((__basisUsed = true, st.blocked === b) && !(STALL_ON && st.stall && cycle !== st.stall.cycle)) {
+      __branch = 'no-window-blocked';
+      return;
+    }
+    __branch = 'no-window-choose';
     var selected = choose(ctx, st, rs);
     if (!selected) {
-      st.blocked = b;
+      __branch = 'no-window-no-hop';
+      (__basisUsed = true, st.blocked = b);
       st.reason = 'no-directional-covered-team';
       if (STALL_ON) {
         if (!st.stall)
@@ -851,6 +879,7 @@
       }
       return;
     }
+    __branch = 'no-window-start-bound';
     st.stall = null;
     selected.plan.forEach(function (p) {
       root.BattleTacticalMarchProvider.releaseMan(ctx, p.man);
@@ -869,7 +898,7 @@
     else coverRequest.moverIds = selected.moverIds;
     var result = ctx.request('maneuver.cover', null, coverRequest);
     if (!result.ok) {
-      st.blocked = b;
+      (__basisUsed = true, st.blocked = b);
       st.reason = 'window-refused:' + result.reason;
       return;
     }
@@ -909,6 +938,9 @@
     st.window = result.actionId;
     st.windowsStarted++;
     note(ctx, st, 'support', 'await-independent-support-discharge');
+    } finally {
+      if (__p) __p.leave(ctx, __branch, __p.clock() - __t, __pre, __basisUsed, st);
+    }
   }
   function engagement(ctx) {
     var st = states.get(ctx.squad),
