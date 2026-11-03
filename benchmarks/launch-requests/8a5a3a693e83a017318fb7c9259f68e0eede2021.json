@@ -1,0 +1,24 @@
+{
+  "branch": "work/benchmark-launch/meso706-us-defend-20261101-final",
+  "launch_parent_sha": "902f8708f962b99834ad6ab936b2e4f82d27b689",
+  "launch_sha": "8a5a3a693e83a017318fb7c9259f68e0eede2021",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/902f8708f962b99834ad6ab936b2e4f82d27b689",
+  "request": {
+    "battle_type": "us-defend",
+    "benchmark": "standard",
+    "correlation_id": "meso706-us-defend-902f8708",
+    "origin_agent": "chatgpt",
+    "purpose": "PR706 final acceptance; exact-head Lab 41288471857 passed; inspect real behavior/owner conflicts and transport receipts. Controller rebuild: legacy deltas diagnostic.",
+    "query_off": "strategicInterception=0",
+    "query_on": "strategicInterception=0&tacticalController=new",
+    "ref": "work/controller-meso-wrap-20261101",
+    "seed": "controller-natural-20261026",
+    "seeds": "3",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/controller-meso-wrap-20261101",
+  "source_sha_at_archive": "f469a6993d490bf101fe17026c73f9c4bb5e81ed"
+}
