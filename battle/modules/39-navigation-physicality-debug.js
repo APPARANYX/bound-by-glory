@@ -793,6 +793,10 @@
       index: 0,
       createdAt: sim.time,
       replanAt: sim.time + REPLAN_SECONDS,
+      stationRevision:
+        root.BattleTacticalPositions && root.BattleTacticalPositions.revision
+          ? root.BattleTacticalPositions.revision(sim)
+          : 0,
       minQueue: MIN_QUEUE,
       routeMargin: ROUTE_MARGIN,
       collisionMargin: COLLISION_MARGIN
@@ -822,8 +826,20 @@
     if (!c) return true;
     if (c.version !== physicalVersion(sim)) return true;
     if (Math.hypot(dest.x - c.finalGoalX, dest.z - c.finalGoalZ) > 1.4) return true;
-    if (!c.points || !c.points.length)
+    if (!c.points || !c.points.length) {
+      /* An empty successful plan has already reached its physical stand goal.
+         Nothing remains to re-route at the periodic deadline. Reconsider the
+         stand point immediately if its station claims change; retain the
+         periodic fallback when moving obstacle footprints are present. */
+      if (c.points && !c.blocked && dist(start, c.standGoal) <= GOAL_ARRIVAL) {
+        var P = root.BattleTacticalPositions,
+          stationRevision = P && P.revision ? P.revision(sim) : 0,
+          moving = sim.obstacles && sim.obstacles.__dynamicFootprints;
+        if (stationRevision !== c.stationRevision) return true;
+        if (!moving || !moving.length) return false;
+      }
       return sim.time >= c.replanAt || (!c.blocked && dist(start, c.standGoal) > GOAL_ARRIVAL);
+    }
     if (!firstSegmentClear(sim, soldier, start, c)) return true;
     if (sim.time >= c.replanAt) return true;
     return false;
