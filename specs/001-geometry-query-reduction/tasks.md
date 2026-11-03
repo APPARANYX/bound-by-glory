@@ -8,6 +8,14 @@
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
+**Progress and evidence protocol (pilot)**: The assigned task owner updates the checkbox only when the task's stated deliverable is verified. On completion, add an adjacent `Evidence:` line linking the owning PR, exact commit, test receipt, or review artifact. Assignment, code written, green CI, and browser signoff are separate states; do not equate them. If validation is pending, leave the checkbox unchecked and link the pending handoff. Avoid checking off another agent's tasks without verified evidence. Reconcile this file with PR handoffs at each convergence checkpoint; PR/issue comments are not a substitute for maintaining task state.
+
+**Muse dispatch contract**: For T010, T015, T016, T018 and any browser-backed validation, the owning implementation PR/issue must contain ONE complete QA handoff keyed by PR + exact SHA + scenario + purpose, marked pending Muse acknowledgement. Include source/baseline SHAs, verified preview/build, flags, controller, map, seed, duration, timestep, run links, commands, pass criteria and required raw physical/ownership/reset artifacts. Apply GitHub label `needs-kit-testing` to that same PR/issue and re-fetch it to verify the label exists. A mention or comment alone does not trigger Muse. If label application fails, record `DISPATCH BLOCKED`; label presence does not prove acknowledgement or results. Muse alone executes/signs off browser/VM/Chromium/Skills Lab and browser-backed benchmarks; automatic CI remains unchanged. Do not duplicate existing handoffs.
+
+**Cache correctness gate**: A step-index and nav-version key alone do NOT prove immutable inputs within a simulation step. Before enabling a cache, inventory every input influencing the result (including moving obstacles, soldier pose/stance, reservations, occupancy, collision and dynamic line-of-sight state). Cache only demonstrably immutable static sub-results, or prove comprehensive live-state invalidation; always revalidate dynamic state. Rounded endpoints can alias distinct collision/visibility decisions: prove exact semantic equivalence at rounding boundaries or use lossless keys. Add same-step mutation, dynamic-obstacle, stance, and rounding-boundary tests. Any deterministic mismatch rejects the candidate; do not infer safety from aggregate repeat counts.
+
+**Convergence checkpoint**: Before requesting final physical validation or PR readiness, compare implemented behavior and source ownership against `spec.md`, `data-model.md`, `AGENTS.md`, this checklist and exact-head CI; document unresolved discrepancies on the owning PR. `/speckit.converge` is a required review checkpoint, not evidence of physical validation.
+
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies)
@@ -47,7 +55,7 @@
 ### Tests for User Story 1
 
 - [ ] T007 [P] [US1] Add a step-boundary invalidation test: move an endpoint between steps, re-query the same pair, and confirm the cache does not return the previous step's result (harness check under `tools/ai-sim-harness/`, or a targeted probe if no suitable check exists).
-- [ ] T008 [P] [US1] Add a `hasLineOfSight` key test: the same soldier pair at the same positions but with different stances must not share a cache entry.
+- [ ] T008 [P] [US1] Add a `hasLineOfSight` key test: the same soldier pair at the same positions but with different stances must not share a cache entry. Also test same-step moving obstacles/reservations/occupancy and endpoint rounding boundaries: any cache reuse must preserve the uncached result exactly.
 
 ### Implementation for User Story 1
 
