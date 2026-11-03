@@ -1,8 +1,14 @@
 {
-  "benchmark": "hotpath",
+  "benchmark": "standard",
   "ref": "work/meso706-lazy-covered-basis-20261102",
+  "seed": "controller-natural-20261026",
+  "seeds": "3",
   "battle_type": "meeting",
-  "seed": "controller-natural-20261026-0002",
+  "windows": "0+600",
   "sim_seconds": "600",
-  "query": "strategicInterception=0&tacticalController=new"
+  "query_off": "strategicInterception=0",
+  "query_on": "strategicInterception=0&tacticalController=new",
+  "origin_agent": "chatgpt",
+  "correlation_id": "meso726-68b2403b-meeting",
+  "purpose": "Official exact-head covered-maneuver lazy-basis gate after passing CI, native lab and deterministic 600s same-seed parity"
 }
