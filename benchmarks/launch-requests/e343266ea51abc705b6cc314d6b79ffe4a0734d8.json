@@ -1,0 +1,18 @@
+{
+  "branch": "work/benchmark-launch/nse-causal-legacy-off-20261031",
+  "launch_parent_sha": "dd28010c52f7459af59cf778a5fa76cdf9bb8576",
+  "launch_sha": "e343266ea51abc705b6cc314d6b79ffe4a0734d8",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "benchmark": "causal",
+    "query": "strategicInterception=0&navStationExit=0",
+    "ref": "work/pin/nse-f92f506a",
+    "seconds": "600",
+    "seeds": "20",
+    "side": "all"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/nse-f92f506a",
+  "source_sha_at_archive": "f92f506a2b943d1767aeb42c54b748a0c1ff6ec1"
+}
