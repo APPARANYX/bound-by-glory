@@ -597,6 +597,8 @@
         })
         .concat(Array.from(st.interrupted), Array.from(st.rejectedReplacementIds))
     );
+    if (root.BattleCoveredManeuverBranchProbe)
+      root.BattleCoveredManeuverBranchProbe.refill(ctx, st, h, active, excluded);
     var choice = choose(ctx, st, rs, excluded);
     if (!choice) return;
     for (var i = 0; i < choice.plan.length && active.length < MAX_PARALLEL_MOVERS; i++) {
@@ -854,7 +856,9 @@
       return;
     }
     __branch = 'no-window-choose';
+    if (__p) __p.decision(ctx, st, b, cycle, newGoal);
     var selected = choose(ctx, st, rs);
+    if (__p) __p.outcome(st);
     if (!selected) {
       __branch = 'no-window-no-hop';
       (__basisUsed = true, st.blocked = b);
