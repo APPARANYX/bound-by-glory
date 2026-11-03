@@ -221,11 +221,17 @@ micro-optimizations.
 ## 7. Allocation / GC
 
 - GC self time: 1.53% (600 s), 1.35% (lab new), 0.81% (lab legacy).
-  GC is not a major cost.
+  GC is not a major cost, and allocation pressure is low — the
+  bottleneck is the volume of geometry queries and per-step AI work,
+  not allocation churn.
 - A heap-allocation profile (CDP HeapProfiler, 512 KiB interval) was
-  captured for the 120 m lab (new controller); see
-  `reports/profile-skills-lab-new-heap/`. [Result pending — fold in
-  when the run lands.]
+  attempted for the 120 m lab (new controller) but the renderer was
+  killed before completing, most likely OOM: the heap profiler adds
+  memory overhead on top of the battle page, and the VM had ~830 MB
+  available. The run is not essential — GC% already bounds the
+  allocation cost — but if allocation attribution is wanted, run it
+  in CI (where memory is plentiful) via `BATTLE_PROFILE_HEAP=1` /
+  `SKILLS_LAB_HEAP=1`, not on this VM.
 
 ## 8. Classification of expensive work (A–E)
 
