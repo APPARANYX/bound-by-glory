@@ -49,6 +49,19 @@ completed=arrived._physicalPath;
 sim.time=90;
 N.nextWaypoint(sim,arrived,stop);
 assert.strictEqual(arrived._physicalPath,completed,'unchanged station revision retains an arrived route');
+/* Subthreshold changes still get their old scheduled review; do not let a
+   completed-route shortcut permanently ignore a new final position. */
+const drifting={id:'drift-probe',root:{position:{x:55,y:0,z:55}}},driftGoal={x:55,z:55};
+sim.time=100;
+N.nextWaypoint(sim,drifting,driftGoal);
+const beforeDrift=drifting._physicalPath;
+sim.time=101;
+N.nextWaypoint(sim,drifting,{x:55.5,z:55});
+assert.strictEqual(drifting._physicalPath,beforeDrift,'small goal drift preserves the existing plan until periodic review');
+sim.time=106;
+N.nextWaypoint(sim,drifting,{x:55.5,z:55});
+assert.notStrictEqual(drifting._physicalPath,beforeDrift,'small goal drift still receives scheduled full replan');
+sim.time=90;
 revision++;
 N.nextWaypoint(sim,arrived,stop);
 assert.notStrictEqual(arrived._physicalPath,completed,'station claim changes must reconsider an arrived stand goal');
