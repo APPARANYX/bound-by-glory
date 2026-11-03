@@ -38,7 +38,7 @@ assert(completed&&!completed.blocked&&completed.points.length===0,'arrived soldi
 sim.time=61;
 N.nextWaypoint(sim,arrived,stop);
 assert.strictEqual(arrived._physicalPath,completed,'elapsed time alone cannot replan an already completed empty route');
-const other={x:41,z:40};
+const other={x:42,z:40};
 N.nextWaypoint(sim,arrived,other);
 assert.notStrictEqual(arrived._physicalPath,completed,'new destination must invalidate completed route');
 let revision=5;
