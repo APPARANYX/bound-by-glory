@@ -256,6 +256,7 @@ try {
 
   const top = (result.profile?.rows || []).slice(0, 25);
   const route = result.profile?.routePlanning;
+  const nav = result.profile?.navigationPlanning;
   const md = [
     '# Battle Sim hot-path profile',
     '',
@@ -265,6 +266,27 @@ try {
     `- Simulated: **${result.simulatedSeconds}s** in **${result.wallSeconds}s wall** (${result.realtimeMultiplier}× real-time)`,
     `- Fixed step: **${fixedDt}s** · snapshots every **${snapshotSeconds}s simulated**`,
     `- Policy: ${policy.source}, revision ${result.policyRevision}${policy.warning ? ` · ${policy.warning}` : ''}`,
+    '',
+    '## Physical waypoint lifecycle (profiler-only)',
+    '',
+    `- Waypoint calls: ${nav?.requests || 0}; physical path rebuilds: ${nav?.physicalReplans || 0}; reuses: ${nav?.physicalReuses || 0}.`,
+    `- Existing populated queues: ${nav?.reuseWithPoints || 0}; same next waypoint: ${nav?.reusedSameWaypoint || 0}; next waypoint advanced in place: ${nav?.reusedAdvancedWaypoint || 0}; tail extended: ${nav?.reusedQueueExtended || 0}.`,
+    `- Version/goal-stable populated plans entering segment clearance check: ${nav?.priorSegmentClearanceChecks || 0}; physical reuse calls while dynamic footprints were present: ${nav?.reuseWithMovingFootprints || 0}.`,
+    '',
+    '| Physical full-replan cause | Count |',
+    '|---|---:|',
+    ...Object.entries(nav?.replanReasons || {})
+      .sort((a, b) => b[1] - a[1])
+      .map(([reason, count]) => `| ${reason} | ${count} |`),
+    '',
+    '| Replan movement owner / kind | Count |',
+    '|---|---:|',
+    ...Object.entries(nav?.replanByOwnerKind || {})
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(([owner, count]) => `| ${owner} | ${count} |`),
+    '',
+    '> Clearance-count is inferred from a version/goal-stable populated plan entering needsReplan; this diagnostic does not intercept the private clearance function. Reuse calls may also consume waypoints or refill the queue. Dynamic footprint counts indicate presence during reuse, not how many affected the route.',
     '',
     '## Route-planning diagnostic (profiler-only)',
     '',
@@ -326,6 +348,7 @@ try {
     `PROFILE_SUMMARY ${JSON.stringify({ seed, battleType, wallSeconds: result.wallSeconds, simulatedSeconds: result.simulatedSeconds, realtimeMultiplier: result.realtimeMultiplier, top: top.slice(0, 12) })}`
   );
   console.log('PROFILE_ROUTE_PLANNING ' + JSON.stringify(route));
+  console.log('PROFILE_NAVIGATION ' + JSON.stringify(nav));
   console.log(md.join('\n'));
 } finally {
   await browser.close();
