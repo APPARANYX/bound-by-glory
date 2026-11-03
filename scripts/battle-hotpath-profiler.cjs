@@ -209,14 +209,49 @@
     if (prev.x !== now.x || prev.z !== now.z) return 'soldier-moved';
     return 'same-observed-inputs';
   }
-  function recordRouteCheck(label, result) {
+  /* Diagnostic-only exact ray-pair census: NEVER short-circuit the native function.
+     Direction matters (START_SKIN at the originating wall), hence no reverse dedup. */
+  var pairRepeat = { calls: 0, first: 0, repeated: 0, trueRepeated: 0, falseRepeated: 0,
+    inconsistent: 0, flushes: 0, maxEntries: 0, distinctVersionChanges: 0 };
+  var pairObserved = new Map(), pairVersion = null;
+  function inspectRouteMovementClear(args, result) {
+    if (!routeActive || !args || !args[0] || !args[1]) return;
+    var a = args[0], b = args[1];
+    if (![a.x, a.z, b.x, b.z].every(Number.isFinite)) return;
+    var v = root.BattleNavigation && root.BattleNavigation.version;
+    if (pairVersion !== v) {
+      if (pairVersion !== null) pairRepeat.distinctVersionChanges++;
+      pairVersion = v;
+      pairObserved.clear();
+    }
+    var key = a.x + ',' + a.z + '>' + b.x + ',' + b.z;
+    pairRepeat.calls++;
+    if (pairObserved.has(key)) {
+      pairRepeat.repeated++;
+      if (result) pairRepeat.trueRepeated++;
+      else pairRepeat.falseRepeated++;
+      if (pairObserved.get(key) !== !!result) pairRepeat.inconsistent++;
+    } else {
+      pairRepeat.first++;
+      if (pairObserved.size >= 32768) {
+        pairObserved.clear();
+        pairRepeat.flushes++;
+      }
+      pairObserved.set(key, !!result);
+      if (pairObserved.size > pairRepeat.maxEntries) pairRepeat.maxEntries = pairObserved.size;
+    }
+  }
+  function recordRouteCheck(label, result, args) {
     if (!routeActive) return;
     var totals = routeActive.totals;
     if (label === 'cover-positions.candidates' || label === 'cover-positions.routeCandidates') {
       totals.candidateQueries++;
       if (Array.isArray(result)) totals.candidatesReturned += result.length;
     } else if (label === 'squad.hasLineOfSight') totals.sightQueries++;
-    else if (label === 'navigation.movementClear') totals.movementQueries++;
+    else if (label === 'navigation.movementClear') {
+      totals.movementQueries++;
+      inspectRouteMovementClear(args, result);
+    }
   }
   function wrapRoutePick() {
     var obj = root.BattleTacticalContactRoute,
@@ -340,7 +375,7 @@
         return result;
       } finally {
         record(label, clock() - start);
-        recordRouteCheck(label, result);
+        recordRouteCheck(label, result, arguments);
       }
     }
     profiled.__battleHotpathWrapped = true;
@@ -572,6 +607,10 @@
     routeLast = new WeakMap();
     routePlanning = routeStats();
     maneuverProbe.reset();
+    pairObserved.clear();
+    pairVersion = null;
+    pairRepeat = { calls: 0, first: 0, repeated: 0, trueRepeated: 0, falseRepeated: 0,
+      inconsistent: 0, flushes: 0, maxEntries: 0, distinctVersionChanges: 0 };
   }
   function snapshot(limit) {
     var wallMs = Math.max(0, clock() - startedAt),
@@ -595,6 +634,7 @@
       wallMs: +wallMs.toFixed(3),
       rows: rows,
       maneuverBranch: maneuverProbe.snapshot(),
+      routeMovementPairRepeat: Object.assign({}, pairRepeat),
       routePlanning: {
         calls: routePlanning.calls,
         fresh: routePlanning.fresh,
