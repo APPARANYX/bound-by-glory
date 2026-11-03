@@ -1,6 +1,6 @@
 {
   "benchmark": "hotpath",
-  "ref": "work/meso706-covered-branch-diagnostic-20261102",
+  "ref": "work/meso706-shooter-plus-lazy-basis-20261102",
   "battle_type": "meeting",
   "seed": "controller-natural-20261026-0002",
   "sim_seconds": "600",
