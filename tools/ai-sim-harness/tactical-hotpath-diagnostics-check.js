@@ -144,6 +144,24 @@ try {
       originals.push({ owner, method, fn });
     }
   }
+  root.BattleNavigation = {
+    version: 1,
+    nextWaypoint(sim, soldier, dest) {
+      let p = soldier._physicalPath;
+      if (!p || sim.time >= p.replanAt) {
+        p = soldier._physicalPath = {
+          version: '1|0|0',
+          finalGoalX: dest.x,
+          finalGoalZ: dest.z,
+          replanAt: sim.time + 5,
+          points: [{ x: 5, z: 0 }, { x: 10, z: 0 }]
+        };
+      } else if (soldier.root.position.x >= 5 && p.points.length > 1) {
+        p.points.shift();
+      }
+      return p.points[0];
+    }
+  };
   loadModule(root, 'scripts/battle-hotpath-profiler.cjs');
   const profiler = root.BattleHotpathProfiler;
   for (const { owner, method } of originals) {
@@ -159,7 +177,27 @@ try {
   assert.ok(profiler.snapshot().rows.every(row => row.calls === 2 && row.totalMs > 0));
   profiler.reset();
   assert.equal(profiler.snapshot().rows.length, 0);
+  const sim = { time: 0, obstacles: [] },
+    soldier = { root: { position: { x: 0, z: 0 } } },
+    dest = { x: 10, z: 0 };
+  root.BattleNavigation.nextWaypoint(sim, soldier, dest);
+  root.BattleNavigation.nextWaypoint(sim, soldier, dest);
+  soldier.root.position.x = 5;
+  root.BattleNavigation.nextWaypoint(sim, soldier, dest);
+  sim.time = 5;
+  root.BattleNavigation.nextWaypoint(sim, soldier, dest);
+  const nav = profiler.snapshot().navigationPlanning;
+  assert.equal(nav.requests, 4);
+  assert.equal(nav.physicalReplans, 2);
+  assert.equal(nav.physicalReuses, 2);
+  assert.equal(nav.replanReasons.missing, 1);
+  assert.equal(nav.replanReasons.periodic, 1);
+  assert.equal(nav.reusedSameWaypoint, 1);
+  assert.equal(nav.reusedAdvancedWaypoint, 1);
+  assert.equal(nav.priorSegmentClearanceChecks, 3);
   profiler.restore();
+  assert.equal(root.BattleNavigation.nextWaypoint(sim, soldier, dest).x, 5);
+  assert.equal(profiler.snapshot().navigationPlanning.requests, 4);
   for (const { owner, method, fn } of originals) assert.equal(owner[method], fn);
   assert.equal(root.BattleTacticalController.dispatch(payload), returned);
   assert.equal(profiler.snapshot().rows.length, 0, 'restored owner calls no longer collect timings');
