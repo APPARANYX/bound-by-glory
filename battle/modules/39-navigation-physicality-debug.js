@@ -840,11 +840,7 @@
         /* No clearance tolerance: changing the line even slightly could
            intersect a body buffer that the original edge avoided. Only
            floating-point roundoff for a collinear point is accepted. */
-        if (
-          progress >= 0 &&
-          progress <= lengthSq &&
-          Math.abs(cross) <= 1e-9 * Math.sqrt(lengthSq)
-        )
+        if (progress >= 0 && progress <= lengthSq && Math.abs(cross) <= 1e-9 * Math.sqrt(lengthSq))
           return true;
       }
     }
