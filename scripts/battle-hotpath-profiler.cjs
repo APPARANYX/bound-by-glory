@@ -21,7 +21,102 @@
     routeActive = null,
     routeLast = new WeakMap(),
     routePlanning = routeStats(),
-    navigationPlanning = navigationStats();
+    navigationPlanning = navigationStats(),
+    /* Query-pair repetition measurement (candidate 1: geometry query volume).
+       For each geometry query (sightBlocker, sightBlocked, hasLineOfSight,
+       movementClear, lineOfSightBlocked) record the endpoint pair, keyed by
+       the current simulation step (0.15 s) and the innermost scoped caller
+       (or 'contact-route.pick' when inside a pick, via routeActive). At each
+       step boundary the per-step sets are finalized into aggregates:
+       total = queries in the step, distinct = unique pairs, repeats =
+       total - distinct. A high repeat rate means a per-step cache would
+       eliminate those queries; a low rate means the volume is genuinely
+       distinct candidates and needs pruning, not caching.
+       Point keys round coordinates to 1 cm (Math.round(v*100)); soldier
+       pairs for hasLineOfSight use soldier ids (eye height differs by
+       stance, so position alone is not a sufficient key). Keys are
+       directional (as called) — a pair queried in the opposite direction
+       counts as distinct, so the repeat rate is a lower bound. */
+    pairStep = -1,
+    pairCurrent = Object.create(null),
+    pairTotals = Object.create(null);
+
+  function pairStepIndex() {
+    var t = root.__battle__ && +root.__battle__.time;
+    if (!isFinite(t)) return -1;
+    return Math.floor(t / 0.15);
+  }
+  function pairFinalizeStep() {
+    for (var label in pairCurrent) {
+      var cur = pairCurrent[label],
+        tot = pairTotals[label] || (pairTotals[label] = { total: 0, distinct: 0, repeats: 0 });
+      tot.total += cur.total;
+      tot.distinct += cur.distinct;
+      tot.repeats += cur.total - cur.distinct;
+    }
+    pairCurrent = Object.create(null);
+  }
+  function pairNoteStep() {
+    var idx = pairStepIndex();
+    if (idx < 0 || idx === pairStep) return;
+    if (pairStep >= 0) pairFinalizeStep();
+    pairStep = idx;
+  }
+  function pairScope() {
+    if (routeActive) return 'contact-route.pick';
+    return scope.length ? scope[scope.length - 1] : 'unscoped';
+  }
+  function pairKeyPoint(a, b) {
+    if (!a || !b) return null;
+    var ax = Math.round((+a.x || 0) * 100),
+      ay = Math.round((+a.y || 0) * 100),
+      az = Math.round((+a.z || 0) * 100),
+      bx = Math.round((+b.x || 0) * 100),
+      by = Math.round((+b.y || 0) * 100),
+      bz = Math.round((+b.z || 0) * 100);
+    return ax + ',' + ay + ',' + az + '>' + bx + ',' + by + ',' + bz;
+  }
+  function pairKeySoldiers(a, b) {
+    if (!a || !b) return null;
+    var ai = a.id != null ? String(a.id) : null,
+      bi = b.id != null ? String(b.id) : null;
+    if (ai != null && bi != null) return ai + '>' + bi;
+    var pa = a.root && a.root.position,
+      pb = b.root && b.root.position;
+    return pairKeyPoint(pa, pb);
+  }
+  function recordPair(kind, key) {
+    if (!key) return;
+    try {
+      pairNoteStep();
+      var label = kind + '@' + pairScope(),
+        cur = pairCurrent[label];
+      if (!cur) cur = pairCurrent[label] = { total: 0, distinct: 0, seen: Object.create(null) };
+      cur.total++;
+      if (!cur.seen[key]) {
+        cur.seen[key] = 1;
+        cur.distinct++;
+      }
+    } catch (e) {
+      /* Diagnostic only: never let pair bookkeeping disturb the simulation. */
+    }
+  }
+  function pairSnapshot() {
+    var out = {};
+    for (var label in pairTotals) {
+      var t = pairTotals[label];
+      out[label] = { total: t.total, distinct: t.distinct, repeats: t.repeats };
+    }
+    return out;
+  }
+  function pairCurrentSnapshot() {
+    var out = {};
+    for (var label in pairCurrent) {
+      var c = pairCurrent[label];
+      out[label] = { total: c.total, distinct: c.distinct, repeats: c.total - c.distinct };
+    }
+    return out;
+  }
 
   function routeStats() {
     return {
@@ -276,6 +371,31 @@
     wrapped.push({ obj: obj, key: key, fn: fn });
     return true;
   }
+  /* Like wrap(), but also records the query's endpoint pair for the
+     per-step repetition measurement. keyFn receives the call's arguments
+     and returns the pair key (or null to skip). */
+  function wrapPair(obj, key, label, kind, keyFn) {
+    if (!obj || typeof obj[key] !== 'function') return false;
+    var fn = obj[key];
+    if (fn.__battleHotpathWrapped) return false;
+    function profiled() {
+      var start = clock();
+      var result;
+      try {
+        result = fn.apply(this, arguments);
+        return result;
+      } finally {
+        record(label, clock() - start);
+        recordRouteCheck(label, result);
+        recordPair(kind, keyFn(arguments));
+      }
+    }
+    profiled.__battleHotpathWrapped = true;
+    profiled.__battleHotpathOriginal = fn;
+    obj[key] = profiled;
+    wrapped.push({ obj: obj, key: key, fn: fn });
+    return true;
+  }
   function wrapMany(obj, prefix, names) {
     for (var i = 0; i < names.length; i++) wrap(obj, names[i], prefix + '.' + names[i]);
   }
@@ -297,6 +417,7 @@
         var elapsed = clock() - start;
         record(label, elapsed);
         record(label + '@' + parent, elapsed);
+        recordPair(key, pairKeyPoint(arguments[1], arguments[2]));
       }
     }
     profiled.__battleHotpathWrapped = true;
@@ -522,22 +643,53 @@
     wrapSightQuery('sightBlocker');
     wrapMany(root.BattleObstacleField, 'obstacle', ['coverAt', 'coverPotentialAt', 'nearby']);
     wrapNavigationWaypoint();
-    wrapMany(root.BattleNavigation, 'navigation', [
-      'findPath',
+    wrapMany(root.BattleNavigation, 'navigation', ['findPath', 'resolveStep']);
+    wrapPair(
+      root.BattleNavigation,
       'movementClear',
-      'resolveStep',
-      'lineOfSightBlocked'
-    ]);
+      'navigation.movementClear',
+      'movementClear',
+      function (args) {
+        return pairKeyPoint(args[0], args[1]);
+      }
+    );
+    wrapPair(
+      root.BattleNavigation,
+      'lineOfSightBlocked',
+      'navigation.lineOfSightBlocked',
+      'lineOfSightBlocked',
+      function (args) {
+        var a = args[0],
+          b = args[1];
+        if (!a || !b) return null;
+        return (
+          Math.round((+a.x || 0) * 100) +
+          ',' +
+          Math.round((+a.z || 0) * 100) +
+          ',' +
+          Math.round((+args[2] || 0) * 100) +
+          '>' +
+          Math.round((+b.x || 0) * 100) +
+          ',' +
+          Math.round((+b.z || 0) * 100) +
+          ',' +
+          Math.round((+args[3] || 0) * 100)
+        );
+      }
+    );
     wrapMany(root.BattleMovementResolver, 'movement-resolver', ['proposeOrder', 'proposeCombat', 'resolve']);
     wrapScoped(root.SquadAI, 'updateSoldier', 'squad.updateSoldier');
     wrapScoped(root.SquadAI, 'updateSquad', 'squad.updateSquad');
-    wrapMany(root.SquadAI, 'squad', [
+    wrapPair(
+      root.SquadAI,
       'hasLineOfSight',
-      'findTarget',
-      'canSuppress',
-      'areaFire',
-      'resolveFire'
-    ]);
+      'squad.hasLineOfSight',
+      'hasLineOfSight',
+      function (args) {
+        return pairKeySoldiers(args[0], args[1]);
+      }
+    );
+    wrapMany(root.SquadAI, 'squad', ['findTarget', 'canSuppress', 'areaFire', 'resolveFire']);
     wrapMany(root.BattleTacticalPositions, 'tactical-position', [
       'claim',
       'release',
@@ -570,6 +722,9 @@
     routeLast = new WeakMap();
     routePlanning = routeStats();
     navigationPlanning = navigationStats();
+    pairStep = -1;
+    pairCurrent = Object.create(null);
+    pairTotals = Object.create(null);
   }
   function snapshot(limit) {
     var wallMs = Math.max(0, clock() - startedAt),
@@ -589,9 +744,11 @@
     });
     if (limit > 0) rows = rows.slice(0, limit);
     return {
-      version: '1.6',
+      version: '1.7',
       wallMs: +wallMs.toFixed(3),
       rows: rows,
+      queryPairs: pairSnapshot(),
+      queryPairsCurrent: pairCurrentSnapshot(),
       navigationPlanning: {
         requests: navigationPlanning.requests,
         nearGoalRequests: navigationPlanning.nearGoalRequests,
@@ -639,5 +796,5 @@
   }
 
   install();
-  root.BattleHotpathProfiler = { version: '1.6', reset: reset, snapshot: snapshot, restore: restore };
+  root.BattleHotpathProfiler = { version: '1.7', reset: reset, snapshot: snapshot, restore: restore };
 })(typeof window !== 'undefined' ? window : globalThis);
