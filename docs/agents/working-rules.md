@@ -47,6 +47,74 @@
   merge arrive as events, so nobody has to say "CI passed" and the agent does not poll. Merge when the head's CI events are
   green; cover the gaps (commit-status CI, merge-queue branches, a lost delivery) with one `send_later` check-in.
 
+## Muse browser QA ownership
+
+Muse is the owner and execution coordinator for **all browser testing across this
+repository**, including interactive UI/visual checks, browser-driven integration and
+regression probes, headless Playwright/Puppeteer runs, CDP CPU/heap profiles, Skills Lab
+exercises and browser-backed battle benchmarks. Code owners continue to implement
+changes, run non-browser Node/PHP/Python/shell checks, and review returned artifacts.
+This ownership applies to every agent and Spec Kit workflow, including work on older
+branches whose instructions predate this rule.
+
+### Route work to Muse
+
+Before starting a browser test, the implementing agent records a **Muse browser QA
+handoff** in the relevant GitHub PR or issue:
+
+- Owner: Muse; requester and implementation owner; status: pending Muse acknowledgement.
+- Source: repository, branch, full published commit SHA and baseline/control SHA.
+- Target: exact preview URL, expected deployed/build identity, map, seed, controller,
+  flags, duration, timestep and any staged premises.
+- Task: existing probe/command or explicit UI actions; success criteria, required
+  skill/ownership/physical evidence, and the raw artifacts to preserve.
+- Existing work: matching CI/run URLs, previous findings and a request identifier
+  formed from PR, source SHA, scenario and purpose, so a second agent does not
+  duplicate the same browser execution.
+
+Muse acknowledges the handoff in that shared record, verifies the actual source and
+runtime, and runs the requested checks using its available browser/VM or the existing
+approved CI workflow. Muse owns manually requested launches and reruns of
+browser-backed workflows; other agents may prepare the request and inspect run
+status/results, but must not independently launch another browser run. Follow the
+existing permanent benchmark launcher and exact-head Skills Lab preflight rules;
+browser ownership does not permit temporary workflows, local multi-seed A/B arms or
+bypassing any acceptance gate.
+
+### Evidence and completion
+
+Muse returns the tested full SHA, actual URL/build and effective inputs, steps or
+commands actually executed, observed versus expected behavior, pass/fail/blocker,
+browser errors, screenshots/video when relevant, raw diagnostics/traces and CI/run
+links. Skills Lab reports retain real actor/target/action-owner identities, simulation
+advancement, same-seed reset, physical movement/support-fire/check-in and cancellation
+evidence; staged inputs are labelled as premises. A changed source invalidates an
+older result as current-head acceptance.
+
+The implementing agent reviews the evidence and fixes any confirmed issue. Mark
+browser QA complete only after Muse has returned evidence for that exact source;
+a task file, mention, dispatch acknowledgement or green launcher alone is not a
+browser test result.
+
+### Automatic CI and unavailable integrations
+
+Existing automatically triggered CI, preview and browser workflows continue to run.
+Do not disable, skip, weaken or replace required checks to enforce agent routing.
+Muse reviews their browser evidence and owns any manual follow-up; automatic execution
+can be reused rather than duplicated. Repository-wide CI, exact-head validation,
+deterministic comparisons, performance limits and merge/deployment requirements still
+apply.
+
+The commands under `.muse/commands/` describe workflows; they do not themselves
+dispatch Muse or connect agents' conversations. An `@mention` is a delivery mechanism
+only when a verified GitHub account/bot and its event integration are configured.
+Never invent an account, assign an unverified recipient, or claim delivery/execution
+without an observed acknowledgement or run. If no Muse integration is available,
+leave the handoff explicitly pending, provide its GitHub link, and continue independent
+non-browser work. Do not silently substitute another agent's browser or claim that
+the request is running. A change to this routing requires the user's explicit
+instruction; Muse unavailability is not a waiver of required browser evidence.
+
 ## Agent ownership and handoffs
 
 **GitHub is the canonical shared record.** Agent-specific memory and chat summaries supplement the
@@ -80,4 +148,3 @@ relying on the handoff. If the branch has advanced, compare the recorded commit 
 head and identify which evidence applies. If a ref, path, commit or permission is missing or differs,
 report the specific mismatch and resolve it before proceeding with dependent work; do not assume
 that agent memory is shared or silently substitute another branch.
-
