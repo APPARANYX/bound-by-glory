@@ -13,6 +13,7 @@ are the profile artifacts listed in §1.
 | 120 m lab, new | Local via preview proxy, build preview-f469a69 | new | 210 s | 28.006 s | 7.50× | 1,400 |
 | 120 m lab, new, wrappers off | Same | new | 210 s | 26.761 s | 7.85× | 1,400 |
 | 120 m lab, legacy | Same | legacy | 210 s | 16.375 s | 12.82× | 1,400 |
+| 120 m lab, new, query-pair instrumentation | Same, profiler v1.7 | new | 210 s | 33.524 s | 6.26× | 1,400 |
 
 Seed for the 600 s meeting: `controller-natural-20261026-0002`,
 `tacticalController=new`, `strategicInterception=0`, fixed step 0.15 s.
@@ -42,6 +43,10 @@ The baseline artifacts are run 41530432380.
   the wrappers-off new run (26.761 s) is still 1.63× the legacy
   wrappers-on run (16.375 s); correcting legacy down by the same ~4%
   gives ~1.71×.
+- The query-pair instrumented run (§12) is slower still: 33.524 s vs
+  28.006 s plain (+19.7%) — the per-query pair bookkeeping (string
+  key + per-step set) is the cost. Its wall time is not used for any
+  comparison; only its pair counts are.
 
 ## 2. Headline: the new controller is 1.71× legacy on the 120 m lab
 
@@ -268,6 +273,14 @@ any movement of either endpoint — dynamic obstacles and moving
 soldiers both invalidate) or cap/prune the candidate set evaluated
 per step.
 
+**Measurement done 2026-11-03 — see §12.** Step (a) is complete:
+25.1% of the 2.06M geometry queries are repeats of a pair already
+queried in the same step, concentrated in `contact-route.pick`
+(41.7% repeats) and `contact-skills.update` (34.9%). A per-step
+cache of the three outermost entry points saves ~2.2 s of the 28 s
+lab wall (~8%). The remaining 75% are distinct pairs and need
+pruning, not caching.
+
 **Safety.** A per-step cache is only safe if every input that can
 change the answer is part of the key (both endpoints' positions,
 dynamic obstacle state, nav version). Identical inputs do not
@@ -389,7 +402,11 @@ benefit is the smallest and the safety case needs work.
   plus the new profiler code; not a behaviour change).
 - **Lab determinism:** new, legacy and wrappers-off new all end with
   `usAlive` 20, `geAlive` 10, no winner; nav requests 28,000 in both
-  arms (1,400 steps × 20 soldiers).
+  arms (1,400 steps × 20 soldiers). The query-pair instrumented run
+  (§12) also ends 20/10 with nav 28,000 / 872 / 27,128 and route
+  631 / 255 / 80 — identical to the plain new-controller run — so
+  the pair instrumentation did not change behaviour, and every pair
+  total matches its wrapper call count exactly.
 - **CI:** the branch 600 s profile run 41648741452 completed
   `success`. The workflow's smoke profiles were not re-run on this
   branch (the push trigger only fires on `main`); exact-head CI and
@@ -398,7 +415,8 @@ benefit is the smallest and the safety case needs work.
   1.25× gate cannot be checked directly on the 600 s meeting — the
   1.71× figure is from the 120 m lab. A paired uninstrumented 600 s
   benchmark (new vs legacy) is the remaining acceptance measurement.
-  The heap-allocation analysis is pending (§7). The local 600 s runner
+  The heap-allocation analysis is in §7 (GC bounds the cost; the
+  heap-profile run OOMed locally). The local 600 s runner
   could not be exercised on this VM (page load is pathologically slow
   there — see `docs/cpu-profiling.md` environment notes; the CI run is
   the authoritative 600 s profile).
@@ -408,8 +426,146 @@ benefit is the smallest and the safety case needs work.
 **9.1 — reduce the new controller's geometry query volume.** It is
 the largest measured excess vs legacy, it is the direct cause of the
 1.71× lab ratio (and therefore of the gate miss), it applies to both
-the lab and the 600 s meeting, and the next step is a bounded
-measurement (count distinct vs repeated query pairs per step at the
-three call sites) that decides between a per-step cache and candidate
-pruning. Do that measurement first; do not cache on the assumption
-that identical inputs guarantee safety.
+the lab and the 600 s meeting, and the repeat-vs-distinct split is
+now measured (§12): a per-step cache at `contact-route.pick` and
+`contact-skills.update` saves ~2.2 s of the 28 s lab wall (~8%),
+and the remaining distinct-pair volume is the larger follow-on
+(pruning). Do the per-step cache first — it is the bounded,
+mechanical fix; then measure whether pruning the distinct candidates
+is worth the design change.
+
+## 12. Query-pair repetition measurement (candidate 1, 2026-11-03)
+
+The question §9.1 left open: of the new controller's 4–5× geometry
+query volume, how much is the *same* query repeated within a step
+(cacheable) vs genuinely distinct candidates (needs pruning)?
+
+### Method
+
+`scripts/battle-hotpath-profiler.cjs` v1.7 (commit `032c02e`)
+instruments the five geometry query entry points —
+`sightBlocker`, `sightBlocked`, `hasLineOfSight`,
+`movementClear`, `lineOfSightBlocked` — and records, per 0.15 s
+step and per innermost scoped caller, the total queries, the
+distinct endpoint pairs, and the repeats (total − distinct).
+
+- Point keys round coordinates to 1 cm. `hasLineOfSight` keys on
+  soldier ids (eye height differs by stance, so position alone is
+  not a sufficient key). Keys are directional (as called), so the
+  repeat rate is a lower bound — a pair queried in the opposite
+  direction counts as distinct.
+- Call-site attribution is the profiler's scope stack; queries
+  inside a `contact-route.pick` are attributed to
+  `contact-route.pick` (via `routeActive`), not to the enclosing
+  scoped caller.
+- The measurement is diagnostic-only (try/catch-guarded, never
+  touches simulation state). It costs ~20% wall overhead on the
+  instrumented run (33.5 s vs 28.0 s plain), so the wall time of
+  this run is not used for any new-vs-legacy comparison.
+
+Run: 120 m lab, new controller, 210 s, seed `skills-range-0001`,
+preview `preview-f469a69` — the same config as the §2 lab arms.
+Output: `reports/profile-skills-lab-new-pairs/` (in the local
+run directory; the profiler and report are on the branch).
+
+**Cross-check:** every pair total matches its wrapper call count
+exactly (sightBlocker 669,735 = 669,735; sightBlocked 461,030;
+hasLineOfSight 314,106; movementClear 112,626;
+lineOfSightBlocked 502,759), so no query was missed or
+double-counted at the entry points. Determinism held: final state
+usAlive 20 / geAlive 10, nav 28,000 / 872 / 27,128, route 631 /
+255 / 80 — identical to the plain new-controller run.
+
+### Results — by query kind
+
+| Query | Total | Distinct | Repeats | Repeat rate |
+|---|---:|---:|---:|---:|
+| sightBlocker | 669,735 | 530,047 | 139,688 | 20.9% |
+| lineOfSightBlocked | 502,759 | 417,724 | 85,035 | 16.9% |
+| sightBlocked | 461,030 | 330,256 | 130,774 | 28.4% |
+| hasLineOfSight | 314,106 | 187,500 | 126,606 | 40.3% |
+| movementClear | 112,626 | 78,480 | 34,146 | 30.3% |
+| **Total** | **2,060,256** | **1,544,007** | **516,249** | **25.1%** |
+
+### Results — by call site
+
+| Call site | Total | Distinct | Repeats | Repeat rate |
+|---|---:|---:|---:|---:|
+| contact-skills.update | 669,263 | 435,879 | 233,384 | 34.9% |
+| contact-route.pick | 453,388 | 264,407 | 188,981 | 41.7% |
+| engagement.updateSquad | 425,505 | 387,597 | 37,908 | 8.9% |
+| engagement.updateSoldier | 177,777 | 149,231 | 28,546 | 16.1% |
+| controller.dispatch | 155,024 | 133,254 | 21,770 | 14.0% |
+| squad.updateSoldier | 113,206 | 110,551 | 2,655 | 2.3% |
+| system:projectile-flight | 32,391 | 32,334 | 57 | 0.2% |
+| squad.updateSquad | 20,811 | 20,802 | 9 | 0.0% |
+| covered-maneuver.update | 10,277 | 7,340 | 2,937 | 28.6% |
+| other (unscoped + systems) | 2,614 | 2,612 | 2 | ~0% |
+
+The repeats are concentrated: `contact-route.pick` +
+`contact-skills.update` hold 422,365 of the 516,249 repeats
+(82%). The largest single cells:
+
+| Cell | Total | Repeats | Repeat rate |
+|---|---:|---:|---:|
+| sightBlocker@contact-skills.update | 319,731 | 105,298 | 32.9% |
+| sightBlocked@contact-route.pick | 180,038 | 75,479 | 41.9% |
+| hasLineOfSight@contact-route.pick | 180,038 | 75,479 | 41.9% |
+| lineOfSightBlocked@contact-skills.update | 159,898 | 57,383 | 35.9% |
+| movementClear@contact-route.pick | 64,032 | 30,713 | 48.0% |
+| hasLineOfSight@contact-skills.update | 45,616 | 31,372 | 68.8% |
+
+Two structural notes:
+
+- `hasLineOfSight@contact-route.pick` and
+  `sightBlocked@contact-route.pick` have **identical** counts
+  (180,038 / 104,559 / 75,479). Every `hasLineOfSight` in a pick
+  issues exactly one `sightBlocked` with the same endpoints — it is
+  a direct pass-through, so the two are the same logical query
+  counted twice. The same nesting applies elsewhere: `hasLineOfSight`
+  calls `sightBlocked` and `lineOfSightBlocked` internally, so the
+  516,249 repeat total double-counts nested repeats. The saving
+  estimate below counts only the outermost entry points to avoid
+  this.
+- `hasLineOfSight@contact-skills.update` is the highest-rate cell
+  (68.8%): only 14,244 distinct soldier pairs out of 45,616
+  queries — the same pairs are checked ~3.2× per step, once per
+  fire-control observation per soldier.
+
+### Verdict: cache AND prune, in that order
+
+**A per-step cache is worth doing, scoped to the two repeat-heavy
+sites.** The repeats are 25.1% of all geometry queries. Valued at
+the wrapper inclusive cost of the three outermost entry points
+(`hasLineOfSight` 9.8 µs × 126,606 repeats,
+`sightBlocker` 6.04 µs × 139,688,
+`movementClear` 4.65 µs × 34,146) the saving is **~2.2 s of the
+28 s lab wall (~8%)**. (`sightBlocked` / `lineOfSightBlocked`
+repeats are mostly nested inside `hasLineOfSight` and are already
+counted in that figure; the direct ones add a little more.)
+
+Safety shape: the cache is scoped to a single 0.15 s step and
+cleared at each step boundary. Within a step, soldier positions are
+fixed (they move once per step, in `stepMovement`), and static
+obstacle geometry does not change, so the same endpoints give the
+same answer within the step. The key must still include the
+obstacle/nav version and, for `hasLineOfSight`, the soldier pair
+(stance affects eye height). Do not cache across steps.
+
+**Pruning is the larger prize and the follow-on.** 75% of the
+queries (1.54M) are distinct pairs — genuinely different
+candidates (each soldier checks a different target, each route edge
+is a different segment). A cache cannot touch those. Reducing them
+needs candidate pruning: don't issue a LOS/movement query for a
+target or edge that cannot improve the current best, or that is
+already known blocked. That is a design change in
+`contact-route.pick` and `contact-skills.update`, not a mechanical
+cache, and it is the next investigation after the cache lands.
+`engagement.updateSquad` (8.9% repeats) and `squad.updateSoldier`
+(2.3%) are already almost entirely distinct — they are the
+pruning candidates, not cache candidates.
+
+**Revised expectation for candidate 9.1.** The cache alone recovers
+~2.2 s (~8% of new's lab wall, ~19% of the 11.6 s new-vs-legacy
+delta). Bringing query volume fully to legacy levels would need the
+pruning half as well; the cache is the bounded first step.
