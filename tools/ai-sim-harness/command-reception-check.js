@@ -104,6 +104,61 @@ test('module owns telemetry only and never writes stance, target or destinations
   assert.equal(s.target, before.target);
 });
 
+test('pending publication key query matches peek without settling or copying other receipt data', () => {
+  const w = world(),
+    s = w.us.members[4],
+    scope = 'soldier:' + s.id;
+  const issue = key =>
+    w.C.publish(w.us, w.b, 'movement', [s], {
+      scope,
+      action: 'formation',
+      signature: String(key),
+      spatial: true,
+      point: { x: 40, z: 80 },
+      data: { publishKey: key }
+    });
+  assert.equal(w.C.pendingKeyMatches(s, w.b, 'movement', scope, 'first'), false);
+  issue('first');
+  const first = w.C.peek(s, w.b, 'movement', scope);
+  const times = [0, first.receivedAt, first.processedAt, first.adoptedAt];
+  for (const at of times) {
+    for (const delta of [-2e-9, 0, 2e-9]) {
+      w.b.time = Math.max(0, at + delta);
+      const before = JSON.stringify(w.b._commandReception);
+      for (const key of ['first', 'other', '', null, 0, false]) {
+        const rec = w.C.peek(s, w.b, 'movement', scope),
+          expected = !!(
+            rec &&
+            rec.phase !== 'adopted' &&
+            rec.phase !== 'unreachable' &&
+            rec.data &&
+            String(rec.data.publishKey || '') === String(key || '')
+          );
+        assert.equal(w.C.pendingKeyMatches(s, w.b, 'movement', scope, key), expected);
+      }
+      assert.equal(JSON.stringify(w.b._commandReception), before, 'query never advances receipt lifecycle');
+    }
+  }
+  issue('replacement');
+  assert.equal(w.C.pendingKeyMatches(s, w.b, 'movement', scope, 'first'), false);
+  assert.equal(w.C.pendingKeyMatches(s, w.b, 'movement', scope, 'replacement'), true);
+  const rec = w.b._commandReception.bySoldier[String(s.id)]['movement|' + scope];
+  let unrelatedReads = 0;
+  Object.defineProperty(rec.data, 'unrelated', {
+    enumerable: true,
+    get() {
+      unrelatedReads++;
+      return 1;
+    }
+  });
+  assert.equal(w.C.pendingKeyMatches(s, w.b, 'movement', scope, 'replacement'), true);
+  assert.equal(unrelatedReads, 0, 'a scalar key query does not copy the opaque data payload');
+  rec.unreachable = true; // Explicit unreachable receipt premise, not simulated loss of contact.
+  assert.equal(w.C.pendingKeyMatches(s, w.b, 'movement', scope, 'replacement'), false);
+  w.C.reset(w.b);
+  assert.equal(w.C.pendingKeyMatches(s, w.b, 'movement', scope, 'replacement'), false);
+});
+
 test('same published command coalesces; a changed command gets the next version', () => {
   const w = world();
   w.b.time = 5;

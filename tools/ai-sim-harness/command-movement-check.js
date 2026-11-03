@@ -114,6 +114,42 @@ test('Meso movement reads only its personal receipt while preserving settlement 
   assert.equal(read().point.x, first.point.x, 'diagnostic callers still receive detached copies');
 });
 
+test('scalar pending-key reads preserve the full publication flow with fewer copied receipts', () => {
+  function run(control) {
+    const w = world(),
+      original = w.C.peek;
+    let copies = 0;
+    w.C.peek = function (...args) {
+      copies++;
+      return original.apply(this, args);
+    };
+    if (control)
+      w.C.pendingKeyMatches = function (s, b, category, scope, key) {
+        const p = w.C.peek(s, b, category, scope);
+        return !!(
+          p &&
+          p.phase !== 'adopted' &&
+          p.phase !== 'unreachable' &&
+          p.data &&
+          String(p.data.publishKey || '') === String(key || '')
+        );
+      };
+    issue(w);
+    const man = w.q.members[4],
+      first = original(man, w.b, 'movement', 'soldier:' + man.id);
+    for (let i = 0; i < 20; i++) issue(w);
+    w.b.time = first.adoptedAt + 0.001;
+    issue(w);
+    return { copies, calls: w.calls, receipt: JSON.stringify(w.C.squadSnapshot(w.q, w.b)) };
+  }
+  const actual = run(false),
+    control = run(true);
+  assert.ok(actual.copies < control.copies, 'gameplay actually omits public DTO creation');
+  assert.deepEqual(actual.calls, control.calls, 'identical native movement publications');
+  assert.equal(actual.receipt, control.receipt, 'all personal receipts and adoption counts match');
+  console.log('PENDING_KEY_COPY_COUNTS', JSON.stringify({ before: control.copies, after: actual.copies }));
+});
+
 test('a fresh Meso slot is pending information, not a personal destination, until adoption', () => {
   const w = world(),
     man = w.q.members[4];

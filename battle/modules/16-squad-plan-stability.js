@@ -1065,18 +1065,12 @@
       return commitPersonalMovement(s, next, publishKey, battle, urgent, stats);
     }
 
-    /* Settle through the canonical adopted view before reading the one pending
-       movement receipt. A diagnostic snapshot copies every command slot and
-       every adopted slot; carrying one personal move does not need those DTOs. */
+    /* Settle through the canonical adopted view before checking the pending
+       publication key. Carrying one personal move needs neither a copied
+       pending receipt nor a full diagnostic snapshot of command slots. */
     var scope = movementScope(s),
       adopted = CR.adoptedView && CR.adoptedView(s, battle, 'movement', scope),
-      pending = CR.peek && CR.peek(s, battle, 'movement', scope),
-      samePending =
-        pending &&
-        pending.phase !== 'adopted' &&
-        pending.phase !== 'unreachable' &&
-        pending.data &&
-        String(pending.data.publishKey || '') === String(publishKey || '');
+      samePending = CR.pendingKeyMatches && CR.pendingKeyMatches(s, battle, 'movement', scope, publishKey);
 
     /* Freeze one replacement while this man is still processing it. Fireteam geometry may keep
        sliding with the formation every Meso tick; that must not continuously replace the pending

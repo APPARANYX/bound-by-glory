@@ -574,6 +574,21 @@
     out.phase = stage(rec, +battle.time || 0);
     return out;
   }
+  /* Publication coalescing only asks whether this key is still pending. Keep
+     the live phase calculation here without copying a public receipt/data DTO
+     or settling adoption. No receipt or result survives this scalar query. */
+  function pendingKeyMatches(soldier, battle, category, scope, publishKey) {
+    var st = ON && battle && battle._commandReception,
+      by = st && soldier && st.bySoldier[String(soldier.id)],
+      rec = by && by[String(category || 'command') + '|' + String(scope || 'squad')];
+    if (!rec || !rec.data) return false;
+    var current = stage(rec, +battle.time || 0);
+    return (
+      current !== 'adopted' &&
+      current !== 'unreachable' &&
+      String(rec.data.publishKey || '') === String(publishKey || '')
+    );
+  }
   function snapshot(soldier, battle) {
     if (!ON || !soldier || !battle) return null;
     var st = settle(battle),
@@ -689,6 +704,7 @@
     adoptedView: adoptedView,
     executionCurrent: executionCurrent,
     peek: peek,
+    pendingKeyMatches: pendingKeyMatches,
     snapshot: snapshot,
     squadSnapshot: squadSnapshot,
     telemetry: telemetry,
