@@ -207,6 +207,48 @@ test('no-window early exits do not build unused maneuver basis; eligible updates
   A.shotEvidence = original;
   clean(w);
 });
+test('exactly two ready soldiers cannot route or start a bound while two supporter slots are required', () => {
+  const w = world();
+  const A = w.r.SquadAI;
+  const Q = w.r.BattleSquadStability;
+  const R = w.r.BattleTacticalContactRoute;
+  const M = w.r.BattleTacticalMarchProvider;
+  const chosen = w.q.members.filter(s => !A.isMachineGun(s) && ['alpha', 'bravo', 'charlie'].includes(Q.teamKeyFor(s))).slice(0, 2);
+  assert.equal(chosen.length, 2);
+  w.q.members.forEach(s => {
+    s.outOfAmmo = !chosen.includes(s);
+  });
+  w.q.inContact = true;
+  const target = M.target;
+  const succession = Q.controllerSuccession;
+  const route = R.pick;
+  let searches = 0;
+  M.target = () => ({ x: 0, z: 300 });
+  Q.controllerSuccession = () => false;
+  R.pick = function () {
+    searches++;
+    return route.apply(this, arguments);
+  };
+  try {
+    const ctx = {
+      sim: w.b,
+      squad: w.q,
+      token: { battleId: 'capacity', generation: 1, controllerEpoch: 1, missionVersion: 1, rosterRevision: 1 },
+      stage: () => null,
+      request: () => ({ ok: false, reason: 'fixture-reject' }),
+      finish: () => true
+    };
+    w.M.update(ctx);
+    assert.equal(searches, 0, 'no physical cover graph is needed when the mover capacity is zero');
+    assert.equal(w.M.summary(w.q).diagnostic.result, 'no-separated-cover-hops');
+    assert.equal(w.M.summary(w.q).pendingCover, false, 'no native covered-window lease was started');
+  } finally {
+    R.pick = route;
+    M.target = target;
+    Q.controllerSuccession = succession;
+  }
+  clean(w);
+});
 test('leader and machine gun require two real forward firing riflemen before a single covered relocation', () => {
   const w = world();
   const Q = w.r.BattleSquadStability;
