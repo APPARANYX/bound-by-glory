@@ -207,6 +207,7 @@ test('no-window early exits do not build unused maneuver basis; eligible updates
   A.shotEvidence = original;
   clean(w);
 });
+// prettier-ignore
 test('exactly two ready soldiers cannot route or start a bound while two supporter slots are required', () => {
   const w = world();
   const A = w.r.SquadAI;
