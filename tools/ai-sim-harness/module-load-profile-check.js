@@ -82,7 +82,11 @@ assert.deepEqual(
   normal.concat('97-device-benchmark.js').sort(),
   'device benchmark remains opt-in'
 );
-assert.deepEqual(page('cpuBench=1'), normal.concat('97a-browser-cpu-probe.js').sort(), 'browser CPU probe remains opt-in');
+assert.deepEqual(
+  page('cpuBench=1'),
+  normal.concat('97a-browser-cpu-probe.js').sort(),
+  'browser CPU probe remains opt-in'
+);
 assert.deepEqual(page('cpuBench=0'), normal, 'browser CPU probe opt-out retains normal profile');
 assert.deepEqual(page('damageRange=1'), normal.concat(range).sort(), 'damage range remains opt-in');
 for (const nonoptional of [
@@ -103,17 +107,3 @@ console.log(
     selected.length +
     ' modules)'
 );
-
-/* CPU_FORMAT_CAPTURE_START: temporary CI formatter extraction, remove after capture. */
-(function () {
-  const paths = ['battle/modules/97a-browser-cpu-probe.js', 'tools/ai-sim-harness/browser-cpu-probe-check.js', 'tools/ai-sim-harness/module-load-profile-check.js'];
-  require('node:child_process').execFileSync('npx', ['--yes', 'prettier@3.3.3', '--write', ...paths], { cwd: repo, stdio: 'pipe', timeout: 60000 });
-  for (const filename of paths) {
-    const contents = fs.readFileSync(path.join(repo, filename), 'utf8');
-    for (let offset = 0; offset < contents.length; offset += 1400) {
-      console.log('CPU_FORMAT_CHUNK|' + filename + '|' + offset + '|' + JSON.stringify(contents.slice(offset, offset + 1400)));
-    }
-    console.log('CPU_FORMAT_END|' + filename + '|' + contents.length);
-  }
-})();
-/* CPU_FORMAT_CAPTURE_END */
