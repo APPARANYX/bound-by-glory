@@ -6,6 +6,7 @@ This is the physical-testing procedure for this feature, run on the VM. It valid
 
 ## Prerequisites
 
+- Read `AGENTS.md` first — it is the agent entry point (Constitution Principle VII) and the authoritative map for testing, benchmarks, harnesses, and CI gating. This quickstart is the feature-specific procedure; `AGENTS.md` is the repo-wide one.
 - Repo clone with the feature branch checked out. PHP CLI + Playwright Chromium installed (see `docs/cpu-profiling.md` for the environment notes: Chromium cannot reach external HTTPS in this VM, so the battle page's jsDelivr CDN scripts are bridged via Node fetch and the preview is profiled through a localhost reverse proxy).
 - Local server: `php -S 127.0.0.1:8765 -t /tmp/battle-www` (with `grasstex` symlinked into it).
 - Clear stale Chromium processes before a run (the VM is memory-tight; a renderer needs ~300–600 MB). Kill by exact PID, never `pkill -f` (it matches your own shell).
