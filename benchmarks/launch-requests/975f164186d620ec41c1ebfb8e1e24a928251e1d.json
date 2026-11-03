@@ -1,0 +1,18 @@
+{
+  "branch": "work/benchmark-launch/nse2-causal-on-20261031",
+  "launch_parent_sha": "dd28010c52f7459af59cf778a5fa76cdf9bb8576",
+  "launch_sha": "975f164186d620ec41c1ebfb8e1e24a928251e1d",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "benchmark": "causal",
+    "query": "tacticalController=new&strategicInterception=0&localPlan=1&localTasks=1&localStructures=1&localEntry=1&localEntryGate=1&localSurvey=1&localWatch=1&localContactResume=1&localContinuity=1&localStructureOrders=1",
+    "ref": "work/pin/nse-c4a65b24",
+    "seconds": "600",
+    "seeds": "20",
+    "side": "all"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/nse-c4a65b24",
+  "source_sha_at_archive": "c4a65b240cfe50eb044cd1931cdf8aa96d2103c4"
+}
