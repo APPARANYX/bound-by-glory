@@ -110,7 +110,8 @@
       z = Math.floor(p.z / DEST_SPACE);
     for (var ix = -1; ix <= 1; ix++)
       for (var iz = -1; iz <= 1; iz++) {
-        var list = grid.buckets[x + ix + ',' + (z + iz)] || [];
+        var list = grid.buckets[x + ix + ',' + (z + iz)];
+        if (!list) continue;
         for (var i = 0; i < list.length; i++) {
           var r = list[i],
             other = r.soldier;
