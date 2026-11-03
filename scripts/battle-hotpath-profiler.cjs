@@ -20,7 +20,8 @@
     scope = [],
     routeActive = null,
     routeLast = new WeakMap(),
-    routePlanning = routeStats();
+    routePlanning = routeStats(),
+    navigationPlanning = navigationStats();
 
   function routeStats() {
     return {
@@ -45,6 +46,24 @@
         detourQueries: 0
       }
     };
+  }
+  function navigationStats() {
+    return {
+      requests: 0,
+      physicalReplans: 0,
+      physicalReuses: 0,
+      replanReasons: Object.create(null),
+      replanByOwnerKind: Object.create(null),
+      reuseWithPoints: 0,
+      reusedSameWaypoint: 0,
+      reusedAdvancedWaypoint: 0,
+      reusedQueueExtended: 0,
+      reuseWithMovingFootprints: 0,
+      priorSegmentClearanceChecks: 0
+    };
+  }
+  function bump(o, key) {
+    o[key] = (o[key] || 0) + 1;
   }
   function routeInputs(s, sim, reports, goal, taken) {
     var p = s && s.root && s.root.position;
@@ -339,6 +358,9 @@
     function profiled(sim, soldier, dest) {
       var beforeNav = soldier && soldier._navCache,
         beforePhysical = soldier && soldier._physicalPath,
+        beforeFirst = beforePhysical && beforePhysical.points && beforePhysical.points[0],
+        beforeTail =
+          beforePhysical && beforePhysical.points && beforePhysical.points[beforePhysical.points.length - 1],
         start = clock();
       try {
         return fn.apply(this, arguments);
@@ -347,6 +369,17 @@
           afterNav = soldier && soldier._navCache,
           afterPhysical = soldier && soldier._physicalPath;
         record('navigation.nextWaypoint', elapsed);
+        navigationPlanning.requests++;
+        if (
+          beforePhysical &&
+          beforePhysical.points &&
+          beforePhysical.points.length &&
+          sim &&
+          beforePhysical.version === physicalVersion(sim) &&
+          dest &&
+          Math.hypot(+dest.x - beforePhysical.finalGoalX, +dest.z - beforePhysical.finalGoalZ) <= 1.4
+        )
+          navigationPlanning.priorSegmentClearanceChecks++;
         if (afterNav !== beforeNav) {
           var br = baseRebuildReason(sim, soldier, dest, beforeNav);
           record('navigation.nextWaypoint.baseCacheRebuild', elapsed);
@@ -355,12 +388,33 @@
             recordMovementAttribution('navigation.baseRebuild.' + br, soldier);
         } else record('navigation.nextWaypoint.baseCacheReuse', elapsed);
         if (afterPhysical !== beforePhysical) {
+          navigationPlanning.physicalReplans++;
           var pr = physicalReplanReason(sim, soldier, dest, beforePhysical);
+          bump(navigationPlanning.replanReasons, pr);
+          var origin = movementProducer(soldier);
+          bump(navigationPlanning.replanByOwnerKind, origin.owner + '__' + origin.kind);
           record('navigation.nextWaypoint.physicalReplan', elapsed);
           recordCount('navigation.physicalReplanReason.' + pr);
           if (pr === 'goal-shift' || pr === 'missing')
             recordMovementAttribution('navigation.physicalReplan.' + pr, soldier);
-        } else record('navigation.nextWaypoint.physicalReuse', elapsed);
+        } else {
+          record('navigation.nextWaypoint.physicalReuse', elapsed);
+          navigationPlanning.physicalReuses++;
+          if (beforePhysical && beforePhysical.points && beforePhysical.points.length) {
+            navigationPlanning.reuseWithPoints++;
+            if (beforeFirst === beforePhysical.points[0]) navigationPlanning.reusedSameWaypoint++;
+            else navigationPlanning.reusedAdvancedWaypoint++;
+            if (beforeTail && beforeTail !== beforePhysical.points[beforePhysical.points.length - 1])
+              navigationPlanning.reusedQueueExtended++;
+            if (
+              sim &&
+              sim.obstacles &&
+              sim.obstacles.__dynamicFootprints &&
+              sim.obstacles.__dynamicFootprints.length
+            )
+              navigationPlanning.reuseWithMovingFootprints++;
+          }
+        }
       }
     }
     profiled.__battleHotpathWrapped = true;
@@ -451,6 +505,7 @@
     routeActive = null;
     routeLast = new WeakMap();
     routePlanning = routeStats();
+    navigationPlanning = navigationStats();
   }
   function snapshot(limit) {
     var wallMs = Math.max(0, clock() - startedAt),
@@ -473,6 +528,19 @@
       version: '1.6',
       wallMs: +wallMs.toFixed(3),
       rows: rows,
+      navigationPlanning: {
+        requests: navigationPlanning.requests,
+        physicalReplans: navigationPlanning.physicalReplans,
+        physicalReuses: navigationPlanning.physicalReuses,
+        replanReasons: Object.assign({}, navigationPlanning.replanReasons),
+        replanByOwnerKind: Object.assign({}, navigationPlanning.replanByOwnerKind),
+        reuseWithPoints: navigationPlanning.reuseWithPoints,
+        reusedSameWaypoint: navigationPlanning.reusedSameWaypoint,
+        reusedAdvancedWaypoint: navigationPlanning.reusedAdvancedWaypoint,
+        reusedQueueExtended: navigationPlanning.reusedQueueExtended,
+        reuseWithMovingFootprints: navigationPlanning.reuseWithMovingFootprints,
+        priorSegmentClearanceChecks: navigationPlanning.priorSegmentClearanceChecks
+      },
       routePlanning: {
         calls: routePlanning.calls,
         fresh: routePlanning.fresh,
