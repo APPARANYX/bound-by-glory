@@ -12,6 +12,8 @@ The native first-contact and ballistic-flight meeting probes report grenade frie
 
 ## Test harnesses
 
+Requesting Kit's browser/VM testing: apply the `needs-kit-testing` label to the issue or PR (see AGENTS.md). PR #749 asked for Muse browser/VM QA in its body and a comment but carried no label, so the hook never saw it until Ivan relayed it — a body or comment mention does not trigger anything. State the branch/PR, what to test, and the acceptance criteria on the labelled item.
+
 All of these run offline in seconds unless noted, and all pass on `main`.
 
 **Node sim checks** (`tools/ai-sim-harness/`). They load the shipping sources with no Babylon and
