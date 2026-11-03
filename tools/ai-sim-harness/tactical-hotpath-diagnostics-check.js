@@ -147,19 +147,20 @@ try {
   root.BattleNavigation = {
     version: 1,
     nextWaypoint(sim, soldier, dest) {
-      let p = soldier._physicalPath;
-      if (!p || sim.time >= p.replanAt) {
-        p = soldier._physicalPath = {
+      let plan = soldier._physicalPath;
+      if (!plan || sim.time >= plan.replanAt) {
+        plan = {
           version: '1|0|0',
           finalGoalX: dest.x,
           finalGoalZ: dest.z,
           replanAt: sim.time + 5,
           points: [{ x: 5, z: 0 }, { x: 10, z: 0 }]
         };
-      } else if (soldier.root.position.x >= 5 && p.points.length > 1) {
-        p.points.shift();
+        soldier._physicalPath = plan;
+      } else if (soldier.root.position.x >= 5 && plan.points.length > 1) {
+        plan.points.shift();
       }
-      return p.points[0];
+      return plan.points[0];
     }
   };
   loadModule(root, 'scripts/battle-hotpath-profiler.cjs');
@@ -177,9 +178,9 @@ try {
   assert.ok(profiler.snapshot().rows.every(row => row.calls === 2 && row.totalMs > 0));
   profiler.reset();
   assert.equal(profiler.snapshot().rows.length, 0);
-  const sim = { time: 0, obstacles: [] },
-    soldier = { root: { position: { x: 0, z: 0 } } },
-    dest = { x: 10, z: 0 };
+  const sim = { time: 0, obstacles: [] };
+  const soldier = { root: { position: { x: 0, z: 0 } } };
+  const dest = { x: 10, z: 0 };
   root.BattleNavigation.nextWaypoint(sim, soldier, dest);
   root.BattleNavigation.nextWaypoint(sim, soldier, dest);
   soldier.root.position.x = 5;
@@ -211,7 +212,11 @@ try {
   assert.equal(profiler.snapshot().navigationPlanning.requests, 5);
   for (const { owner, method, fn } of originals) assert.equal(owner[method], fn);
   assert.equal(root.BattleTacticalController.dispatch(payload), returned);
-  assert.equal(profiler.snapshot().rows.length, frozenRows, 'restored owner calls no longer collect timings');
+  assert.equal(
+    profiler.snapshot().rows.length,
+    frozenRows,
+    'restored owner calls no longer collect timings'
+  );
   console.log('PASS controller profiler preserves owner calls, results, exceptions and restoration');
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });
