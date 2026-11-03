@@ -2,6 +2,21 @@ import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
 import summarizeCPUProfile from './lib/cpu-profile-summary.cjs';
+import cpuChains from './lib/cpu-profile-chains.cjs';
+import { renderFlamegraph } from './lib/cpu-flamegraph.cjs';
+
+const { topChains, flameTree, splitByIntervals } = cpuChains;
+
+// BATTLE_PROFILE_WRAPPERS=0 skips the inclusive wall-time wrapper profiler
+// and runs CDP sampling only. The wrappers perturb wall-clock behaviour
+// (their `clock` helper was the largest self-time entry in the baseline
+// profile), so a wrappers-off run is the uninstrumented wall-clock
+// reference. Default is on: wrappers also supply the route/navigation
+// counters the report reconciles against.
+// BATTLE_PROFILE_HEAP=1 additionally captures CDP HeapProfiler allocation
+// sampling (selfSize per allocating function) alongside CPU sampling.
+const useWrappers = process.env.BATTLE_PROFILE_WRAPPERS !== '0';
+const useHeapSampling = process.env.BATTLE_PROFILE_HEAP === '1';
 
 const url =
   process.env.BATTLE_PROFILE_URL ||
@@ -89,18 +104,29 @@ try {
     null,
     { timeout: 120_000 }
   );
-  await page.addScriptTag({ path: path.resolve('scripts/battle-hotpath-profiler.cjs') });
+  if (useWrappers) {
+    await page.addScriptTag({ path: path.resolve('scripts/battle-hotpath-profiler.cjs') });
+  }
 
   // Sampling complements the inclusive wrappers: it exposes work inside their
   // closures without changing gameplay functions, scheduling, inputs or RNG.
+  // The anchor is the page's performance.now() just before sampling starts;
+  // step boundaries recorded inside the battle are converted to microseconds
+  // since this anchor so CPU samples can be attributed to simulation
+  // intervals on the same clock.
+  const profileStartPerfNowMs = await page.evaluate(() => performance.now());
   const cpuSession = await page.context().newCDPSession(page);
   await cpuSession.send('Profiler.enable');
   await cpuSession.send('Profiler.setSamplingInterval', { interval: 1000 });
+  if (useHeapSampling) {
+    await cpuSession.send('HeapProfiler.enable');
+    await cpuSession.send('HeapProfiler.startSampling', { samplingInterval: 512 * 1024 });
+  }
   await cpuSession.send('Profiler.start');
-  let result, cpuSummary;
+  let result, cpuSummary, cpuProfile, heapProfile;
   try {
     result = await page.evaluate(
-      async ({ fixedDt, simSeconds, snapshotSeconds, suppliedPolicy }) => {
+      async ({ fixedDt, simSeconds, snapshotSeconds, suppliedPolicy, useWrappers }) => {
         const root = window,
           sim = root.__battle__,
           engine = sim.scene?.getEngine?.(),
@@ -142,12 +168,15 @@ try {
         sim.timeScale = 1;
         sim.timeLimit = simSeconds;
 
-        const profiler = root.BattleHotpathProfiler;
-        if (!profiler) throw new Error('BattleHotpathProfiler did not load');
-        profiler.reset();
+        const profiler = useWrappers ? root.BattleHotpathProfiler : null;
+        if (useWrappers && !profiler) throw new Error('BattleHotpathProfiler did not load');
+        if (profiler) profiler.reset();
         const commandTick = +root.BattleCommanderAI.commandTick || 0.45;
         const maxSteps = Math.ceil((simSeconds + 2) / fixedDt);
         const snapshots = [];
+        // Step boundaries on the page clock, for attributing CPU samples to
+        // simulation intervals. First entry is the battle start.
+        const stepBoundaries = [{ simTime: 0, perfNowMs: performance.now() }];
         let commandAccum = 0,
           steps = 0,
           nextSnapshot = snapshotSeconds;
@@ -185,13 +214,15 @@ try {
             );
           }
           if (sim.time + 1e-9 >= nextSnapshot) {
-            snapshots.push({ state: slimState(), profile: profiler.snapshot(40) });
+            snapshots.push({ state: slimState(), profile: profiler ? profiler.snapshot(40) : null });
+            stepBoundaries.push({ simTime: +(+sim.time || 0).toFixed(2), perfNowMs: performance.now() });
             nextSnapshot += snapshotSeconds;
           }
         }
         if (!sim.winner && sim._checkWinner) sim._checkWinner();
+        stepBoundaries.push({ simTime: +(+sim.time || 0).toFixed(2), perfNowMs: performance.now() });
         const finalState = slimState(),
-          profile = profiler.snapshot(80),
+          profile = profiler ? profiler.snapshot(80) : null,
           wallSeconds = (performance.now() - wallStart) / 1000;
         return {
           build: root.BATTLE_BUILD || null,
@@ -202,23 +233,80 @@ try {
           realtimeMultiplier: wallSeconds > 0 ? +((+sim.time || 0) / wallSeconds).toFixed(2) : 0,
           finalState,
           profile,
-          snapshots
+          snapshots,
+          stepBoundaries
         };
       },
-      { fixedDt, simSeconds, snapshotSeconds, suppliedPolicy: policy }
+      { fixedDt, simSeconds, snapshotSeconds, suppliedPolicy: policy, useWrappers }
     );
   } finally {
     // Keep the raw trace even if the battle evaluation throws.
     try {
       const { profile } = await cpuSession.send('Profiler.stop');
+      cpuProfile = profile;
       fs.writeFileSync(path.join(outputDir, 'battle-hotpath-profile.cpuprofile'), JSON.stringify(profile));
       cpuSummary = summarizeCPUProfile(profile);
       fs.writeFileSync(
         path.join(outputDir, 'battle-hotpath-cpu-summary.json'),
         JSON.stringify(cpuSummary, null, 2) + '\n'
       );
+      if (useHeapSampling) {
+        try {
+          const { profile: heap } = await cpuSession.send('HeapProfiler.stopSampling');
+          heapProfile = heap;
+          fs.writeFileSync(
+            path.join(outputDir, 'battle-hotpath-heap-profile.json'),
+            JSON.stringify(heap)
+          );
+        } catch (error) {
+          browserWarnings.push(`Heap sampling stop failed: ${error?.message || error}`);
+        }
+      }
     } finally {
       await cpuSession.detach();
+    }
+  }
+
+  // Post-process the raw CPU profile: top call chains, flamegraph, and
+  // per-interval splits. Intervals are the snapshot boundaries (every
+  // snapshotSeconds of simulated time); each sample is attributed to the
+  // interval containing its timestamp, converted from the page clock to
+  // microseconds since sampling started.
+  let chains = { sampledUs: 0, chains: [] };
+  let intervals = [];
+  if (cpuProfile) {
+    chains = topChains(cpuProfile, 25);
+    fs.writeFileSync(
+      path.join(outputDir, 'battle-hotpath-cpu-chains.json'),
+      JSON.stringify(chains, null, 2) + '\n'
+    );
+    fs.writeFileSync(
+      path.join(outputDir, 'battle-hotpath-flamegraph.svg'),
+      renderFlamegraph(
+        flameTree(cpuProfile),
+        `Grasstex battle CPU flamegraph · ${battleType} · seed ${seed} · ${commit}`
+      ) + '\n'
+    );
+    const boundaries = (result?.stepBoundaries || []).map(b => ({
+      atUs: Math.max(0, (b.perfNowMs - profileStartPerfNowMs) * 1000),
+      label: `sim-${String(b.simTime).replace('.', 'p')}s`
+    }));
+    if (boundaries.length >= 2) {
+      const intervalsDir = path.join(outputDir, 'intervals');
+      fs.mkdirSync(intervalsDir, { recursive: true });
+      intervals = splitByIntervals(cpuProfile, boundaries).map(({ label, profile, samples }) => {
+        fs.writeFileSync(path.join(intervalsDir, `${label}.cpuprofile`), JSON.stringify(profile));
+        const summary = summarizeCPUProfile(profile);
+        fs.writeFileSync(
+          path.join(intervalsDir, `${label}-cpu-summary.json`),
+          JSON.stringify(summary, null, 2) + '\n'
+        );
+        return { label, samples, sampledUs: summary.sampledUs, topFunction: summary.functions[0] || null };
+      });
+      fs.writeFileSync(
+        path.join(outputDir, 'battle-hotpath-step-boundaries.json'),
+        JSON.stringify({ anchorPerfNowMs: profileStartPerfNowMs, boundaries: result.stepBoundaries }, null, 2) + '\n'
+      );
     }
   }
 
@@ -243,7 +331,18 @@ try {
     cpu: {
       ...cpuSummary,
       functions: cpuSummary.functions.slice(0, 40),
-      rawFile: 'battle-hotpath-profile.cpuprofile'
+      rawFile: 'battle-hotpath-profile.cpuprofile',
+      chainsFile: 'battle-hotpath-cpu-chains.json',
+      flamegraphFile: 'battle-hotpath-flamegraph.svg'
+    },
+    chains: { sampledUs: chains.sampledUs, chains: chains.chains.slice(0, 10) },
+    intervals,
+    instrumentation: {
+      wrappersEnabled: useWrappers,
+      heapSampling: useHeapSampling,
+      note: useWrappers
+        ? 'Inclusive wall-time wrappers were active; their own clock/helper cost appears in the sampled profile (see `clock` self time). Wall seconds are instrumented, not uninstrumented benchmark wall-clock.'
+        : 'Inclusive wall-time wrappers were OFF (BATTLE_PROFILE_WRAPPERS=0); wall seconds are the uninstrumented reference. Route/navigation counters are unavailable in this mode.'
     },
     browserErrors,
     browserWarnings,
@@ -266,7 +365,42 @@ try {
     `- Simulated: **${result.simulatedSeconds}s** in **${result.wallSeconds}s wall** (${result.realtimeMultiplier}× real-time)`,
     `- Fixed step: **${fixedDt}s** · snapshots every **${snapshotSeconds}s simulated**`,
     `- Policy: ${policy.source}, revision ${result.policyRevision}${policy.warning ? ` · ${policy.warning}` : ''}`,
+    `- Instrumentation: inclusive wrappers ${useWrappers ? '**on**' : '**OFF (uninstrumented wall-clock reference)'}; heap sampling ${useHeapSampling ? '**on**' : 'off'}.`,
     '',
+    '## Top sampled call chains (CDP, self + inclusive by stack)',
+    '',
+    '| Rank | Chain (root → leaf) | Samples | Sampled µs | % |',
+    '|---:|---|---:|---:|---:|',
+    ...chains.chains.slice(0, 10).map(
+      (c, i) =>
+        `| ${i + 1} | ${c.frames.join(' → ').replaceAll('|', '\\|')} | ${c.samples} | ${c.us} | ${c.percent}% |`
+    ),
+    '',
+    '> Chains aggregate full stacks: a sample counts once per chain, so chain percentages do not double-count nested frames. Full list: `battle-hotpath-cpu-chains.json`. Flamegraph: `battle-hotpath-flamegraph.svg` (open in a browser; the raw `.cpuprofile` also loads in Chrome DevTools / Speedscope).',
+    '',
+    ...(intervals.length
+      ? [
+          '## Sampled CPU by simulation interval',
+          '',
+          '| Interval | Samples | Sampled µs | Top function (self µs) |',
+          '|---|---:|---:|---|',
+          ...intervals.map(
+            i =>
+              `| ${i.label} | ${i.samples} | ${i.sampledUs} | ${i.topFunction ? `${i.topFunction.functionName} (${i.topFunction.selfUs})` : '—'} |`
+          ),
+          '',
+          '> Intervals split the single CDP session by sample timestamp against the step boundaries the driver recorded. Per-interval `.cpuprofile` files live under `intervals/`.',
+          ''
+        ]
+      : []),
+    ...(heapProfile
+      ? [
+          '## Allocation sampling (CDP HeapProfiler, opt-in)',
+          '',
+          '- Raw heap allocation profile: `battle-hotpath-heap-profile.json`. Summarize allocating functions from its `nodes[].callFrame` + `selfSize` before drawing allocation conclusions; sampling interval 512 KiB.',
+          ''
+        ]
+      : []),
     '## Physical waypoint lifecycle (profiler-only)',
     '',
     `- Waypoint calls: ${nav?.requests || 0}; physical path rebuilds: ${nav?.physicalReplans || 0}; reuses: ${nav?.physicalReuses || 0}.`,
