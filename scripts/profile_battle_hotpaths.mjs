@@ -15,8 +15,15 @@ const { topChains, flameTree, splitByIntervals } = cpuChains;
 // counters the report reconciles against.
 // BATTLE_PROFILE_HEAP=1 additionally captures CDP HeapProfiler allocation
 // sampling (selfSize per allocating function) alongside CPU sampling.
-const useWrappers = process.env.BATTLE_PROFILE_WRAPPERS !== '0';
-const useHeapSampling = process.env.BATTLE_PROFILE_HEAP === '1';
+// BATTLE_PROFILE_BABYLON_LOCAL=/path/to/babylon.js serves a local copy of
+// the Babylon.js CDN script instead of fetching it from jsdelivr. The battle
+// page loads Babylon from the CDN; sandboxed/offline runners (proxy blocks
+// the CDN in Chromium even when curl reaches it) cannot initialise the
+// battle without it. CI has internet access and does not need this. The file
+// is served byte-for-byte; it changes no simulation code.
+const babylonLocalPath = process.env.BATTLE_PROFILE_BABYLON_LOCAL || '';
+let babylonJs = null;
+if (babylonLocalPath) babylonJs = fs.readFileSync(path.resolve(babylonLocalPath));
 
 const url =
   process.env.BATTLE_PROFILE_URL ||
@@ -84,6 +91,25 @@ try {
     else if (msg.type() === 'warning') browserWarnings.push(text);
   });
   await page.route('**/*', async route => {
+    const reqUrl = route.request().url();
+    // Chromium in this sandbox cannot fetch the jsdelivr CDN (the egress
+    // proxy rejects its tunnel); when a local Babylon file is supplied, the
+    // CDN is bridged through Node fetch instead. Babylon comes from the
+    // local file; the other CDN scripts (loaders, meshoptimizer) are
+    // fulfilled from the CDN via Node fetch. Without this the battle never
+    // initialises (FBX loader script fails to load).
+    if (babylonJs && /^https:\/\/cdn\.jsdelivr\.net\//.test(reqUrl)) {
+      try {
+        const isBabylon = /\/npm\/babylonjs@[^/]+\/babylon\.js/.test(reqUrl);
+        const body = isBabylon
+          ? babylonJs
+          : Buffer.from(await (await fetch(reqUrl)).arrayBuffer());
+        return route.fulfill({ status: 200, contentType: 'application/javascript', body });
+      } catch (error) {
+        browserWarnings.push(`CDN bridge failed for ${reqUrl}: ${error?.message || error}`);
+        return route.continue();
+      }
+    }
     const type = route.request().resourceType();
     if (type === 'media' || type === 'font') return route.abort();
     return route.continue();
