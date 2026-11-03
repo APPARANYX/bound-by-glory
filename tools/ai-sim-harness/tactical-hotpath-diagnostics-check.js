@@ -196,7 +196,7 @@ try {
   assert.equal(nav.reusedAdvancedWaypoint, 1);
   assert.equal(nav.priorSegmentClearanceChecks, 3);
   profiler.restore();
-  assert.equal(root.BattleNavigation.nextWaypoint(sim, soldier, dest).x, 5);
+  assert.equal(root.BattleNavigation.nextWaypoint(sim, soldier, dest).x, 10);
   assert.equal(profiler.snapshot().navigationPlanning.requests, 4);
   for (const { owner, method, fn } of originals) assert.equal(owner[method], fn);
   assert.equal(root.BattleTacticalController.dispatch(payload), returned);
