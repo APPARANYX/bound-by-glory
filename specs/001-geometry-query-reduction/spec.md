@@ -74,7 +74,7 @@ The integrated Meso controller's official wall-clock acceptance requirement is �
 - **FR-005**: The cache MUST NOT change any gameplay outcome: final state, navigation counters, route counters, snapshots, and receipts must be identical with the cache on vs off (deterministic equivalence).
 - **FR-006**: Candidate pruning rules MUST skip a geometry query only when the target or edge provably cannot improve the current best or is already known blocked, and each rule MUST be validated by a deterministic comparison.
 - **FR-007**: The 1.25× acceptance gate MUST be measured by a paired uninstrumented benchmark (new vs legacy) on both the 120 m lab and the 600 s meeting; an instrumented profile alone MUST NOT be used to claim the gate is met.
-- **FR-008**: Each agent working on this feature MUST work on a separate branch, MUST NOT edit another agent's active branch, and MUST record ownership, scope, source, work, changes, evidence, and status in the relevant PR or issue (per the working rules).
+- **FR-008**: Each agent working on this feature MUST work on a separate branch, MUST NOT edit another agent's active branch, and MUST record ownership, scope, source, work, changes, evidence, and status in the relevant PR or issue. **FR-008a**: Each agent MUST start from `AGENTS.md` (the agent entry point, per Constitution Principle VII) for the working rules, testing/benchmark map, harness checks, and CI gating — the spec does not restate those rules.
 
 ### Key Entities
 
@@ -99,5 +99,6 @@ The integrated Meso controller's official wall-clock acceptance requirement is �
 - The profiling evidence is the 2026-11-03 measurement (PR #744, `docs/cpu-profiling-analysis.md` §12): 25.1% of 2,060,256 geometry queries are per-step repeats; the cache saves ~2.2 s of the 28 s lab wall.
 - The Meso controller integration (PR #706) is the protected base; this feature does not modify #706 directly. The cache lives in the shared geometry query layer, which is present on main.
 - The 600 s meeting has no legacy arm yet, so the 600 s gate (SC-004) requires a paired uninstrumented 600 s benchmark (new vs legacy) to be run as part of this feature.
-- The other agents working on the Meso optimization stack (PRs #707–#743) are coordinated via GitHub (issues/PRs), per the working rules; this feature does not duplicate their in-flight work.
+- The other agents working on the Meso optimization stack (PRs #707–#743) are coordinated via GitHub (issues/PRs), per `AGENTS.md` and the working rules; this feature does not duplicate their in-flight work.
 - The working-rules prohibition on new plan/roadmap/summary Markdown files is explicitly excepted for the Spec Kit artifacts under `specs/` for this pilot, authorized by the project owner (issue #711).
+- `AGENTS.md` is the authoritative entry point for testing, benchmarks, and harnesses; this spec points at it (Constitution Principle VII) rather than restating its rules.

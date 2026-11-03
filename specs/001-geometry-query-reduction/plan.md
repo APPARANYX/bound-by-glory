@@ -16,7 +16,7 @@ The new (Meso) controller issues 2,060,256 geometry queries in the 120 m lab (21
 
 **Storage**: N/A (in-memory per-step cache only; no persistence). Profile artifacts are `.cpuprofile` + JSON reports.
 
-**Testing**: Deterministic harness (`tools/ai-sim-harness/*-check.js`), Native Tactical Skills Lab (`battle/skills-lab.js`, `scripts/probes/probe_skills_lab.cjs`), the 120 m lab profiler (`scripts/profile_skills_lab.mjs`), the 600 s profile workflow (`.github/workflows/battle-hotpath-profile.yml`), and paired uninstrumented benchmarks (`scripts/run_battle_benchmark.mjs`).
+**Testing**: Deterministic harness (`tools/ai-sim-harness/*-check.js`), Native Tactical Skills Lab (`battle/skills-lab.js`, `scripts/probes/probe_skills_lab.cjs`), the 120 m lab profiler (`scripts/profile_skills_lab.mjs`), the 600 s profile workflow (`.github/workflows/battle-hotpath-profile.yml`), and paired uninstrumented benchmarks (`scripts/run_battle_benchmark.mjs`). The authoritative map for all of these — testing, benchmarks, harnesses, CI gating — is `AGENTS.md` (the agent entry point, Constitution Principle VII); an agent doing this work reads `AGENTS.md` first.
 
 **Target Platform**: Browser (Chromium headless, SwiftShader) for the simulation; GitHub Actions runners for CI acceptance.
 
