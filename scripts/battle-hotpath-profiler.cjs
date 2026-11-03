@@ -22,6 +22,45 @@
     routeLast = new WeakMap(),
     routePlanning = routeStats();
 
+  function blankManeuver() {
+    return { calls: 0, basisUsed: 0, basisUnused: 0, totalMs: 0, preludeMs: 0,
+      byBranch: Object.create(null), byPhase: Object.create(null),
+      byMinute: Object.create(null), byMoverCount: Object.create(null),
+      detail: Object.create(null) };
+  }
+  var maneuver = blankManeuver();
+  function recordManeuver(table, label, ms, prelude, unused) {
+    var b = table[label] || (table[label] = { calls: 0, totalMs: 0, preludeMs: 0, basisUnused: 0 });
+    b.calls++; b.totalMs += ms; b.preludeMs += prelude;
+    if (unused) b.basisUnused++;
+  }
+  var maneuverProbe = {
+    clock: clock,
+    enter: function () {},
+    timed: function (label, fn) {
+      var t = clock();
+      try { return fn(); } finally { this.detail(label, clock() - t); }
+    },
+    detail: function (label, ms) {
+      var b = maneuver.detail[label] || (maneuver.detail[label] = { calls: 0, totalMs: 0 });
+      b.calls++; b.totalMs += ms;
+    },
+    leave: function (ctx, branch, ms, prelude, used, st) {
+      maneuver.calls++; maneuver.totalMs += ms; maneuver.preludeMs += prelude;
+      if (used) maneuver.basisUsed++; else maneuver.basisUnused++;
+      var sq = ctx.squad, minute = Math.floor(ctx.sim.time / 60),
+        movers = st && st.window && st.phase === 'moving'
+          ? Math.max(0, st.plan.length - st.arrived.size - st.interrupted.size) : 0;
+      recordManeuver(maneuver.byBranch, branch, ms, prelude, !used);
+      recordManeuver(maneuver.byPhase, String(sq.commandPhase), ms, prelude, !used);
+      recordManeuver(maneuver.byMinute, String(minute), ms, prelude, !used);
+      recordManeuver(maneuver.byMoverCount, String(movers), ms, prelude, !used);
+    },
+    snapshot: function () { return JSON.parse(JSON.stringify(maneuver)); },
+    reset: function () { maneuver = blankManeuver(); }
+  };
+  root.BattleCoveredManeuverBranchProbe = maneuverProbe;
+
   function routeStats() {
     return {
       calls: 0,
@@ -451,6 +490,7 @@
     routeActive = null;
     routeLast = new WeakMap();
     routePlanning = routeStats();
+    maneuverProbe.reset();
   }
   function snapshot(limit) {
     var wallMs = Math.max(0, clock() - startedAt),
@@ -473,6 +513,7 @@
       version: '1.6',
       wallMs: +wallMs.toFixed(3),
       rows: rows,
+      maneuverBranch: maneuverProbe.snapshot(),
       routePlanning: {
         calls: routePlanning.calls,
         fresh: routePlanning.fresh,
