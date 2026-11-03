@@ -33,7 +33,8 @@
     return { decisions: 0, outcomes: Object.create(null),
       basisReasons: Object.create(null), changedParts: Object.create(null),
       exactBasisRepeat: 0, recentStateRepeat: 0, noPrior: 0,
-      refills: 0, holdersTooFew: 0, noHolderCandidate: 0, holdersTooFewCapable: 0,
+      refills: 0, readyCounts: Object.create(null), readyTwoByPhase: Object.create(null),
+      holdersTooFew: 0, noHolderCandidate: 0, holdersTooFewCapable: 0,
       holdersWithCandidate: 0, byMoverCount: Object.create(null),
       byMinute: Object.create(null) };
   }
@@ -98,6 +99,10 @@
       priorDecision.set(ctx.squad, { basis: basis });
       if (newGoal) reason = 'new-flank-goal:' + reason;
       count(triggers.basisReasons, reason);
+    },
+    ready: function (ctx, st, ready) {
+      count(triggers.readyCounts, String(ready.length));
+      if (ready.length === 2) count(triggers.readyTwoByPhase, st.window ? 'active-refill' : 'new-window');
     },
     outcome: function (st) {
       count(triggers.outcomes, st.diagnostic && st.diagnostic.result || 'unknown');
