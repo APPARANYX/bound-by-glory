@@ -42,7 +42,7 @@ const other={x:42,z:40};
 N.nextWaypoint(sim,arrived,other);
 assert.notStrictEqual(arrived._physicalPath,completed,'new destination must invalidate completed route');
 let revision=5;
-r.BattleTacticalPositions={revision(){return revision;},station(){return null;}};
+r.BattleTacticalPositions={revision(){return revision;},station(){return null;},current(){return null;}};
 sim.time=62;
 N.nextWaypoint(sim,arrived,stop);
 completed=arrived._physicalPath;
