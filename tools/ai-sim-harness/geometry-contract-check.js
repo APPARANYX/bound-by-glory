@@ -55,6 +55,31 @@ function truckFootprint(v) {
 }
 const P = (x, z) => ({ x, z });
 
+// prettier-ignore
+test('base wall self-clearance skips only zero-length static intersections; dynamic truck remains live', () => {
+  const countedMath = Object.create(Math);
+  let nativeQueries = 0;
+  countedMath.hypot = (...args) => {
+    nativeQueries++;
+    return Math.hypot(...args);
+  };
+  const base = H.bootstrap({ modules: false });
+  loadModule(base, 'battle/battle-navigation.js', { Math: countedMath, console: quietConsole });
+  base.BattleNavigation.installScenario({ buildings: [] });
+  const p = P(4, 8);
+  nativeQueries = 0;
+  for (let i = 0; i < 100; i++) assert.equal(base.BattleNavigation.movementClear(p, p), true);
+  assert.equal(nativeQueries, 0, 'static wall intersection work is skipped for a finite zero-length ray');
+  assert.equal(base.BattleNavigation.movementClear(p, P(5, 8)), true);
+  assert.ok(nativeQueries > 0, 'nonzero movements still query building-wall geometry');
+
+  const w = world();
+  const vehicle = { id: 'live-truck', position: { x: 4, z: 8 }, heading: { x: 0, z: 1 } };
+  w.obstacles.__dynamicFootprints = [truckFootprint(vehicle)];
+  assert.equal(w.N.movementClear(p, p), false, 'same-point native clearance still detects a truck');
+  vehicle.position.x = 80;
+  assert.equal(w.N.movementClear(p, p), true, 'moving truck clearance changes without a tick or version');
+});
 test('physical OBB segment normalizes one basis per query, with live geometry on the next query', () => {
   const countedMath = Object.create(Math);
   let normalizations = 0;
