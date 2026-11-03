@@ -50,6 +50,11 @@
   function navigationStats() {
     return {
       requests: 0,
+      nearGoalRequests: 0,
+      nearGoalPhysicalReuses: 0,
+      nearGoalPhysicalReplans: 0,
+      stoppedRequests: 0,
+      stoppedPhysicalReuses: 0,
       physicalReplans: 0,
       physicalReuses: 0,
       replanReasons: Object.create(null),
@@ -361,6 +366,9 @@
         beforeFirst = beforePhysical && beforePhysical.points && beforePhysical.points[0],
         beforeTail =
           beforePhysical && beforePhysical.points && beforePhysical.points[beforePhysical.points.length - 1],
+        at = soldier && soldier.root && soldier.root.position,
+        nearGoal = !!(at && dest && Math.hypot(+dest.x - at.x, +dest.z - at.z) <= 0.35),
+        stopped = !!(soldier && soldier.moving === false),
         start = clock();
       try {
         return fn.apply(this, arguments);
@@ -370,6 +378,8 @@
           afterPhysical = soldier && soldier._physicalPath;
         record('navigation.nextWaypoint', elapsed);
         navigationPlanning.requests++;
+        if (nearGoal) navigationPlanning.nearGoalRequests++;
+        if (stopped) navigationPlanning.stoppedRequests++;
         if (
           beforePhysical &&
           beforePhysical.points &&
@@ -389,6 +399,7 @@
         } else record('navigation.nextWaypoint.baseCacheReuse', elapsed);
         if (afterPhysical !== beforePhysical) {
           navigationPlanning.physicalReplans++;
+          if (nearGoal) navigationPlanning.nearGoalPhysicalReplans++;
           var pr = physicalReplanReason(sim, soldier, dest, beforePhysical);
           bump(navigationPlanning.replanReasons, pr);
           var origin = movementProducer(soldier);
@@ -400,6 +411,8 @@
         } else {
           record('navigation.nextWaypoint.physicalReuse', elapsed);
           navigationPlanning.physicalReuses++;
+          if (nearGoal) navigationPlanning.nearGoalPhysicalReuses++;
+          if (stopped) navigationPlanning.stoppedPhysicalReuses++;
           if (beforePhysical && beforePhysical.points && beforePhysical.points.length) {
             navigationPlanning.reuseWithPoints++;
             if (beforeFirst === beforePhysical.points[0]) navigationPlanning.reusedSameWaypoint++;
@@ -530,6 +543,11 @@
       rows: rows,
       navigationPlanning: {
         requests: navigationPlanning.requests,
+        nearGoalRequests: navigationPlanning.nearGoalRequests,
+        nearGoalPhysicalReuses: navigationPlanning.nearGoalPhysicalReuses,
+        nearGoalPhysicalReplans: navigationPlanning.nearGoalPhysicalReplans,
+        stoppedRequests: navigationPlanning.stoppedRequests,
+        stoppedPhysicalReuses: navigationPlanning.stoppedPhysicalReuses,
         physicalReplans: navigationPlanning.physicalReplans,
         physicalReuses: navigationPlanning.physicalReuses,
         replanReasons: Object.assign({}, navigationPlanning.replanReasons),
