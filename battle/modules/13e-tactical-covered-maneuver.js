@@ -414,6 +414,15 @@
       audit.result = 'no-mover-and-supporter';
       return null;
     }
+    /* Every ordinary bound must leave two independent potential shooters.
+       With exactly two ready soldiers, the final selection cap is zero
+       (Math.min(MAX_PARALLEL_MOVERS, ready.length - 2)). A special support
+       relocation also cannot qualify: it needs its mover PLUS two forward
+       firing riflemen. Never pay for graph planning for an impossible draft. */
+    if (ready.length === 2) {
+      audit.result = 'no-separated-cover-hops';
+      return null;
+    }
     /* Only the assault approach may shift its support echelon. Ordinary
        defense and retreat keep their separate owner-defined posture. */
     if (!back && !defense && !lateral && ctx.squad._macroMission.action === 'assault') {
