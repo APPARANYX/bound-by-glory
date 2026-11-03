@@ -408,6 +408,8 @@
     var ready = list.filter(function (s) {
       return viable(s, ctx.sim) && (!excluded || !excluded.has(String(s.id)));
     });
+    if (root.BattleCoveredManeuverBranchProbe)
+      root.BattleCoveredManeuverBranchProbe.ready(ctx, st, ready);
     /* Preserve one live support weapon outside the mover set. This may be a
        single MG or rifleman with genuine independent discharge evidence. */
     if (ready.length < 2) {
