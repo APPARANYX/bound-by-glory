@@ -29,6 +29,57 @@
       detail: Object.create(null) };
   }
   var maneuver = blankManeuver();
+  function blankTriggers() {
+    return { decisions: 0, outcomes: Object.create(null),
+      basisReasons: Object.create(null), changedParts: Object.create(null),
+      exactBasisRepeat: 0, recentStateRepeat: 0, noPrior: 0,
+      refills: 0, holdersTooFew: 0, noHolderCandidate: 0, holdersTooFewCapable: 0,
+      holdersWithCandidate: 0, byMoverCount: Object.create(null),
+      byMinute: Object.create(null) };
+  }
+  var triggers = blankTriggers(), priorDecision = new WeakMap();
+  function count(table, label) { table[label] = (table[label] || 0) + 1; }
+  function compareBasis(before, after) {
+    if (!before) return 'no-prior-failure';
+    if (before === after) return 'same-basis-due-cycle';
+    var a, b;
+    try { a = JSON.parse(before); b = JSON.parse(after); }
+    catch (_) { return 'unparseable'; }
+    var labels = ['retreat', 'command-phase', 'contact', 'nav-version', 'flank-goal', 'threat-position'];
+    var changed = [];
+    for (var i = 0; i < 6; i++)
+      if (JSON.stringify(a[i]) !== JSON.stringify(b[i])) changed.push(labels[i]);
+    var old = a[6] || [], now = b[6] || [];
+    if (old.length !== now.length) changed.push('roster');
+    else {
+      var location = false, viability = false, shot = false, ids = false;
+      for (var j = 0; j < now.length; j++) {
+        if (old[j][0] !== now[j][0]) ids = true;
+        if (old[j][1] !== now[j][1] || old[j][2] !== now[j][2]) location = true;
+        if (old[j][3] !== now[j][3]) viability = true;
+        if (old[j][4] !== now[j][4]) shot = true;
+      }
+      if (ids) changed.push('roster');
+      if (location) changed.push('soldier-rounded-position');
+      if (viability) changed.push('soldier-viability');
+      if (shot) changed.push('shot-evidence');
+    }
+    changed.forEach(function (c) { count(triggers.changedParts, c); });
+    if (!changed.length) return 'changed-unknown';
+    if (changed.length === 1) return changed[0] + '-only';
+    return changed.slice().sort().join('+');
+  }
+  function refillOpportunity(h, excluded) {
+    if (!h || !h.holders) return { total: 0, candidate: false, capable: 0 };
+    var A = root.SquadAI, capable = 0, candidate = false;
+    for (var i = 0; i < h.holders.length; i++) {
+      var man = h.holders[i];
+      if (man && !man.dead && !man.incapacitated && man.hp > 0 && man.weapon && !man.outOfAmmo) capable++;
+      if (man && (!A || !A.isMachineGun || !A.isMachineGun(man)) &&
+          (!excluded || !excluded.has(String(man.id)))) candidate = true;
+    }
+    return { total: h.holders.length, candidate: candidate, capable: capable };
+  }
   function recordManeuver(table, label, ms, prelude, unused) {
     var b = table[label] || (table[label] = { calls: 0, totalMs: 0, preludeMs: 0, basisUnused: 0 });
     b.calls++; b.totalMs += ms; b.preludeMs += prelude;
@@ -36,6 +87,31 @@
   }
   var maneuverProbe = {
     clock: clock,
+    decision: function (ctx, st, basis, cycle, newGoal) {
+      triggers.decisions++;
+      var prior = st.blocked || null,
+        reason = compareBasis(prior, basis),
+        memory = priorDecision.get(ctx.squad);
+      if (!prior) triggers.noPrior++;
+      if (prior === basis) triggers.exactBasisRepeat++;
+      if (memory && memory.basis === basis) triggers.recentStateRepeat++;
+      priorDecision.set(ctx.squad, { basis: basis });
+      if (newGoal) reason = 'new-flank-goal:' + reason;
+      count(triggers.basisReasons, reason);
+    },
+    outcome: function (st) {
+      count(triggers.outcomes, st.diagnostic && st.diagnostic.result || 'unknown');
+    },
+    refill: function (ctx, st, h, active, excluded) {
+      triggers.refills++;
+      count(triggers.byMoverCount, String(active.length));
+      count(triggers.byMinute, String(Math.floor(ctx.sim.time / 60)));
+      var o = refillOpportunity(h, excluded);
+      if (o.total < 3) triggers.holdersTooFew++;
+      if (o.capable < 3) triggers.holdersTooFewCapable++;
+      if (!o.candidate) triggers.noHolderCandidate++;
+      else triggers.holdersWithCandidate++;
+    },
     enter: function () {},
     timed: function (label, fn) {
       var t = clock();
@@ -56,8 +132,8 @@
       recordManeuver(maneuver.byMinute, String(minute), ms, prelude, !used);
       recordManeuver(maneuver.byMoverCount, String(movers), ms, prelude, !used);
     },
-    snapshot: function () { return JSON.parse(JSON.stringify(maneuver)); },
-    reset: function () { maneuver = blankManeuver(); }
+    snapshot: function () { return JSON.parse(JSON.stringify({ maneuver: maneuver, triggers: triggers })); },
+    reset: function () { maneuver = blankManeuver(); triggers = blankTriggers(); priorDecision = new WeakMap(); }
   };
   root.BattleCoveredManeuverBranchProbe = maneuverProbe;
 
