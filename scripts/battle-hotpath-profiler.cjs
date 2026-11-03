@@ -380,6 +380,17 @@
           afterNav = soldier && soldier._navCache,
           afterPhysical = soldier && soldier._physicalPath;
         record('navigation.nextWaypoint', elapsed);
+        // Inclusive, mutually exclusive timing buckets. These are benchmark-only observations:
+        // they include caller overhead and cannot isolate private clearance helpers.
+        var timingClass = 'other';
+        if (afterPhysical !== beforePhysical) timingClass = 'physical-rebuild';
+        else if (beforePhysical && beforePhysical.points && beforePhysical.points.length) {
+          timingClass = beforeFirst === beforePhysical.points[0]
+            ? 'populated-same-waypoint'
+            : 'populated-advanced-waypoint';
+        } else if (beforePhysical && beforePhysical.blocked) timingClass = 'blocked-empty-reuse';
+        else if (beforePhysical) timingClass = 'unblocked-empty-reuse';
+        record('navigation.nextWaypoint.class.' + timingClass, elapsed);
         navigationPlanning.requests++;
         if (nearGoal) {
           navigationPlanning.nearGoalRequests++;
