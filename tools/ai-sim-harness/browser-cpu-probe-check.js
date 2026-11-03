@@ -89,6 +89,23 @@ assert.equal(normal.sim.timeScale, 4, 'time scale must restore');
 assert.equal(normal.sim.paused, true);
 assert.equal(normal.engine.stopped, false, 'render loop must restore');
 
+const fullMeeting = fixture('?cpuBench=1&tacticalController=new');
+fullMeeting.window.BattleBrowserCpuProbe.start();
+fullMeeting.drain();
+const fullReport = fullMeeting.window.BattleBrowserCpuProbe.result();
+assert.equal(fullReport.run.requestedSimSeconds, 600, 'default is the 600 s natural meeting');
+assert.equal(fullReport.run.steps, 4000, 'full meeting advances 4,000 fixed steps');
+assert.equal(fullReport.run.valid, true, 'full 600 s run must be valid');
+assert.equal(fullReport.caveats.exactStepCount, true);
+assert.equal(fullMeeting.sim.step, fullMeeting.originalStep);
+assert.equal(fullMeeting.engine.stopped, false);
+
+const lab = fixture('?cpuBench=1&cpuSeconds=210&tacticalController=new');
+lab.window.BattleBrowserCpuProbe.start();
+lab.drain();
+assert.equal(lab.window.BattleBrowserCpuProbe.result().run.steps, 1400, 'optional 210 s lab profile');
+assert.equal(lab.window.BattleBrowserCpuProbe.result().run.valid, true);
+
 const hidden = fixture('?cpuBench=1&cpuSeconds=15', { hidden: true });
 hidden.window.BattleBrowserCpuProbe.start();
 hidden.drain();
