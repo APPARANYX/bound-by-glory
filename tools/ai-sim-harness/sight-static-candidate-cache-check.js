@@ -40,7 +40,11 @@ assert.equal(F.sightBlocked(obstacles, lowA, lowB), true, 'same-time restoration
 const original = obstacles[0];
 obstacles[0] = { ...original, y: 5 };
 assert.equal(F.index(obstacles), field, 'test must not rebuild the unchanged index');
-assert.equal(F.sightBlocked(obstacles, lowA, lowB), false, 'same-index obstacle replacement uses live object');
+assert.equal(
+  F.sightBlocked(obstacles, lowA, lowB),
+  false,
+  'same-index obstacle replacement uses live object'
+);
 obstacles[0] = original;
 assert.equal(F.sightBlocked(obstacles, lowA, lowB), true, 'restored object blocks immediately');
 const emptyA = { x: 9, z: 0, y: 1 };
@@ -48,14 +52,22 @@ const emptyB = { x: 12, z: 0, y: 1 };
 assert.equal(F.sightBlocked(obstacles, emptyA, emptyB), false);
 const truck = { id: 'truck-1', shape: 'circle', type: 'truck', x: 11, z: 0, y: 0, height: 2, radius: 0.8 };
 obstacles.__dynamicFootprints = [truck];
-assert.equal(F.sightBlocked(obstacles, emptyA, emptyB), true, 'new moving truck blocks an already cached ray');
+assert.equal(
+  F.sightBlocked(obstacles, emptyA, emptyB),
+  true,
+  'new moving truck blocks an already cached ray'
+);
 assert.equal(
   F.sightBlocked(obstacles, emptyA, emptyB, { ignoreDynamicId: 'truck-1' }),
   false,
   'carrier owner exemption remains live'
 );
 truck.x = 30;
-assert.equal(F.sightBlocked(obstacles, emptyA, emptyB), false, 'truck movement without a version bump clears');
+assert.equal(
+  F.sightBlocked(obstacles, emptyA, emptyB),
+  false,
+  'truck movement without a version bump clears'
+);
 truck.x = 11;
 assert.equal(F.sightBlocked(obstacles, emptyA, emptyB), true, 'same-time truck return blocks again');
 delete obstacles.__dynamicFootprints;
@@ -82,4 +94,6 @@ assert.equal(rebuilt.sightRayCandidates.size, 0, 'no old ray candidates survive 
 assert.equal(F.sightBlocked(obstacles, lowA, lowB), false, 'new static geometry is authoritative');
 assert.equal(F.sightBlocked(obstacles, lowA, lowB), false);
 assert.equal(rebuilt.sightRayHits, 1, 'new version can cache only its own candidate list');
-console.log('PASS static ray candidate cache: exact X/Z keys, live volumes and trucks, same-time changes, bounded eviction and version resets');
+console.log(
+  'PASS static ray candidate cache: exact X/Z keys, live volumes and trucks, same-time changes, bounded eviction and version resets'
+);
