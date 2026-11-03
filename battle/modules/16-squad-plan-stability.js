@@ -2396,7 +2396,10 @@
       dz = goal.z - z,
       len = Math.hypot(dx, dz),
       mayAdvance = !hold && !held && (sq.state === 'advance' || sq.state === 'engaged');
-    if ((force || orderCanAdvance(sq, battle)) && mayAdvance && len > 2) {
+    /* Acknowledgements are read-only and cannot permit a held or exhausted
+       stride. Consult them only after the existing phase/contact/distance
+       gates pass; goal changes and blocked-execution reporting above remain. */
+    if (mayAdvance && len > 2 && (force || orderCanAdvance(sq, battle))) {
       var stride = bounding
         ? ORDER_STRIDE * 0.5
         : sq.state === 'engaged'

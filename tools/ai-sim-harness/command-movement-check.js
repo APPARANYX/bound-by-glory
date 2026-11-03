@@ -77,6 +77,66 @@ test('movement adoption is default-on after Phase 0E benchmark validation', () =
   assert.equal(world('?stressAct=0&commandMovement=1').C.movementEnabled(), true);
 });
 
+test('an anchor that cannot stride does not read unused personal acknowledgements', () => {
+  for (const scenario of [
+    'hold',
+    'contact',
+    'near-goal',
+    'boundary',
+    'above-boundary',
+    'eligible',
+    'forced-hold'
+  ]) {
+    const w = world(),
+      q = w.q,
+      O = w.r.BattleExecutionOutcome;
+    q.state = 'advance';
+    q.commandPhase = scenario === 'hold' || scenario === 'forced-hold' ? 'hold' : 'approach';
+    q.inContact = scenario === 'contact';
+    q.orderAnchor = { x: 0, z: 0 };
+    q.objective = {
+      x: 0,
+      z:
+        scenario === 'near-goal'
+          ? 1
+          : scenario === 'boundary'
+            ? 2
+            : scenario === 'above-boundary'
+              ? 2.000000001
+              : 120
+    };
+    q._orderGoal = { ...q.objective };
+    q.formation = w.r.SquadAI.formationFor(q);
+    if (scenario === 'forced-hold') q._orderGoal.z = 20;
+    w.C.publish(q, w.b, 'movement', allLive(w), {
+      scope: 'squad',
+      action: 'formation',
+      spatial: true,
+      point: q.objective,
+      data: { missionVersion: 0, publishKey: 'fixture' }
+    });
+    const records = JSON.stringify(w.b._commandReception),
+      anchor = { ...q.orderAnchor },
+      man = O.man;
+    let reads = 0;
+    O.man = function (...args) {
+      reads++;
+      return man.apply(this, args);
+    };
+    w.Q.advanceSquadAnchor(q, w.b);
+    assert.equal(
+      JSON.stringify(w.b._commandReception),
+      records,
+      'anchor query never settles or rewrites receipts'
+    );
+    assert.deepEqual(q.orderAnchor, anchor, 'held, near-goal or unacknowledged anchor remains unchanged');
+    assert.deepEqual(q._orderGoal, q.objective, 'goal updates remain independent of stride permission');
+    if (scenario === 'eligible' || scenario === 'above-boundary')
+      assert.ok(reads > 0, 'an eligible stride still checks current acknowledgements');
+    else assert.equal(reads, 0, scenario + ' needs no acknowledgement result');
+  }
+});
+
 test('Meso movement reads only its personal receipt while preserving settlement and adoption', () => {
   const w = world(),
     man = w.q.members[4],
