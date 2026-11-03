@@ -11,7 +11,7 @@ function test(name, fn) {
   checks++;
   console.log('PASS ' + name);
 }
-function fixture(shapes = []) {
+function fixture(shapes = [], personalSpaceSource) {
   H.resetIds();
   const r = H.bootstrap({ modules: false }),
     systems = {};
@@ -33,7 +33,11 @@ function fixture(shapes = []) {
     }
   };
   function load(p) {
-    new Function('window', 'globalThis', 'console', 'BABYLON', fs.readFileSync(path.join(H.REPO, p), 'utf8'))(
+    const text =
+      p === 'battle/modules/51-soldier-personal-space.js' && personalSpaceSource
+        ? personalSpaceSource
+        : fs.readFileSync(path.join(H.REPO, p), 'utf8');
+    new Function('window', 'globalThis', 'console', 'BABYLON', text)(
       r,
       r,
       { log() {}, warn() {} },
@@ -201,5 +205,135 @@ test('death, changed intent and restart release endpoint allocations', () => {
   f.systems['soldier-personal-space'].onBattleRestart(f.sim);
   for (const s of f.sq.members) assert.equal(s._personalSpaceDestination, undefined);
   assert.equal(f.sim._personalSpaceDestinations, undefined);
+});
+test('numeric cells preserve ordered pairs, live corrections and terrain queries of string cells', () => {
+  // Frozen pre-change broad phase only. The same shipping separation and
+  // navigation owners run in both worlds; this is a geometry fixture, not a
+  // local battle A/B. In particular, do not reuse the first grid-build position
+  // after an earlier pair may have pushed a man across a cell boundary.
+  function stringCellsTick(sim) {
+    var all = root.BattleModules.unitsFor(sim).filter(function (s) {
+        return s && !s.dead && s.root && s.root.position;
+      }),
+      buckets = Object.create(null),
+      i,
+      j,
+      ix,
+      iz;
+    for (i = 0; i < all.length; i++) {
+      var p = point(all[i]),
+        k = Math.floor(p.x / CELL) + ',' + Math.floor(p.z / CELL);
+      (buckets[k] || (buckets[k] = [])).push(i);
+    }
+    for (i = 0; i < all.length; i++) {
+      var p = point(all[i]),
+        cx = Math.floor(p.x / CELL),
+        cz = Math.floor(p.z / CELL);
+      for (ix = -1; ix <= 1; ix++)
+        for (iz = -1; iz <= 1; iz++) {
+          var list = buckets[cx + ix + ',' + (cz + iz)];
+          if (!list) continue;
+          for (var q = 0; q < list.length; q++) {
+            j = list[q];
+            if (j <= i) continue;
+            separate(sim, all[i], all[j]);
+          }
+        }
+    }
+  }
+  const source = fs.readFileSync(path.join(H.REPO, 'battle/modules/51-soldier-personal-space.js'), 'utf8'),
+    tickPattern = /function tick\(sim\) \{[\s\S]*?(?=  function publish\(sim\))/,
+    pairHook = 'function separate(sim, a, b) {',
+    traced = text => text.replace(pairHook, pairHook + '\n    (root.__pairTrace ||= []).push([a.id, b.id]);'),
+    control = source.replace(
+      tickPattern,
+      stringCellsTick.toString().replace('stringCellsTick', 'tick') + '\n'
+    );
+  assert.ok(tickPattern.test(source));
+  assert.equal(source.split(pairHook).length, 2, 'trace one existing separation boundary');
+  const cases = [
+    [
+      [-0, 0],
+      [0, -0],
+      [0.1, 0.1]
+    ],
+    [
+      [-1.000000001, -1],
+      [-0.999999999, -1],
+      [-0.7, -0.8]
+    ],
+    [
+      [0.999999999, 1],
+      [1.000000001, 1],
+      [1.4, 1.2]
+    ],
+    [
+      [-2000, 1199],
+      [-1999.8, 1199.1],
+      [2000, -1199]
+    ],
+    [
+      [-0.2, 0],
+      [0, 0],
+      [0.2, 0]
+    ],
+    [
+      [-3, -8],
+      [-2.7, -8],
+      [-2.4, -8]
+    ]
+  ];
+  let pairs = 0,
+    terrainQueries = 0;
+  for (const [index, positions] of cases.entries()) {
+    const run = text => {
+      const f = fixture(index === 4 ? [hedge] : [], traced(text)),
+        queries = [],
+        native = f.r.BattleNavigation.movementClear;
+      f.r.BattleNavigation.movementClear = function (a, b) {
+        const result = native.call(this, a, b);
+        queries.push([a.x, a.z, b.x, b.z, result]);
+        return result;
+      };
+      f.sq.members.forEach((s, i) => {
+        Object.assign(s.root.position, { x: positions[i][0], z: positions[i][1] });
+        s.destination = { x: s.root.position.x, z: s.root.position.z };
+      });
+      // Fixed posts, regroup exclusions and death retain their native rules.
+      f.r.BattleTacticalPositions = {
+        current: s => (index === 2 && s === f.a ? { occupiedAt: 0 } : null)
+      };
+      if (index === 3) f.b._regroupUnstick = true;
+      for (let step = 0; step < 20; step++) {
+        if (step === 10) f.c.dead = true;
+        f.sim.time += 0.15;
+        f.systems['soldier-personal-space'].onSimulationStep(f.sim);
+      }
+      f.systems['soldier-personal-space'].onCommanderTick(f.sim);
+      return {
+        pairs: f.r.__pairTrace || [],
+        queries,
+        stats: f.PS.summary(f.sim),
+        bodies: f.sq.members.map(s => ({
+          position: { x: s.root.position.x, y: s.root.position.y, z: s.root.position.z },
+          destination: s.destination
+        }))
+      };
+    };
+    const actual = run(source),
+      expected = run(control);
+    assert.deepEqual(
+      actual,
+      expected,
+      'same pair order, live body positions, goals, clearance and correction stats'
+    );
+    pairs += actual.pairs.length;
+    terrainQueries += actual.queries.length;
+  }
+  assert.ok(pairs > 0 && terrainQueries > 0, 'fixtures must exercise actual body corrections');
+  console.log(
+    'numeric-cell geometry transcript',
+    JSON.stringify({ cases: cases.length, pairs, terrainQueries })
+  );
 });
 console.log('All ' + checks + ' personal-space checks passed.');

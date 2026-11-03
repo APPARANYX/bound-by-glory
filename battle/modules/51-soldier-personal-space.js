@@ -22,9 +22,6 @@
     var t = root.BattleTacticalPositions && root.BattleTacticalPositions.current(s);
     return !!(t && t.occupiedAt != null);
   }
-  function key(x, z) {
-    return Math.floor(x / CELL) + ',' + Math.floor(z / CELL);
-  }
   function clear(a, b) {
     try {
       return (
@@ -240,23 +237,32 @@
     var all = root.BattleModules.unitsFor(sim).filter(function (s) {
         return s && !s.dead && s.root && s.root.position;
       }),
-      buckets = Object.create(null),
+      buckets = new Map(),
       i,
       j,
       ix,
       iz;
     for (i = 0; i < all.length; i++) {
       var p = point(all[i]),
-        k = key(p.x, p.z);
-      (buckets[k] || (buckets[k] = [])).push(i);
+        cx = Math.floor(p.x / CELL),
+        cz = Math.floor(p.z / CELL),
+        column = buckets.get(cx);
+      if (!column) buckets.set(cx, (column = new Map()));
+      var list = column.get(cz);
+      if (!list) column.set(cz, (list = []));
+      list.push(i);
     }
     for (i = 0; i < all.length; i++) {
       var p = point(all[i]),
         cx = Math.floor(p.x / CELL),
         cz = Math.floor(p.z / CELL);
-      for (ix = -1; ix <= 1; ix++)
+      /* The same nine cells in the same order, without building "x,z" keys.
+         Keep live position reads: earlier separation may have moved this man. */
+      for (ix = -1; ix <= 1; ix++) {
+        var column = buckets.get(cx + ix);
+        if (!column) continue;
         for (iz = -1; iz <= 1; iz++) {
-          var list = buckets[cx + ix + ',' + (cz + iz)];
+          var list = column.get(cz + iz);
           if (!list) continue;
           for (var q = 0; q < list.length; q++) {
             j = list[q];
@@ -264,6 +270,7 @@
             separate(sim, all[i], all[j]);
           }
         }
+      }
     }
   }
   function publish(sim) {
