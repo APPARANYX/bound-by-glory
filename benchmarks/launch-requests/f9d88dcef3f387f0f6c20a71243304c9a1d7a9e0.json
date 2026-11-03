@@ -1,0 +1,18 @@
+{
+  "branch": "work/benchmark-launch/c13ib-causal-off-20261101",
+  "launch_parent_sha": "ff50823735f5735e1d2d454f8920e0be1f3fef30",
+  "launch_sha": "f9d88dcef3f387f0f6c20a71243304c9a1d7a9e0",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "benchmark": "causal",
+    "query": "tacticalController=new&strategicInterception=0&controllerAssault=0",
+    "ref": "work/pin/c13i-e761ef42",
+    "seconds": "600",
+    "seeds": "20",
+    "side": "all"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/c13i-e761ef42",
+  "source_sha_at_archive": "e761ef4299c6dcc77b820edb89c030cfa9614412"
+}
