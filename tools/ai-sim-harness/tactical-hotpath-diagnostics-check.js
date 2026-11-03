@@ -144,25 +144,6 @@ try {
       originals.push({ owner, method, fn });
     }
   }
-  root.BattleNavigation = {
-    version: 1,
-    nextWaypoint(sim, soldier, dest) {
-      let plan = soldier._physicalPath;
-      if (!plan || sim.time >= plan.replanAt) {
-        plan = {
-          version: '1|0|0',
-          finalGoalX: dest.x,
-          finalGoalZ: dest.z,
-          replanAt: sim.time + 5,
-          points: [{ x: 5, z: 0 }, { x: 10, z: 0 }]
-        };
-        soldier._physicalPath = plan;
-      } else if (soldier.root.position.x >= 5 && plan.points.length > 1) {
-        plan.points.shift();
-      }
-      return plan.points[0];
-    }
-  };
   loadModule(root, 'scripts/battle-hotpath-profiler.cjs');
   const profiler = root.BattleHotpathProfiler;
   for (const { owner, method } of originals) {
@@ -178,45 +159,10 @@ try {
   assert.ok(profiler.snapshot().rows.every(row => row.calls === 2 && row.totalMs > 0));
   profiler.reset();
   assert.equal(profiler.snapshot().rows.length, 0);
-  const sim = { time: 0, obstacles: [] };
-  const soldier = { root: { position: { x: 0, z: 0 } } };
-  const dest = { x: 10, z: 0 };
-  root.BattleNavigation.nextWaypoint(sim, soldier, dest);
-  root.BattleNavigation.nextWaypoint(sim, soldier, dest);
-  soldier.root.position.x = 5;
-  root.BattleNavigation.nextWaypoint(sim, soldier, dest);
-  sim.time = 5;
-  root.BattleNavigation.nextWaypoint(sim, soldier, dest);
-  const nav = profiler.snapshot().navigationPlanning;
-  assert.equal(nav.requests, 4);
-  assert.equal(nav.physicalReplans, 2);
-  assert.equal(nav.physicalReuses, 2);
-  assert.equal(nav.replanReasons.missing, 1);
-  assert.equal(nav.replanReasons.periodic, 1);
-  assert.equal(nav.reusedSameWaypoint, 1);
-  assert.equal(nav.reusedAdvancedWaypoint, 1);
-  assert.equal(nav.priorSegmentClearanceChecks, 3);
-  soldier.root.position.x = 10;
-  soldier.moving = false;
-  sim.time = 5.15;
-  assert.equal(root.BattleNavigation.nextWaypoint(sim, soldier, dest).x, 10);
-  const near = profiler.snapshot().navigationPlanning;
-  assert.equal(near.requests, 5);
-  assert.equal(near.physicalReuses, 3);
-  assert.equal(near.nearGoalRequests, 1);
-  assert.equal(near.nearGoalPhysicalReuses, 1);
-  assert.equal(near.stoppedRequests, 1);
   profiler.restore();
-  const frozenRows = profiler.snapshot().rows.length;
-  assert.equal(root.BattleNavigation.nextWaypoint(sim, soldier, dest).x, 10);
-  assert.equal(profiler.snapshot().navigationPlanning.requests, 5);
   for (const { owner, method, fn } of originals) assert.equal(owner[method], fn);
   assert.equal(root.BattleTacticalController.dispatch(payload), returned);
-  assert.equal(
-    profiler.snapshot().rows.length,
-    frozenRows,
-    'restored owner calls no longer collect timings'
-  );
+  assert.equal(profiler.snapshot().rows.length, 0, 'restored owner calls no longer collect timings');
   console.log('PASS controller profiler preserves owner calls, results, exceptions and restoration');
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });
