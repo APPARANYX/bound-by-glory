@@ -1,0 +1,21 @@
+{
+  "branch": "work/benchmark-launch/meso706-regroup-causal-dc730b86",
+  "launch_parent_sha": "dc730b8638a5f9b631e1c6e5a5e65617ed5eded3",
+  "launch_sha": "9896d163810ff0827619031d7e7c044c91c6caa7",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/dc730b8638a5f9b631e1c6e5a5e65617ed5eded3",
+  "request": {
+    "benchmark": "causal",
+    "exact_seed": "controller-natural-20261026-0002",
+    "lifecycle": "1",
+    "query": "strategicInterception=0&tacticalController=new",
+    "ref": "work/controller-meso-wrap-20261101",
+    "role": "all",
+    "seconds": "600",
+    "seeds": "1",
+    "side": "all"
+  },
+  "schema_version": 1,
+  "source_ref": "work/controller-meso-wrap-20261101",
+  "source_sha_at_archive": "f469a6993d490bf101fe17026c73f9c4bb5e81ed"
+}
