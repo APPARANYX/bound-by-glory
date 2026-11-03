@@ -1,5 +1,5 @@
 /* Opt-in browser CPU probe. Real fixed-step battle, no render-loop timing or gameplay tuning.
-   ?cpuBench=1&cpuSeconds=210; collects inclusive call-site costs for diagnosis,
+   ?cpuBench=1&cpuSeconds=600; collects inclusive call-site costs for diagnosis,
    NOT an uninstrumented A/B performance acceptance benchmark. */
 (function (root) {
   'use strict';
@@ -8,7 +8,7 @@
   if (q.get('cpuBench') !== '1' || root.BattleBrowserCpuProbe) return;
 
   var seconds = Number(q.get('cpuSeconds'));
-  if (!Number.isFinite(seconds) || seconds < 15 || seconds > 600) seconds = 210;
+  if (!Number.isFinite(seconds) || seconds < 15 || seconds > 600) seconds = 600;
   var STEP = 0.15, SLICE_MS = 24, BUCKET_SECONDS = 30;
   var panel, status, startButton, stopButton, saveButton, copyButton;
   var sim = null, engine = null, clock = null, patches = [], rows = {};
@@ -105,13 +105,24 @@
       [root.BattleModules, 'runHook', 'BattleModules.runHook'],
       [root.BattleNavigation, 'findPath', 'Navigation.findPath'],
       [root.BattleNavigation, 'movementClear', 'Navigation.movementClear'],
-      [root.BattleNavigation, 'hasLineOfSight', 'Navigation.hasLineOfSight'],
+      [root.BattleNavigation, 'lineOfSightBlocked', 'Navigation.lineOfSightBlocked'],
+      [root.BattleNavigation, 'nextWaypoint', 'Navigation.nextWaypoint'],
+      [root.BattleNavigation, 'resolveStep', 'Navigation.resolveStep'],
       [root.BattleObstacleField, 'sightBlocked', 'Obstacles.sightBlocked'],
       [root.BattleObstacleField, 'sightBlocker', 'Obstacles.sightBlocker'],
       [root.BattleObstacleField, 'nearby', 'Obstacles.nearby'],
+      [root.BattleObstacleField, 'coverAt', 'Obstacles.coverAt'],
       [root.BattleMovementResolver, 'resolve', 'MovementResolver.resolve'],
-      [root.BattleMovementResolver, 'arbitrate', 'MovementResolver.arbitrate']
+      [root.BattleMovementResolver, 'proposeCombat', 'MovementResolver.proposeCombat'],
+      [root.BattleMovementResolver, 'proposeOrder', 'MovementResolver.proposeOrder']
     ].forEach(function (entry) { measure(entry[0], entry[1], entry[2]); });
+    /* Native registry owns the real simulation-step callbacks; time each system
+       without replacing the runHook dispatch or changing its error handling. */
+    if (root.BattleModules && root.BattleModules.listSystems)
+      root.BattleModules.listSystems().forEach(function (system) {
+        if (system && typeof system.onSimulationStep === 'function')
+          measure(system, 'onSimulationStep', 'system.' + system.id + '.onSimulationStep');
+      });
   }
   function restore() {
     patches.forEach(function (p) {
@@ -225,10 +236,10 @@
         }).sort(function (a, b) { return a.simFrom - b.simFrom; }) };
     }).sort(function (a, b) { return b.inclusiveMs - a.inclusiveMs; });
     var scenario = root.__scenario__ || {};
-    valid = !lastError && !hiddenSlices && !endedEarly && nSteps > 0;
+    valid = !lastError && !hiddenSlices && !endedEarly && nSteps > 0 && nSteps === Math.round(seconds / STEP);
     finishedEarly = endedEarly;
     result = {
-      kind: 'grasstex-browser-cpu-probe', version: 1, date: new Date().toISOString(),
+      kind: 'grasstex-browser-cpu-probe', version: 2, date: new Date().toISOString(),
       source: { url: location.href, ref: root.BATTLE_REF || null, build: root.BATTLE_BUILD || root.BATTLE_BUILD_DEPLOYED || null },
       device: { userAgent: navigator.userAgent, cores: navigator.hardwareConcurrency || null,
         memoryGB: navigator.deviceMemory || null, hiddenSlices: hiddenSlices },
@@ -241,6 +252,9 @@
         p50AdvanceMs: quantile(sampledSteps, 0.5), p95AdvanceMs: quantile(sampledSteps, 0.95),
         p99AdvanceMs: quantile(sampledSteps, 0.99), slowestSteps: slowSteps, endReason: reason, early: endedEarly, valid: valid },
       functions: functions, error: lastError,
+      caveats: { runningTabHidden: hiddenSlices > 0, reachedFullDuration: !endedEarly,
+        exactStepCount: nSteps === Math.round(seconds / STEP),
+        timingType: 'inclusive instrumented JS elapsed', officialPerformanceGate: false },
       note: 'Instrumented inclusive JavaScript main-thread elapsed time, not OS CPU utilization. Function times can nest and must not be summed. Captured exports can miss internal closure call sites. Use the official uninstrumented paired benchmark for acceptance.'
     };
     root.__browserCpuResult = result;
