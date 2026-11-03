@@ -12,7 +12,11 @@
 (function (root) {
   'use strict';
 
-  var CELL = 26;
+  var CELL = 26,
+    /* Store only the ordered static-index IDs crossed by an exact X/Z ray.
+       Live obstacle objects, heights, truck footprints and hit tests are never cached. */
+    SIGHT_RAY_CACHE_LIMIT = 1024,
+    SIGHT_RAY_MAX_CANDIDATES = 96;
   var SILHOUETTE = { stand: 1.75, crouch: 1.2, prone: 0.55 };
   var EYE = { stand: 1.55, crouch: 1.05, prone: 0.42 };
   var DEFAULT_HEIGHT = 1.6;
@@ -139,7 +143,10 @@
       buckets: buckets,
       stamp: new Int32Array(obstacles.length),
       epoch: 0,
-      scratch: []
+      scratch: [],
+      sightRayCandidates: new Map(),
+      sightRayHits: 0,
+      sightRayMisses: 0
     };
     for (i = 0; i < obstacles.length; i++) {
       var o = obstacles[i],
@@ -214,6 +221,19 @@
      gatherSegment's sampled 3x3 blocks find the same obstacles among several times the candidates,
      in an order sightBlocker's nearest-hit ties depend on, so only the yes/no query uses this. */
   var GATHER_PAD = 1e-6;
+  function pushBucketIds(field, k, out) {
+    var bucket = field.buckets[k];
+    if (!bucket) return;
+    for (var i = 0; i < bucket.length; i++) {
+      var id = bucket[i];
+      if (field.stamp[id] === field.epoch) continue;
+      field.stamp[id] = field.epoch;
+      out.push(id);
+    }
+  }
+  /* The Boolean sight query alone needs candidate identities, not a nearest-hit
+     order or an owned copy of the obstacle objects. Re-read field.obstacles[id] on
+     every call so even a same-length object replacement remains authoritative. */
   function gatherCrossed(field, ax, az, bx, bz) {
     var out = beginGather(field),
       dx = bx - ax,
@@ -236,9 +256,40 @@
       }
       var r0 = rowOf(field, Math.min(z0, z1) - GATHER_PAD),
         r1 = rowOf(field, Math.max(z0, z1) + GATHER_PAD);
-      for (var r = r0; r <= r1; r++) pushBucket(field, c + r * field.cols, out);
+      for (var r = r0; r <= r1; r++) pushBucketIds(field, c + r * field.cols, out);
     }
     return out;
+  }
+  function sightRayIds(field, a, b) {
+    var ax = a.x,
+      az = a.z,
+      bx = b.x,
+      bz = b.z;
+    /* Non-finite or non-number coordinates keep the original uncached gather.
+       The cache key does not round: neighbouring rays must never alias. */
+    if (
+      !Number.isFinite(ax) ||
+      !Number.isFinite(az) ||
+      !Number.isFinite(bx) ||
+      !Number.isFinite(bz)
+    )
+      return gatherCrossed(field, ax, az, bx, bz);
+    var key = ax + '|' + az + '|' + bx + '|' + bz,
+      cache = field.sightRayCandidates,
+      saved = cache.get(key);
+    if (saved) {
+      field.sightRayHits++;
+      return saved;
+    }
+    field.sightRayMisses++;
+    var ids = gatherCrossed(field, ax, az, bx, bz);
+    if (ids.length > SIGHT_RAY_MAX_CANDIDATES) return ids;
+    /* gatherCrossed owns a shared scratch array which later queries mutate.
+       Retain only stable indices; no obstacle shape/result is persisted. */
+    var stable = ids.slice();
+    if (cache.size >= SIGHT_RAY_CACHE_LIMIT) cache.clear();
+    cache.set(key, stable);
+    return stable;
   }
 
   function closestParam(ax, az, bx, bz, px, pz) {
@@ -342,17 +393,27 @@
   }
   /* Blocked or not needs any hit, not the nearest one: stop at the first. */
   function sightBlocked(obstacles, a, b, options) {
-    var field = fieldFor(obstacles);
-    var dynamic = obstacles && obstacles.__dynamicFootprints,
-      candidates = field ? gatherCrossed(field, a.x, a.z, b.x, b.z) : [];
-    if (dynamic && dynamic.length) candidates = candidates.concat(dynamic);
+    var field = fieldFor(obstacles),
+      dynamic = obstacles && obstacles.__dynamicFootprints,
+      candidates = field ? sightRayIds(field, a, b) : [];
     for (var i = 0; i < candidates.length; i++) {
-      var ob = candidates[i];
+      /* Candidate IDs only: even a replaced static obstacle gets live geometry. */
+      var ob = field.obstacles[candidates[i]];
       if (options && ob.type === 'truck' && ob.id === options.ignoreDynamicId) continue;
       if (sightHitT(ob, a, b) == null) continue;
       if (legacyCircularHedgeEndpoint(ob, a) || legacyCircularHedgeEndpoint(ob, b)) continue;
       return true;
     }
+    /* Never memoize the final ray answer. Moving trucks may change inside the
+       same simulation step without bumping the static spatial-index version. */
+    if (dynamic)
+      for (i = 0; i < dynamic.length; i++) {
+        var hull = dynamic[i];
+        if (options && hull.type === 'truck' && hull.id === options.ignoreDynamicId) continue;
+        if (sightHitT(hull, a, b) == null) continue;
+        if (legacyCircularHedgeEndpoint(hull, a) || legacyCircularHedgeEndpoint(hull, b)) continue;
+        return true;
+      }
     return false;
   }
 
