@@ -218,6 +218,19 @@
     return null;
   }
   function movementClear(a, b) {
+    /* A finite zero-length line has no wall crossing: intersection() sees
+       rx=rz=0 and its denominator is zero for every fixed building wall.
+       Skip static wall-index/ray work, NOT the live footprint collision layer:
+       module 39 still wraps this function and performs all current-shape
+       checks on every public movementClear() request. */
+    if (
+      a && b &&
+      a.x === b.x &&
+      a.z === b.z &&
+      Number.isFinite(a.x) &&
+      Number.isFinite(a.z)
+    )
+      return true;
     return !blocked(a, b, 'move');
   }
   /* Physical navigation owns how a man gets past something in his way. The Movement Resolver still
