@@ -1,0 +1,24 @@
+{
+  "branch": "work/benchmark-launch/meso706-meeting-2838555a",
+  "launch_parent_sha": "2838555ab0ac1738b65f534e4a6c4d60032046bc",
+  "launch_sha": "9bfb2054495fe552d05899d13ddf7df9684de972",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/2838555ab0ac1738b65f534e4a6c4d60032046bc",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "standard",
+    "correlation_id": "meso706-meeting-2838555a",
+    "origin_agent": "chatgpt",
+    "purpose": "PR706 final-source acceptance after exact-head CI and Native Lab 41296050524 passed; inspect actual ownership, lifecycle, physical movement and fire. Legacy behavior deltas are diagnostic.",
+    "query_off": "strategicInterception=0",
+    "query_on": "strategicInterception=0&tacticalController=new",
+    "ref": "work/controller-meso-wrap-20261101",
+    "seed": "controller-natural-20261026",
+    "seeds": "3",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/controller-meso-wrap-20261101",
+  "source_sha_at_archive": "f469a6993d490bf101fe17026c73f9c4bb5e81ed"
+}
