@@ -831,7 +831,13 @@
          Nothing remains to re-route at the periodic deadline. Reconsider the
          stand point immediately if its station claims change; retain the
          periodic fallback when moving obstacle footprints are present. */
-      if (c.points && !c.blocked && dist(start, c.standGoal) <= GOAL_ARRIVAL) {
+      if (
+        c.points &&
+        !c.blocked &&
+        dist(start, c.standGoal) <= GOAL_ARRIVAL &&
+        dest.x === c.finalGoalX &&
+        dest.z === c.finalGoalZ
+      ) {
         var P = root.BattleTacticalPositions,
           stationRevision = P && P.revision ? P.revision(sim) : 0,
           moving = sim.obstacles && sim.obstacles.__dynamicFootprints;
