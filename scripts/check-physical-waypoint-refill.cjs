@@ -49,6 +49,15 @@ completed=arrived._physicalPath;
 sim.time=90;
 N.nextWaypoint(sim,arrived,stop);
 assert.strictEqual(arrived._physicalPath,completed,'unchanged station revision retains an arrived route');
+revision++;
+N.nextWaypoint(sim,arrived,stop);
+assert.notStrictEqual(arrived._physicalPath,completed,'station claim changes must reconsider an arrived stand goal');
+completed=arrived._physicalPath;
+sim.obstacles.__dynamicFootprints=[{id:'distant-hull',shape:'circle',x:1000,z:1000,radius:2}];
+sim.time=97;
+N.nextWaypoint(sim,arrived,stop);
+assert.notStrictEqual(arrived._physicalPath,completed,'moving-hull presence retains bounded periodic replan');
+delete sim.obstacles.__dynamicFootprints;
 /* Subthreshold changes still get their old scheduled review; do not let a
    completed-route shortcut permanently ignore a new final position. */
 const drifting={id:'drift-probe',root:{position:{x:55,y:0,z:55}}},driftGoal={x:55,z:55};
@@ -62,14 +71,6 @@ sim.time=106;
 N.nextWaypoint(sim,drifting,{x:55.5,z:55});
 assert.notStrictEqual(drifting._physicalPath,beforeDrift,'small goal drift still receives scheduled full replan');
 sim.time=90;
-revision++;
-N.nextWaypoint(sim,arrived,stop);
-assert.notStrictEqual(arrived._physicalPath,completed,'station claim changes must reconsider an arrived stand goal');
-completed=arrived._physicalPath;
-sim.obstacles.__dynamicFootprints=[{id:'distant-hull',shape:'circle',x:1000,z:1000,radius:2}];
-sim.time=97;
-N.nextWaypoint(sim,arrived,stop);
-assert.notStrictEqual(arrived._physicalPath,completed,'moving-hull presence retains bounded periodic replan');
-delete sim.obstacles.__dynamicFootprints;
+
 console.log('PASS: completed empty waypoint queues skip periodic rebuild, but invalidate on goal, station and moving obstacles');
 console.log('PASS: low rolling waypoint queues refill in place without a full physical replan');
