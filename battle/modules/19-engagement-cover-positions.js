@@ -266,6 +266,7 @@
           bodies: new Map(),
           bodyBuckets: [],
           neighborhoods: new WeakMap(),
+          routeStandClearance: new WeakMap(),
           bodyTime: null
         };
         var physical = obs.__physicalFootprints || [];
@@ -599,7 +600,30 @@
          but do not query physical clearance for a point that cannot be used. */
       if (routePointAllowed && !routePointAllowed(slot)) return false;
       var N = root.BattleNavigation;
-      return !N || N.movementClear(slot, slot);
+      if (!N) return true;
+      /* Only the native route-discovery caller can reuse static building-wall
+         clearance for an unchanged exact slot. Real claims, bodies and route
+         admission above are still checked on EVERY call. Ordinary candidates,
+         owner adoption and physical execution continue to query live native
+         clearance. The navigator's version changes when wall geometry changes;
+         a replacement clearance function also invalidates this private entry. */
+      if (!routePointAllowed || !Number.isFinite(N.version)) return N.movementClear(slot, slot);
+      var prior = c.routeStandClearance.get(slot);
+      if (
+        prior &&
+        prior.x === slot.x &&
+        prior.z === slot.z &&
+        prior.navigation === N &&
+        prior.version === N.version &&
+        prior.clearance === N.movementClear
+      )
+        return prior.ok;
+      var ok = N.movementClear(slot, slot);
+      c.routeStandClearance.set(slot, {
+        x: slot.x, z: slot.z, navigation: N, version: N.version,
+        clearance: N.movementClear, ok: ok
+      });
+      return ok;
     }
     function reserveCover(s, battle, slot, kind) {
       var c = coverRegistry(battle);
