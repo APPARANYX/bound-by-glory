@@ -274,6 +274,7 @@ try {
     `- Requests from soldiers reported stopped on previous movement step: ${nav?.stoppedRequests || 0}; physical reuses while stopped: ${nav?.stoppedPhysicalReuses || 0}.`,
     `- Existing populated queues: ${nav?.reuseWithPoints || 0}; same next waypoint: ${nav?.reusedSameWaypoint || 0}; next waypoint advanced in place: ${nav?.reusedAdvancedWaypoint || 0}; tail extended: ${nav?.reusedQueueExtended || 0}.`,
     `- Version/goal-stable populated plans entering segment clearance check: ${nav?.priorSegmentClearanceChecks || 0}; physical reuse calls while dynamic footprints were present: ${nav?.reuseWithMovingFootprints || 0}.`,
+    `- Inferred retained clear-segment proof hits: ${nav?.retainedClearanceProofHits || 0}; live-clearance proof refreshes on reused paths: ${nav?.retainedClearanceProofRefreshes || 0}.`,
     '',
     '| Physical full-replan cause | Count |',
     '|---|---:|',
