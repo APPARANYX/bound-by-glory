@@ -1,14 +1,8 @@
 {
-  "benchmark": "standard",
-  "ref": "work/meso706-checked-cover-stack-20261102",
-  "seed": "controller-natural-20261026",
-  "seeds": "3",
+  "benchmark": "hotpath",
+  "ref": "work/meso706-base-wall-zero-segment-fastpath-20261102",
   "battle_type": "meeting",
-  "windows": "0+600",
+  "seed": "controller-natural-20261026-0002",
   "sim_seconds": "600",
-  "query_off": "strategicInterception=0",
-  "query_on": "strategicInterception=0&tacticalController=new",
-  "origin_agent": "chatgpt",
-  "correlation_id": "meso732-8772be1f-meeting",
-  "purpose": "Official three-pair uninstrumented gate for composition of independently validated #723 #726 #731"
+  "query": "strategicInterception=0&tacticalController=new"
 }
