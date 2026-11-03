@@ -1,0 +1,18 @@
+{
+  "branch": "work/benchmark-launch/ncs-causal-on-20261031",
+  "launch_parent_sha": "911c94c3912ecf5a16a4ef38c2d9c3f719e47b4e",
+  "launch_sha": "8232a404e6486c1466c0c44043568345b1910c2b",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "benchmark": "causal",
+    "query": "tacticalController=new&strategicInterception=0&localPlan=1&localTasks=1&localStructures=1&localEntry=1&localEntryGate=1&localSurvey=1&localWatch=1&localContactResume=1&localContinuity=1&localStructureOrders=1",
+    "ref": "work/pin/ncs-7e1ed1e1",
+    "seconds": "600",
+    "seeds": "20",
+    "side": "all"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/ncs-7e1ed1e1",
+  "source_sha_at_archive": "7e1ed1e12bf8748301b3a2b267fb1e7e83834458"
+}
