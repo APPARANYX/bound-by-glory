@@ -811,11 +811,59 @@
     else soldier._fieldDetour = null;
     return soldier._physicalPath;
   }
+  /* A clear directed segment stays clear along its remaining collinear portion
+     while geometry and station claims are unchanged. This is a proof for the
+     SAME waypoint, not a route or movement authorization: dynamic footprints
+     always use live clearance, as do diverted soldiers and changed stations. */
   function firstSegmentClear(sim, soldier, start, c) {
     var p = c && c.points && c.points[0];
     if (!p) return false;
-    var shapes = routeFootprints(sim, start, p, soldier);
-    return edgeClear(sim, start, p, shapes, ROUTE_MARGIN);
+    var dynamic = sim.obstacles && sim.obstacles.__dynamicFootprints,
+      liveDynamic = !!(dynamic && dynamic.length),
+      P = root.BattleTacticalPositions,
+      revision = P && P.revision ? P.revision(sim) : 0,
+      proof = c.firstSegmentProof;
+    if (
+      !liveDynamic &&
+      proof &&
+      proof.battle === sim &&
+      proof.version === c.version &&
+      proof.revision === revision &&
+      proof.waypoint === p &&
+      proof.x === p.x &&
+      proof.z === p.z
+    ) {
+      var dx = p.x - proof.fromX,
+        dz = p.z - proof.fromZ,
+        length2 = dx * dx + dz * dz,
+        along = (start.x - proof.fromX) * dx + (start.z - proof.fromZ) * dz;
+      /* Do not infer clearance for a reversed or diverted segment. The tiny
+         tolerance only absorbs floating-point integration drift. */
+      if (
+        length2 > 1e-9 &&
+        along >= -1e-8 &&
+        along <= length2 + 1e-8 &&
+        Math.abs((start.x - proof.fromX) * dz - (start.z - proof.fromZ) * dx) <=
+          Math.sqrt(length2) * 1e-5
+      )
+        return true;
+    }
+    var shapes = routeFootprints(sim, start, p, soldier),
+      clear = edgeClear(sim, start, p, shapes, ROUTE_MARGIN);
+    c.firstSegmentProof =
+      clear && !liveDynamic
+        ? {
+            battle: sim,
+            version: c.version,
+            revision: revision,
+            waypoint: p,
+            x: p.x,
+            z: p.z,
+            fromX: start.x,
+            fromZ: start.z
+          }
+        : null;
+    return clear;
   }
   function needsReplan(soldier, sim, dest, start) {
     var c = soldier._physicalPath;
