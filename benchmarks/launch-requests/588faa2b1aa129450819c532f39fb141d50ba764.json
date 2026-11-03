@@ -1,0 +1,24 @@
+{
+  "branch": "work/benchmark-launch/meso706-final-transport-2e4086dc",
+  "launch_parent_sha": "2e4086dc14372006fcecf029b4ddd45d73b7f57b",
+  "launch_sha": "588faa2b1aa129450819c532f39fb141d50ba764",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/2e4086dc14372006fcecf029b4ddd45d73b7f57b",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "standard",
+    "correlation_id": "meso706-final-transport-2e4086dc",
+    "origin_agent": "codex",
+    "purpose": "Final-head acceptance after Lab41311221688 and causal41311442887; inspect real owner receipts, lifecycle progress and cost without tactical tuning.",
+    "query_off": "strategicInterception=1&frontLines=1&motorTransport=1&truckAccess=1&truckCollision=1&truckVisual=1&aerialRecon=1&interception=1&reinforcements=1&reinforcementSortie=1",
+    "query_on": "strategicInterception=1&frontLines=1&motorTransport=1&truckAccess=1&truckCollision=1&truckVisual=1&aerialRecon=1&interception=1&reinforcements=1&reinforcementSortie=1&tacticalController=new",
+    "ref": "work/controller-meso-wrap-20261101",
+    "seed": "meso706-transport-20261101",
+    "seeds": "3",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/controller-meso-wrap-20261101",
+  "source_sha_at_archive": "f469a6993d490bf101fe17026c73f9c4bb5e81ed"
+}
