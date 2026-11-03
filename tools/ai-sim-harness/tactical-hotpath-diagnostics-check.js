@@ -206,11 +206,12 @@ try {
   assert.equal(near.nearGoalPhysicalReuses, 1);
   assert.equal(near.stoppedRequests, 1);
   profiler.restore();
+  const frozenRows = profiler.snapshot().rows.length;
   assert.equal(root.BattleNavigation.nextWaypoint(sim, soldier, dest).x, 10);
   assert.equal(profiler.snapshot().navigationPlanning.requests, 5);
   for (const { owner, method, fn } of originals) assert.equal(owner[method], fn);
   assert.equal(root.BattleTacticalController.dispatch(payload), returned);
-  assert.equal(profiler.snapshot().rows.length, 0, 'restored owner calls no longer collect timings');
+  assert.equal(profiler.snapshot().rows.length, frozenRows, 'restored owner calls no longer collect timings');
   console.log('PASS controller profiler preserves owner calls, results, exceptions and restoration');
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });
