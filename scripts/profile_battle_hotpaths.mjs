@@ -270,6 +270,8 @@ try {
     '## Physical waypoint lifecycle (profiler-only)',
     '',
     `- Waypoint calls: ${nav?.requests || 0}; physical path rebuilds: ${nav?.physicalReplans || 0}; reuses: ${nav?.physicalReuses || 0}.`,
+    `- Requests already within 0.35m of physical goal: ${nav?.nearGoalRequests || 0}; physical reuses at goal: ${nav?.nearGoalPhysicalReuses || 0}; replans at goal: ${nav?.nearGoalPhysicalReplans || 0}.`,
+    `- Requests from soldiers reported stopped on previous movement step: ${nav?.stoppedRequests || 0}; physical reuses while stopped: ${nav?.stoppedPhysicalReuses || 0}.`,
     `- Existing populated queues: ${nav?.reuseWithPoints || 0}; same next waypoint: ${nav?.reusedSameWaypoint || 0}; next waypoint advanced in place: ${nav?.reusedAdvancedWaypoint || 0}; tail extended: ${nav?.reusedQueueExtended || 0}.`,
     `- Version/goal-stable populated plans entering segment clearance check: ${nav?.priorSegmentClearanceChecks || 0}; physical reuse calls while dynamic footprints were present: ${nav?.reuseWithMovingFootprints || 0}.`,
     '',
