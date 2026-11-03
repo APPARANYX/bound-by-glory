@@ -814,8 +814,44 @@
   function firstSegmentClear(sim, soldier, start, c) {
     var p = c && c.points && c.points[0];
     if (!p) return false;
-    var shapes = routeFootprints(sim, start, p, soldier);
-    return edgeClear(sim, start, p, shapes, ROUTE_MARGIN);
+    /* Every previously cleared straight segment also certifies its forward
+       subsegments, provided the start stayed exactly on that line. A real
+       lateral deviation must still perform the full live clearance query.
+       This does not authorize physical movement; stepMovement keeps its
+       per-step collision test, and any changed waypoint or claim is rechecked. */
+    var cert = c.segmentClear,
+      P = root.BattleTacticalPositions,
+      stationRevision = P && P.revision ? P.revision(sim) : 0,
+      dynamic = sim.obstacles && sim.obstacles.__dynamicFootprints;
+    if (
+      cert &&
+      cert.point === p &&
+      cert.stationRevision === stationRevision &&
+      (!dynamic || !dynamic.length)
+    ) {
+      var dx = p.x - cert.x,
+        dz = p.z - cert.z,
+        lengthSq = dx * dx + dz * dz;
+      if (lengthSq > 1e-8) {
+        var sx = start.x - cert.x,
+          sz = start.z - cert.z,
+          progress = sx * dx + sz * dz,
+          cross = sx * dz - sz * dx;
+        /* No clearance tolerance: changing the line even slightly could
+           intersect a body buffer that the original edge avoided. Only
+           floating-point roundoff for a collinear point is accepted. */
+        if (
+          progress >= 0 &&
+          progress <= lengthSq &&
+          Math.abs(cross) <= 1e-9 * Math.sqrt(lengthSq)
+        )
+          return true;
+      }
+    }
+    var shapes = routeFootprints(sim, start, p, soldier),
+      clear = edgeClear(sim, start, p, shapes, ROUTE_MARGIN);
+    c.segmentClear = clear ? { point: p, x: start.x, z: start.z, stationRevision: stationRevision } : null;
+    return clear;
   }
   function needsReplan(soldier, sim, dest, start) {
     var c = soldier._physicalPath;
