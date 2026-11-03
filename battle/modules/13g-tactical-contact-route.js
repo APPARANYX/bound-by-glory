@@ -217,19 +217,20 @@
       )
         return;
       if (p.slotId) seen.add(String(p.slotId));
-      chosen.push(p);
+      /* Coordinates and endpoints are fixed for this synchronous sort. Compute
+         the original rank once; comparator ties still use the same slot ID. */
+      chosen.push({ point: p, rank: crossTrack(p, here, target) + 0.12 * distance(p, here) });
     });
     stats.total = chosen.length;
     chosen.sort(function (a, b) {
-      return (
-        crossTrack(a, here, target) +
-          0.12 * distance(a, here) -
-          (crossTrack(b, here, target) + 0.12 * distance(b, here)) ||
-        String(a.slotId).localeCompare(String(b.slotId))
-      );
+      return a.rank - b.rank || String(a.point.slotId).localeCompare(String(b.point.slotId));
     });
     chosen.length = Math.min(chosen.length, MAX_NODES);
-    var nodes = [{ x: here.x, z: here.z, slotId: 'start', quality: 0 }].concat(chosen);
+    var nodes = [{ x: here.x, z: here.z, slotId: 'start', quality: 0 }].concat(
+      chosen.map(function (entry) {
+        return entry.point;
+      })
+    );
     stats.graphNodes = nodes.length - 1;
     var d = Array(nodes.length).fill(Infinity),
       prev = Array(nodes.length).fill(-1),
