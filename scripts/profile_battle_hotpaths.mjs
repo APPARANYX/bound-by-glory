@@ -15,6 +15,8 @@ const { topChains, flameTree, splitByIntervals } = cpuChains;
 // counters the report reconciles against.
 // BATTLE_PROFILE_HEAP=1 additionally captures CDP HeapProfiler allocation
 // sampling (selfSize per allocating function) alongside CPU sampling.
+const useWrappers = process.env.BATTLE_PROFILE_WRAPPERS !== '0';
+const useHeapSampling = process.env.BATTLE_PROFILE_HEAP === '1';
 // BATTLE_PROFILE_BABYLON_LOCAL=/path/to/babylon.js serves a local copy of
 // the Babylon.js CDN script instead of fetching it from jsdelivr. The battle
 // page loads Babylon from the CDN; sandboxed/offline runners (proxy blocks
