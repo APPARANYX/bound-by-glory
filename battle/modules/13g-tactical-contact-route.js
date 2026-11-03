@@ -110,7 +110,19 @@
       return out;
     }
     var samples = 0,
-      exposed = 0;
+      exposed = 0,
+      rejectionSamples = 0;
+    /* A graph first hop only consumes rejection, not the rejected exposure
+       fraction. Count the original sample denominator exactly: once observed
+       exposure alone exceeds the limit, unseen sheltered points cannot save
+       this edge. Independent evaluate() has no visibility callback and keeps
+       measuring its full fraction for execution and public receipts. */
+    if (strict && visibility) {
+      for (var n = 1; n < transit.points.length; n++)
+        rejectionSamples +=
+          Math.max(1, Math.ceil(distance(transit.points[n - 1], transit.points[n]) / SAMPLE)) +
+          (n === 1 ? 1 : 0);
+    }
     /* Measure exposure ALONG the actual traversable route, including B1
        egress and C ingress, not through the solid obstacle between B and C. */
     /* Only later graph edges can be unable to relax their destination even at
@@ -127,6 +139,15 @@
             at = { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t };
           samples++;
           if (visibility ? visibility(at) : threatVisible(sim, at, reports, stance)) exposed++;
+          if (
+            rejectionSamples &&
+            exposed / rejectionSamples > (underFire ? MAX_UNDER_FIRE_EXPOSURE : MAX_EXPOSURE)
+          ) {
+            out.distance = transit.distance;
+            out.exposure = exposed / rejectionSamples;
+            out.reason = 'excessive-observed-exposure';
+            return out;
+          }
         }
       }
     }

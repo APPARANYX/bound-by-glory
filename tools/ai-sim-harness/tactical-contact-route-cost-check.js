@@ -65,6 +65,67 @@ const reports = [
   { x: 32, z: 100 }
 ];
 const goal = { x: 0, z: 70 };
+// A strict graph edge may stop only when the already observed exposed samples
+// exceed the unchanged limit even if every remaining sample is sheltered.
+// Independent evaluate() must still return the complete measured fraction.
+const fullRejectedExposure = source.replace('if (strict && visibility) {', 'if (false) {');
+let rejectedSightSaved = 0,
+  rejectedSightBefore = 0;
+for (const detour of [false, true]) {
+  for (const underFire of [false, true]) {
+    for (const exposure of [() => true, p => p.z < 18, p => p.x >= 0]) {
+      const fast = world(source, exposure, detour),
+        control = world(fullRejectedExposure, exposure, detour),
+        run = w => {
+          w.soldier.suppressedUntil = underFire ? 10 : 0;
+          return w.root.BattleTacticalContactRoute.pick(w.soldier, w.sim, reports, goal, []);
+        };
+      assert.deepEqual(run(fast), run(control), 'strict graph rejection preserves the complete route');
+      assert.deepEqual(fast.nativeTrace(), control.nativeTrace(), 'strict rejection retains live physics');
+      rejectedSightBefore += control.calls();
+      rejectedSightSaved += control.calls() - fast.calls();
+    }
+  }
+}
+assert.ok(rejectedSightSaved > 0, 'certain strict rejection avoids actual sight work');
+// This native two-segment detour has exactly twenty samples, so the original
+// strict > comparison can be exercised at both limits and just above them.
+for (const test of [
+  { underFire: false, exposure: p => p.x < 12, fraction: 0.85, eligible: true },
+  { underFire: false, exposure: p => p.x < 14, fraction: 0.9, eligible: false },
+  { underFire: true, exposure: p => p.x === 0 && p.z < 19, fraction: 0.5, eligible: true },
+  { underFire: true, exposure: p => p.x === 0, fraction: 0.55, eligible: false }
+]) {
+  const destination = { x: 17, z: 19, quality: 0.1, slotId: 'boundary' },
+    fast = world(source, test.exposure, true, [destination]),
+    control = world(fullRejectedExposure, test.exposure, true, [destination]),
+    run = w => {
+      w.soldier.suppressedUntil = test.underFire ? 10 : 0;
+      return w.root.BattleTacticalContactRoute.pick(w.soldier, w.sim, reports, goal, []);
+    },
+    result = run(fast);
+  assert.deepEqual(result, run(control), 'exact-limit graph result and native budgets');
+  assert.equal(!!result.point, test.eligible, 'a route exactly on the exposure limit remains eligible');
+  assert.deepEqual(fast.nativeTrace(), control.nativeTrace(), 'boundary case live physical transcript');
+  const measured = fast.root.BattleTacticalContactRoute.evaluate(
+    fast.soldier,
+    fast.sim,
+    destination,
+    reports,
+    test.underFire
+  );
+  assert.equal(measured.exposure, test.fraction, 'independent detour exposure stays exact');
+  assert.equal(measured.eligible, test.eligible);
+}
+for (const underFire of [false, true]) {
+  const fast = world(source, p => p.z < 8, false),
+    control = world(fullRejectedExposure, p => p.z < 8, false),
+    evaluate = w =>
+      w.root.BattleTacticalContactRoute.evaluate(w.soldier, w.sim, { x: 0, z: 20 }, reports, underFire);
+  assert.deepEqual(evaluate(fast), evaluate(control), 'execution retains complete exposure measurement');
+  assert.equal(fast.calls(), control.calls(), 'execution does not stop sight sampling early');
+  assert.equal(fast.calls(), 18, 'all eleven execution samples, including seven sheltered double rays');
+}
 // Restoring exposure on every physical edge is the pre-optimization control.
 // This must retain physical checks and their detour budgets, even when an
 // already-known route makes the edge incapable of improving a node's cost.
@@ -266,6 +327,8 @@ console.log(
     nativeClearanceQueriesBefore: nativeBefore,
     avoidedNativeClearanceQueries: nativeSaved,
     avoidedIrrelevantStandQueries: admissionSaved,
+    rejectedEdgeSightQueriesBefore: rejectedSightBefore,
+    avoidedRejectedEdgeSightQueries: rejectedSightSaved,
     dominatedEdgeSightQueriesBefore: dominatedSightBefore,
     avoidedDominatedEdgeSightQueries: dominatedSightSaved
   })
