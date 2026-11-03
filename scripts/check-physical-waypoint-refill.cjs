@@ -27,4 +27,37 @@ for(let i=0;i<4;i++){
 assert(Math.abs(soldier.root.position.z-startZ)>35,'probe must consume enough lookahead to cross the old low-queue rebuild threshold');
 assert(sim.time<plan.replanAt,'probe must exercise queue refill before the bounded periodic replan');
 assert.equal(plan.finalGoalX,goal.x);assert.equal(plan.finalGoalZ,goal.z);
+
+/* A previously cleared static straight segment remains clear along its forward
+   subsegments only. Any off-line position, claim revision, moving obstacle
+   or changed waypoint must require the full live physical clearance again. */
+const certSoldier={id:'cert-probe',root:{position:{x:0,y:0,z:0}}},certGoal={x:0,z:80};
+sim.time=1;
+N.nextWaypoint(sim,certSoldier,certGoal);
+const certPlan=certSoldier._physicalPath;
+sim.time=1.15;
+N.nextWaypoint(sim,certSoldier,certGoal);
+const cert1=certPlan.segmentClear;
+assert(cert1&&cert1.point===certPlan.points[0],'first revisit must certify the live segment');
+certSoldier.root.position.z=2;
+sim.time=1.3;
+N.nextWaypoint(sim,certSoldier,certGoal);
+assert.strictEqual(certPlan.segmentClear,cert1,'forward collinear travel reuses validated corridor');
+certSoldier.root.position.x=0.1;
+sim.time=1.45;
+N.nextWaypoint(sim,certSoldier,certGoal);
+const cert2=certPlan.segmentClear;
+assert(cert2&&cert2!==cert1,'lateral deviation must recheck the physical segment');
+let certRevision=0;
+r.BattleTacticalPositions={current(){return null;},station(){return null;},revision(){return certRevision;}};
+certRevision++;
+sim.time=1.6;
+N.nextWaypoint(sim,certSoldier,certGoal);
+const cert3=certPlan.segmentClear;
+assert(cert3&&cert3!==cert2,'changed live station claim forces revalidation');
+sim.obstacles.__dynamicFootprints=[{id:'hull',shape:'circle',x:800,z:800,radius:2}];
+sim.time=1.75;
+N.nextWaypoint(sim,certSoldier,certGoal);
+assert(certPlan.segmentClear!==cert3,'moving hull presence must bypass static-segment certificate');
+delete sim.obstacles.__dynamicFootprints;
 console.log('PASS: low rolling waypoint queues refill in place without a full physical replan');
