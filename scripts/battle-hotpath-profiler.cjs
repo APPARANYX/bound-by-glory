@@ -64,7 +64,9 @@
       reusedAdvancedWaypoint: 0,
       reusedQueueExtended: 0,
       reuseWithMovingFootprints: 0,
-      priorSegmentClearanceChecks: 0
+      priorSegmentClearanceChecks: 0,
+      retainedClearanceProofHits: 0,
+      retainedClearanceProofRefreshes: 0
     };
   }
   function bump(o, key) {
@@ -366,6 +368,7 @@
         beforeFirst = beforePhysical && beforePhysical.points && beforePhysical.points[0],
         beforeTail =
           beforePhysical && beforePhysical.points && beforePhysical.points[beforePhysical.points.length - 1],
+        beforeProof = beforePhysical && beforePhysical.firstSegmentProof,
         at = soldier && soldier.root && soldier.root.position,
         nearGoal = !!(at && dest && Math.hypot(+dest.x - at.x, +dest.z - at.z) <= 0.35),
         stopped = !!(soldier && soldier.moving === false),
@@ -411,6 +414,10 @@
         } else {
           record('navigation.nextWaypoint.physicalReuse', elapsed);
           navigationPlanning.physicalReuses++;
+          if (beforeProof && beforeProof === (afterPhysical && afterPhysical.firstSegmentProof))
+            navigationPlanning.retainedClearanceProofHits++;
+          else if (afterPhysical && afterPhysical.firstSegmentProof)
+            navigationPlanning.retainedClearanceProofRefreshes++;
           if (nearGoal) navigationPlanning.nearGoalPhysicalReuses++;
           if (stopped) navigationPlanning.stoppedPhysicalReuses++;
           if (beforePhysical && beforePhysical.points && beforePhysical.points.length) {
@@ -557,7 +564,9 @@
         reusedAdvancedWaypoint: navigationPlanning.reusedAdvancedWaypoint,
         reusedQueueExtended: navigationPlanning.reusedQueueExtended,
         reuseWithMovingFootprints: navigationPlanning.reuseWithMovingFootprints,
-        priorSegmentClearanceChecks: navigationPlanning.priorSegmentClearanceChecks
+        priorSegmentClearanceChecks: navigationPlanning.priorSegmentClearanceChecks,
+        retainedClearanceProofHits: navigationPlanning.retainedClearanceProofHits,
+        retainedClearanceProofRefreshes: navigationPlanning.retainedClearanceProofRefreshes
       },
       routePlanning: {
         calls: routePlanning.calls,
