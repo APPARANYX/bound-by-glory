@@ -56,6 +56,9 @@
   function exactPoint(p) {
     return p == null ? p : { x: dataField(p, 'x'), y: dataField(p, 'y'), z: dataField(p, 'z') };
   }
+  function planarPoint(p) {
+    return p == null ? p : [dataField(p, 'x'), dataField(p, 'z')];
+  }
   function exactOptions(options) {
     if (options == null) return options;
     if (Object.getPrototypeOf(options) !== Object.prototype && Object.getPrototypeOf(options) !== null)
@@ -101,24 +104,13 @@
       obstacles;
     try {
       if (kind === 'hasLineOfSight') {
-        // Record the outer private LOS inputs without invoking heightAt or any
-        // other gameplay callback. Nested native rays do not cover terrain
-        // sampling, stance-dependent eye heights, or carrier exclusions.
-        var observer = args[0],
-          target = args[1];
-        inputs = [
-          exactCensus.ref(observer),
-          exactCensus.ref(target),
-          exactPoint(dataField(dataField(observer, 'root'), 'position')),
-          exactPoint(dataField(dataField(target, 'root'), 'position')),
-          exactCensus.ref(args[2]),
-          exactCensus.ref(args[3]),
-          dataField(observer, 'stance'),
-          dataField(target, 'stance')
-        ];
         obstacles = args[3];
-        complete = false;
-        reason = 'private-los-dynamic-dependencies-unobserved';
+        inputs = [
+          exactCensus.ref(args[0]),
+          exactCensus.ref(args[1]),
+          exactCensus.ref(args[2]),
+          exactCensus.ref(obstacles)
+        ];
       } else if (kind === 'sightBlocked' || kind === 'sightBlocker') {
         obstacles = args[0];
         inputs = [
@@ -129,7 +121,13 @@
         ];
       } else if (kind === 'lineOfSightBlocked') {
         inputs = [exactPoint(args[0]), exactPoint(args[1]), args[2], args[3]];
-      } else inputs = [exactPoint(args[0]), exactPoint(args[1]), exactOptions(args[2])];
+      } else if (kind === 'movementClear' && fn.observeQuery) {
+        inputs = [exactOptions(args[2])];
+      } else {
+        // Physical movement queries consume planar endpoints. A render-only
+        // Y accessor must not make a readable X/Z endpoint opaque.
+        inputs = [planarPoint(args[0]), planarPoint(args[1]), exactOptions(args[2])];
+      }
     } catch (_) {
       complete = false;
       reason = 'opaque-input';
@@ -145,6 +143,29 @@
       liveGeometry: 'uncertified',
       generation: 'unavailable'
     };
+    if (kind === 'hasLineOfSight' || (kind === 'movementClear' && fn.observeQuery)) {
+      // Freeze the entry context before native code runs. The receipt contains
+      // only values the native call actually consumed, including early exits.
+      var scope = pairScope();
+      return function (receipt, threw) {
+        var ready = complete && !threw && receipt && receipt.ray;
+        if (ready) {
+          inputs.push(receipt.ray);
+          if (kind === 'hasLineOfSight') inputs.push(receipt.carrier);
+        }
+        return exactCensus.enter(
+          kind,
+          fn,
+          receiver,
+          scope,
+          inputs,
+          context,
+          !!ready,
+          reason || 'missing-native-' + kind + '-receipt',
+          unknownContextFields
+        );
+      };
+    }
     return exactCensus.enter(
       kind,
       fn,
@@ -513,17 +534,37 @@
     function profiled() {
       var start = clock();
       var token = exactCensus ? exactEnter(kind, fn, this, arguments) : null,
+        deferred = typeof token === 'function',
+        receipt = deferred && fn.observeQuery ? { terrain: [], dynamicTests: [] } : null,
         result,
         threw = true;
       try {
-        result = fn.apply(this, arguments);
+        if (receipt && kind === 'hasLineOfSight')
+          result = fn.observeQuery(arguments[0], arguments[1], arguments[2], arguments[3], receipt);
+        else if (receipt) result = fn.observeQuery(arguments[0], arguments[1], arguments[2], receipt);
+        else result = fn.apply(this, arguments);
         threw = false;
         return result;
       } finally {
+        if (deferred) token = token(receipt, threw);
+        if (kind === 'hasLineOfSight' && receipt && receipt.ray && !threw)
+          exactCensus.recordLosReceipt(token, receipt);
         if (exactCensus) exactCensus.leave(token, result, threw);
         record(label, clock() - start);
         recordRouteCheck(label, result);
-        recordPair(kind, keyFn(arguments));
+        if (receipt && receipt.ray) {
+          var ray = receipt.ray,
+            end = kind === 'hasLineOfSight' ? 4 : 2;
+          var key = pairKeyPoint({ x: ray[0], z: ray[1] }, { x: ray[end], z: ray[end + 1] });
+          if (kind === 'hasLineOfSight') {
+            try {
+              var idA = dataField(arguments[0], 'id'),
+                idB = dataField(arguments[1], 'id');
+              if (idA != null && idB != null) key = String(idA) + '>' + idB;
+            } catch (_) {}
+          }
+          recordPair(kind, key);
+        } else if (!deferred) recordPair(kind, keyFn(arguments));
       }
     }
     profiled.__battleHotpathWrapped = true;

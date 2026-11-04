@@ -195,8 +195,15 @@
     idx.queries.set(key, out);
     return out;
   }
-  function blocked(a, b, mode, ay, by) {
-    var segLen = Math.hypot(b.x - a.x, b.z - a.z) || EPS,
+  function blocked(a, b, mode, ay, by, receipt) {
+    var bx = b.x,
+      ax = a.x,
+      dx = bx - ax,
+      bz = b.z,
+      az = a.z,
+      dz = bz - az;
+    if (receipt) receipt.ray = [ax, az, bx, bz];
+    var segLen = Math.hypot(dx, dz) || EPS,
       pad = EPS * segLen,
       minX = Math.min(a.x, b.x) - pad,
       maxX = Math.max(a.x, b.x) + pad,
@@ -220,6 +227,9 @@
   function movementClear(a, b) {
     return !blocked(a, b, 'move');
   }
+  movementClear.observeQuery = function (a, b, options, receipt) {
+    return !blocked(a, b, 'move', undefined, undefined, receipt);
+  };
   /* Physical navigation owns how a man gets past something in his way. The Movement Resolver still
      owns where he is going: this only ever rewrites one integration step, never a destination.
      Returns a movement-legal step of the same length, or null when he is genuinely boxed in. */

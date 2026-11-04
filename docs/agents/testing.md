@@ -19,7 +19,13 @@ separately from `unknownInputs`. The known numeric `BattleNavigation.version`
 getter is sampled once per query; failed or nonfinite reads remain unknown. Other
 context and participant accessors stay opaque and are never invoked.
 Readable arguments and answer agreement with partially observed context do not
-certify reuse. Private LOS inputs remain unknown. Probe schema 4 separates
+certify reuse. Shipping LOS records the actual X/Z, ground and eye heights, and
+carrier exemption. A bounded example per row retains terrain samples in native
+order and intersection results for tested dynamic obstacles. These execution
+receipts are separate from the argument key so an early exit cannot hide an
+answer disagreement. Mutable world state remains uncertified. Shipping movement
+records the first native planar endpoint reads, including getter-backed vectors.
+An observed LOS call without a readable native receipt invalidates the census. Probe schema 4 separates
 `run.simulationValid` from overall `run.valid`: an empty or all-opaque census
 cannot pass the latter. Run `exact-query-census-check.js` and
 `browser-cpu-probe-check.js` under `tools/ai-sim-harness/`; the browser bundle is

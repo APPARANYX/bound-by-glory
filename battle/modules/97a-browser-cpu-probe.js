@@ -382,10 +382,23 @@
         return b.inclusiveMs - a.inclusiveMs;
       });
     var scenario = root.__scenario__ || {},
-      queryCapture = { calls: 0, readableInputCalls: 0, unknownContextCalls: 0, answerComparisons: 0 };
+      queryCapture = {
+        calls: 0,
+        readableInputCalls: 0,
+        unknownContextCalls: 0,
+        answerComparisons: 0,
+        losCalls: 0,
+        losReceipts: 0,
+        opaqueLos: 0
+      };
     if (queryProfile && queryProfile.queryExactCensus)
       Object.keys(queryProfile.queryExactCensus.rows).forEach(function (label) {
         var row = queryProfile.queryExactCensus.rows[label];
+        if (label.indexOf('hasLineOfSight@') === 0) {
+          queryCapture.losCalls += row.calls;
+          queryCapture.losReceipts += row.nativeLos ? row.nativeLos.calls : 0;
+          queryCapture.opaqueLos += row.unknownInputs;
+        }
         queryCapture.calls += row.calls;
         queryCapture.readableInputCalls += row.calls - row.unknownInputs;
         queryCapture.unknownContextCalls += row.unknownContextCalls || 0;
@@ -399,7 +412,10 @@
         queryProfile &&
         queryProfile.queryExactCensus &&
         queryProfile.queryExactCensus.frame === nSteps &&
-        queryCapture.readableInputCalls > 0
+        queryCapture.readableInputCalls > 0 &&
+        (!(root.SquadAI && root.SquadAI.hasLineOfSight) || queryCapture.losCalls > 0) &&
+        queryCapture.opaqueLos === 0 &&
+        queryCapture.losReceipts === queryCapture.losCalls
       );
     finishedEarly = endedEarly;
     result = {
@@ -489,6 +505,9 @@
       (hiddenSlices ? '\nWARNING: tab hidden in ' + hiddenSlices + ' slices' : '') +
       (collectQueries && !queryCapture.readableInputCalls
         ? '\nWARNING: exact observer captured no readable inputs; census unusable.'
+        : '') +
+      (collectQueries && (queryCapture.opaqueLos || queryCapture.losCalls !== queryCapture.losReceipts)
+        ? '\nWARNING: incomplete native LOS receipts.'
         : '') +
       '\nDownload the JSON and attach it in ChatGPT.';
     controlsState();

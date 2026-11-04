@@ -136,6 +136,15 @@
       ref: ref,
       enter: enter,
       leave: leave,
+      recordLosReceipt: function (token, receipt) {
+        var r = row(token.label);
+        if (!r.nativeLos)
+          r.nativeLos = { calls: 0, terrainSamples: 0, dynamicQueries: 0, dynamicTests: 0, first: receipt };
+        r.nativeLos.calls++;
+        r.nativeLos.terrainSamples += receipt.terrain.length;
+        if (receipt.dynamicCount) r.nativeLos.dynamicQueries++;
+        r.nativeLos.dynamicTests += receipt.dynamicTests.length;
+      },
       beginFrame: function () {
         if (!depth++) {
           frame++;

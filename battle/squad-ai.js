@@ -283,19 +283,34 @@
   }
 
   function hasLineOfSight(a, b, heightAt, obstacles) {
+    return nativeLineOfSight(a, b, heightAt, obstacles);
+  }
+  function nativeLineOfSight(a, b, heightAt, obstacles, receipt) {
     var ax = a.root.position.x,
       az = a.root.position.z,
-      ay = heightAt(ax, az) + eyeHeight(a);
+      groundA = heightAt(ax, az),
+      eyeA = eyeHeight(a),
+      ay = groundA + eyeA;
     var bx = b.root.position.x,
       bz = b.root.position.z,
-      by = heightAt(bx, bz) + eyeHeight(b);
+      groundB = heightAt(bx, bz),
+      eyeB = eyeHeight(b),
+      by = groundB + eyeB;
+    if (receipt) receipt.ray = [ax, az, groundA, eyeA, bx, bz, groundB, eyeB];
     var F = field();
     if (F) {
       // Only an admitted occupant can look out through his own carrier envelope.
       // Other trucks, terrain and static cover still occlude the crew's sight.
       var carrier = root.BattleSquadTransport ? root.BattleSquadTransport.carrierId(a) : null,
         sightOptions = carrier != null ? { ignoreDynamicId: carrier } : undefined;
-      if (F.sightBlocked(obstacles, { x: ax, z: az, y: ay }, { x: bx, z: bz, y: by }, sightOptions))
+      if (receipt) receipt.carrier = carrier;
+      var from = { x: ax, z: az, y: ay },
+        to = { x: bx, z: bz, y: by };
+      if (
+        receipt
+          ? F.sightBlocked(obstacles, from, to, sightOptions, receipt)
+          : F.sightBlocked(obstacles, from, to, sightOptions)
+      )
         return false;
     } else if (obstacleBlocks(ax, az, bx, bz, obstacles)) return false;
     if (
@@ -309,10 +324,14 @@
         z = az + (bz - az) * t;
       var lineY = ay + (by - ay) * t,
         groundY = heightAt(x, z);
+      if (receipt) receipt.terrain.push(groundY);
       if (groundY > lineY - 0.15) return false;
     }
     return true;
   }
+
+  // Only this native implementation accepts a profiler-owned read receipt.
+  hasLineOfSight.observeQuery = nativeLineOfSight;
 
   /* Effective spotting range against one particular man in one particular stance. */
   function detectionRange(observerRole, target) {

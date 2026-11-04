@@ -341,15 +341,23 @@
     return best || false;
   }
   /* Blocked or not needs any hit, not the nearest one: stop at the first. */
-  function sightBlocked(obstacles, a, b, options) {
+  function sightBlocked(obstacles, a, b, options, receipt) {
     var field = fieldFor(obstacles);
     var dynamic = obstacles && obstacles.__dynamicFootprints,
       candidates = field ? gatherCrossed(field, a.x, a.z, b.x, b.z) : [];
+    var staticCount = candidates.length;
+    if (receipt) receipt.dynamicCount = dynamic ? dynamic.length : 0;
     if (dynamic && dynamic.length) candidates = candidates.concat(dynamic);
     for (var i = 0; i < candidates.length; i++) {
       var ob = candidates[i];
-      if (options && ob.type === 'truck' && ob.id === options.ignoreDynamicId) continue;
-      if (sightHitT(ob, a, b) == null) continue;
+      var observeDynamic = receipt && i >= staticCount;
+      if (options && ob.type === 'truck' && ob.id === options.ignoreDynamicId) {
+        if (observeDynamic) receipt.dynamicTests.push('carrier-excluded');
+        continue;
+      }
+      var hit = sightHitT(ob, a, b);
+      if (observeDynamic) receipt.dynamicTests.push(hit);
+      if (hit == null) continue;
       if (legacyCircularHedgeEndpoint(ob, a) || legacyCircularHedgeEndpoint(ob, b)) continue;
       return true;
     }

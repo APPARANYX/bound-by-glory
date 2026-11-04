@@ -326,6 +326,33 @@ assert.equal(opaqueReport.run.valid, false, 'all-opaque inputs cannot pass censu
 const advancedLab = fixture(labLink, { lab: true, initialTime: 0.15 });
 advancedLab.window.BattleBrowserCpuProbe.start();
 assert.equal(advancedLab.sim.time, 0.15, 'canonical lab refuses an already advanced state');
+// Other readable query kinds cannot mask a fully opaque LOS row.
+const missingLos = fixture(labLink, { lab: true, queryCalls: true });
+const startMissingLos = missingLos.window.BattleBrowserQueryCensus.start;
+missingLos.window.BattleBrowserQueryCensus.start = function () {
+  const session = startMissingLos();
+  return {
+    restore: session.restore,
+    snapshot() {
+      const report = session.snapshot();
+      report.queryExactCensus.rows['hasLineOfSight@unscoped'] = {
+        calls: 1,
+        unknownInputs: 1,
+        answerAgreements: 0,
+        answerDisagreements: 0
+      };
+      return report;
+    }
+  };
+};
+missingLos.window.BattleBrowserCpuProbe.start();
+missingLos.drain();
+const missingLosResult = missingLos.window.BattleBrowserCpuProbe.result();
+assert.equal(missingLosResult.queryCapture.readableInputCalls, 4200);
+assert.equal(missingLosResult.queryCapture.opaqueLos, 1);
+assert.equal(missingLosResult.run.simulationValid, true);
+assert.equal(missingLosResult.run.valid, false);
+
 const failedQuery = fixture(labLink, { lab: true, queryCalls: true, throwQuery: true });
 failedQuery.window.BattleBrowserCpuProbe.start();
 failedQuery.drain();

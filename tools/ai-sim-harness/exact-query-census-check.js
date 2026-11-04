@@ -257,7 +257,7 @@ test('shipping navigation version getter cannot discard readable native query in
   assert.equal(row.unknownContextCalls, 0, 'shipping numeric version is observed');
   assert.equal(row.unknownContextFields.navigationVersion, undefined);
   assert.equal(
-    c.rows['hasLineOfSight@unscoped'].unknownInputReasons['private-los-dynamic-dependencies-unobserved'],
+    c.rows['hasLineOfSight@unscoped'].unknownInputReasons['missing-native-hasLineOfSight-receipt'],
     1,
     'a missing context field cannot overwrite the private-LOS reason'
   );
@@ -303,5 +303,84 @@ test('invalid navigation versions stay unknown without losing native query evide
     assert.equal(r.answerAgreements, 1);
     assert.equal(r.certifiedReuse, 0);
   }
+});
+test('shipping LOS preserves reads, short circuits, and detects same-time truck changes', () => {
+  function run(observe) {
+    const ctx = vm.createContext({});
+    const ev = code => vm.runInContext(code, ctx);
+    ev('var window=globalThis, GTMath={clamp:(x,a,b)=>Math.max(a,Math.min(b,x))}, GTLog=()=>{}');
+    for (const file of ['obstacle-field', 'squad-ai', 'battle-navigation'])
+      ev(fs.readFileSync(path.join(__dirname, '../../battle/' + file + '.js'), 'utf8'));
+    ev(`var reads=0, heights=0, carriers=0, truckReads=0, truckZ=10, ridge=false, rider=null;
+        var a={id:1, prone:true, root:{get position(){reads++; return {x:0,z:0};}}},
+            b={id:2, crouching:true, root:{position:{x:8,z:0}}},
+            truck={type:'truck',id:'T',x:4,get z(){truckReads++;return truckZ;},radius:1,height:4},
+            obs=[]; obs.__dynamicFootprints=[truck];
+        var BattleSquadTransport={carrierId(){carriers++;return rider;}};
+        function ground(x){heights++;return ridge && x===1 ? 4 : 0;}
+        var answers=[], counts=[];
+        var __battle__={time:1,_frame(){
+          function query(){
+            answers.push(SquadAI.hasLineOfSight(a,b,ground,obs));
+            counts.push([reads,heights,carriers,truckReads]);
+          }
+          query(); query(); truckZ=0; query(); rider='T'; query(); ridge=true; query();
+        }};`);
+    if (observe) {
+      ev(helper);
+      ev(profiler);
+    }
+    ev('__battle__._frame()');
+    const values = JSON.parse(ev('JSON.stringify({answers,counts})'));
+    if (observe)
+      values.row = JSON.parse(
+        ev(
+          "JSON.stringify(BattleHotpathProfiler.snapshot(0).queryExactCensus.rows['hasLineOfSight@unscoped'])"
+        )
+      );
+    return values;
+  }
+  const baseline = run(false),
+    { row, ...observed } = run(true);
+  assert.deepEqual(observed, baseline);
+  assert.deepEqual(observed.answers, [true, true, false, true, false]);
+  assert.equal(row.unknownInputs, 0);
+  assert.equal(row.answerDisagreements, 2);
+  assert.equal(row.nativeLos.calls, 5);
+  assert.equal(row.nativeLos.terrainSamples, 22);
+  assert.equal(row.nativeLos.dynamicTests, 5);
+  assert.deepEqual(row.nativeLos.first.ray, [0, 0, 0, 0.42, 8, 0, 0, 1.05]);
+  assert.equal(row.certifiedReuse, 0);
+});
+test('shipping movement captures getter-backed coordinates without a diagnostic reread', () => {
+  function run(observe) {
+    const ctx = vm.createContext({ URLSearchParams, location: { search: '' } });
+    const ev = code => vm.runInContext(code, ctx);
+    ev('var window=globalThis, GTMath={clamp:Math.min}, GTLog=()=>{};');
+    ev(fs.readFileSync(path.join(__dirname, '../../battle/battle-navigation.js'), 'utf8'));
+    ev(`var reads=0, point={ get x(){reads++;return 0;}, get z(){reads++;return 1;}, get y(){throw Error('irrelevant Y');} };
+        var results=[], __battle__={time:0,_frame(){
+          for(var i=0;i<2;i++) results.push(BattleNavigation.movementClear(point,point));
+        }};`);
+    if (observe) {
+      ev(helper);
+      ev(profiler);
+    }
+    ev('__battle__._frame()');
+    return [
+      ev('JSON.stringify([reads,results])'),
+      observe &&
+        JSON.parse(
+          ev(
+            "JSON.stringify(BattleHotpathProfiler.snapshot(0).queryExactCensus.rows['movementClear@unscoped'])"
+          )
+        )
+    ];
+  }
+  const [baseline] = run(false),
+    [observed, row] = run(true);
+  assert.equal(observed, baseline);
+  assert.equal(row.unknownInputs, 0);
+  assert.equal(row.answerAgreements, 1);
 });
 console.log(`${passed}/${passed} exact-query census checks passed (offline Node/VM).`);

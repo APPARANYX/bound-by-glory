@@ -890,8 +890,9 @@
     return exact ? (dist(cursor, end) <= GOAL_ARRIVAL ? raw : []) : densify(start, raw);
   }
 
-  N.movementClear = function (a, b, options) {
-    if (!baseMovementClear(a, b)) return false;
+  function physicalMovementClear(a, b, options, receipt) {
+    var clear = receipt ? baseMovementClear.observeQuery(a, b, options, receipt) : baseMovementClear(a, b);
+    if (!clear) return false;
     var sim = currentSim();
     if (!sim) return true;
     var shapes = gatherStatic(sim, a, b, COLLISION_MARGIN + 0.8);
@@ -901,7 +902,11 @@
       if (shapeHit(a, b, shapes[i], COLLISION_MARGIN)) return false;
     }
     return true;
+  }
+  N.movementClear = function (a, b, options) {
+    return physicalMovementClear(a, b, options);
   };
+  if (baseMovementClear.observeQuery) N.movementClear.observeQuery = physicalMovementClear;
   /* The base wall slider only knows building walls. Validate its answer against the complete
    body envelope, then seek a legal physical tangent/fan step at this same navigation layer. */
   var baseResolveStep = N.resolveStep;
