@@ -1,0 +1,24 @@
+{
+  "branch": "work/benchmark-launch/meso715-wall-standard-45a673f4-20261102",
+  "launch_parent_sha": "45a673f4152a24acca5a69ec28a73b5ed912483b",
+  "launch_sha": "b895756cb8f0b6a7460e5114fb133b8db1a20e3c",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/45a673f4152a24acca5a69ec28a73b5ed912483b",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "standard",
+    "correlation_id": "meso715-wall-query-cache",
+    "origin_agent": "chatgpt",
+    "purpose": "Exact CI41454402659/Lab41454402729 pass; profile41455247033 preserves 20 states/final/plan counts and reduces navigation sampled self share ~47%. Same final 1.25x gate.",
+    "query_off": "strategicInterception=0",
+    "query_on": "strategicInterception=0&tacticalController=new",
+    "ref": "work/meso706-wall-query-cache-20261102",
+    "seed": "controller-natural-20261026",
+    "seeds": "3",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/meso706-wall-query-cache-20261102",
+  "source_sha_at_archive": "45a673f4152a24acca5a69ec28a73b5ed912483b"
+}
