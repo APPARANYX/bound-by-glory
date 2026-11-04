@@ -12,6 +12,12 @@ The native first-contact and ballistic-flight meeting probes report grenade frie
 
 ## Test harnesses
 
+`node tools/ai-sim-harness/skills-lab-event-clock-check.js` loads the shipping
+Skills Lab in an offline DOM fixture. Delayed snapshots must retain native maneuver
+occurrence times, while synchronous callbacks and unknown event times use current
+simulation time. The UI timeline remains a bounded, polling-based view, not a
+complete deterministic event history.
+
 The opt-in browser CPU probe (`cpuBench=1`, `cpuLab=120`, `cpuQueries=1`) exports
 the canonical exact-query census and initial/final lab receipts. Census schema 2
 reports unreadable context in `unknownContextCalls` / `unknownContextFields`

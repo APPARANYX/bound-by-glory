@@ -181,8 +181,11 @@
     gaitTotals = newGaitTotals();
   }
 
-  function log(kind, message) {
-    history.push({ t: battle ? +battle.time.toFixed(2) : 0, kind: kind, message: message });
+  function log(kind, message, at) {
+    // Polled maneuver receipts carry their native occurrence time. UI polling
+    // cadence must not replace it with the later observation time.
+    var time = Number.isFinite(at) ? at : battle ? battle.time : 0;
+    history.push({ t: +time.toFixed(2), kind: kind, message: message });
     if (history.length > 120) history.shift();
   }
   function visible(el, show) {
