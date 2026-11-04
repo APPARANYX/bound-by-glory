@@ -1,0 +1,22 @@
+{
+  "branch": "work/benchmark-launch/nse2-probes-legacy-20261031",
+  "launch_parent_sha": "dd28010c52f7459af59cf778a5fa76cdf9bb8576",
+  "launch_sha": "bf945f596128ae76c8439d221722b4e136628c07",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "benchmark": "probe-pack",
+    "map": "tactical",
+    "origin_agent": "claude",
+    "purpose": "navStationExit probe pack, controller off",
+    "query_off": "strategicInterception=0&navStationExit=0",
+    "query_on": "strategicInterception=0",
+    "ref": "work/pin/nse-c4a65b24",
+    "seed": "nse-pl",
+    "seeds": "20",
+    "sim_seconds": "600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/nse-c4a65b24",
+  "source_sha_at_archive": "c4a65b240cfe50eb044cd1931cdf8aa96d2103c4"
+}
