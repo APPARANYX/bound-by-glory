@@ -91,10 +91,23 @@
       obstacles;
     try {
       if (kind === 'hasLineOfSight') {
-        // Actual computed eyes/rays are captured at the nested native boundaries.
-        // IDs/objects alone do not describe the private eye-height/terrain/carrier computation.
+        // Record the outer private LOS inputs without invoking heightAt or any
+        // other gameplay callback. Nested native rays do not cover terrain
+        // sampling, stance-dependent eye heights, or carrier exclusions.
+        var observer = args[0], target = args[1];
+        inputs = [
+          exactCensus.ref(observer),
+          exactCensus.ref(target),
+          exactPoint(observer && observer.root && observer.root.position),
+          exactPoint(target && target.root && target.root.position),
+          exactCensus.ref(args[2]),
+          exactCensus.ref(args[3]),
+          observer && observer.stance,
+          target && target.stance
+        ];
+        obstacles = args[3];
         complete = false;
-        reason = 'private-los-inputs';
+        reason = 'private-los-dynamic-dependencies-unobserved';
       } else if (kind === 'sightBlocked' || kind === 'sightBlocker') {
         obstacles = args[0];
         inputs = [
@@ -114,7 +127,11 @@
       battle: exactCensus.ref(sim),
       time: contextField(sim, 'time', 'time'),
       navigation: exactCensus.ref(N),
-      navigationVersion: contextField(N, 'version', 'navigationVersion'),
+      // The shipping BattleNavigation.version getter only reads its closed-over
+      // counter. Read it explicitly; never invoke arbitrary context accessors.
+      navigationVersion: N && typeof N.version === 'number'
+        ? N.version
+        : contextField(N, 'version', 'navigationVersion'),
       physicalVersion: contextField(obstacles, '__physicalVersion', 'physicalVersion'),
       dynamicList: contextField(obstacles, '__dynamicFootprints', 'dynamicList', true),
       phase: 'unclassified',
