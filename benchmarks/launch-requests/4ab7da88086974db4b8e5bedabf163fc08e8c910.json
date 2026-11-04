@@ -1,0 +1,18 @@
+{
+  "branch": "work/benchmark-launch/meso714-direct-leg-de467ed0",
+  "launch_parent_sha": "de467ed0bcbb82ac72e3117c6d814632c7d3eb9b",
+  "launch_sha": "4ab7da88086974db4b8e5bedabf163fc08e8c910",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/de467ed0bcbb82ac72e3117c6d814632c7d3eb9b",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "hotpath",
+    "query": "strategicInterception=0&tacticalController=new",
+    "ref": "work/meso712-direct-leg-20261102",
+    "seed": "controller-natural-20261026-0002",
+    "sim_seconds": "600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/meso712-direct-leg-20261102",
+  "source_sha_at_archive": "de467ed0bcbb82ac72e3117c6d814632c7d3eb9b"
+}
