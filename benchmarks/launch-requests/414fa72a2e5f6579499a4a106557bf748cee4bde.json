@@ -1,0 +1,24 @@
+{
+  "branch": "work/benchmark-launch/meso708-nav-walls-3seed-28c2ffb3",
+  "launch_parent_sha": "28c2ffb30f9c15ed3d7afe79a263ac08403c00be",
+  "launch_sha": "414fa72a2e5f6579499a4a106557bf748cee4bde",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/28c2ffb30f9c15ed3d7afe79a263ac08403c00be",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "standard",
+    "correlation_id": "meso708-wall-index-28c2ffb3",
+    "origin_agent": "chatgpt",
+    "purpose": "PR708 exact-head source 28c2ffb3: green CI 41367229395 and Native Skills Lab 41367229402. Compare 600s 3-seed ON/OFF with 707 benchmark #1592 baseline 2.028x under <=1.25x gate; verify actual child and avoid runner-noise attribution.",
+    "query_off": "strategicInterception=0",
+    "query_on": "strategicInterception=0&tacticalController=new",
+    "ref": "work/meso707-wall-broadphase-20261101",
+    "seed": "controller-natural-20261026",
+    "seeds": "3",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/meso707-wall-broadphase-20261101",
+  "source_sha_at_archive": "28c2ffb30f9c15ed3d7afe79a263ac08403c00be"
+}
