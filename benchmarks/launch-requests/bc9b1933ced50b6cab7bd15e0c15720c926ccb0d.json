@@ -1,0 +1,24 @@
+{
+  "branch": "work/benchmark-launch/meso706-combined-standard-15dbf5a9-20261102",
+  "launch_parent_sha": "15dbf5a988c222e4a9633d23fa8130b284d8a14c",
+  "launch_sha": "bc9b1933ced50b6cab7bd15e0c15720c926ccb0d",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/15dbf5a988c222e4a9633d23fa8130b284d8a14c",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "standard",
+    "correlation_id": "meso706-combined-15dbf5a9",
+    "origin_agent": "chatgpt",
+    "purpose": "Combined 15dbf5a9: exact CI/Lab/Strategic QA green; native raw identities/reset/drills verified; profile 41450800341 matches 20/20 recorded states and final state. Unchanged 1.25x gate.",
+    "query_off": "strategicInterception=0",
+    "query_on": "strategicInterception=0&tacticalController=new",
+    "ref": "work/controller-meso-wrap-20261101",
+    "seed": "controller-natural-20261026",
+    "seeds": "3",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/controller-meso-wrap-20261101",
+  "source_sha_at_archive": "f469a6993d490bf101fe17026c73f9c4bb5e81ed"
+}
