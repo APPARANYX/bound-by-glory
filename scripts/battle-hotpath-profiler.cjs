@@ -72,11 +72,24 @@
     var inputs,
       context,
       reason,
-      complete = true;
+      complete = true,
+      unknownContextFields = [];
+    // Navigation exposes version through a getter. Never invoke a context
+    // accessor merely for diagnostics, and never let it erase readable inputs.
+    // A matching partial context is explicitly NOT a live-state certificate.
+    function contextField(obj, key, label, reference) {
+      try {
+        var value = dataField(obj, key);
+        return reference ? exactCensus.ref(value) : value;
+      } catch (_) {
+        unknownContextFields.push(label);
+        return { unobserved: 'accessor-or-opaque' };
+      }
+    }
+    var sim = root.__battle__,
+      N = root.BattleNavigation,
+      obstacles;
     try {
-      var sim = root.__battle__,
-        N = root.BattleNavigation,
-        obstacles;
       if (kind === 'hasLineOfSight') {
         // Actual computed eyes/rays are captured at the nested native boundaries.
         // IDs/objects alone do not describe the private eye-height/terrain/carrier computation.
@@ -93,22 +106,32 @@
       } else if (kind === 'lineOfSightBlocked') {
         inputs = [exactPoint(args[0]), exactPoint(args[1]), args[2], args[3]];
       } else inputs = [exactPoint(args[0]), exactPoint(args[1]), exactOptions(args[2])];
-      context = {
-        battle: exactCensus.ref(sim),
-        time: dataField(sim, 'time'),
-        navigation: exactCensus.ref(N),
-        navigationVersion: dataField(N, 'version'),
-        physicalVersion: dataField(obstacles, '__physicalVersion'),
-        dynamicList: exactCensus.ref(dataField(obstacles, '__dynamicFootprints')),
-        phase: 'unclassified',
-        liveGeometry: 'uncertified',
-        generation: 'unavailable'
-      };
     } catch (_) {
       complete = false;
-      reason = 'opaque-input-or-context';
+      reason = 'opaque-input';
     }
-    return exactCensus.enter(kind, fn, receiver, pairScope(), inputs, context, complete, reason);
+    context = {
+      battle: exactCensus.ref(sim),
+      time: contextField(sim, 'time', 'time'),
+      navigation: exactCensus.ref(N),
+      navigationVersion: contextField(N, 'version', 'navigationVersion'),
+      physicalVersion: contextField(obstacles, '__physicalVersion', 'physicalVersion'),
+      dynamicList: contextField(obstacles, '__dynamicFootprints', 'dynamicList', true),
+      phase: 'unclassified',
+      liveGeometry: 'uncertified',
+      generation: 'unavailable'
+    };
+    return exactCensus.enter(
+      kind,
+      fn,
+      receiver,
+      pairScope(),
+      inputs,
+      context,
+      complete,
+      reason,
+      unknownContextFields
+    );
   }
   function wrapExactFrame() {
     var obj = root.__battle__;

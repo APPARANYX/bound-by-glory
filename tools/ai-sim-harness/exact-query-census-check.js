@@ -225,4 +225,58 @@ test('effective inherited carrier option is captured without reading an accessor
   assert.equal(r.argumentRepeats, 0);
   assert.equal(e.run('calls'), 2);
 });
+test('shipping navigation version getter cannot discard readable native query inputs', () => {
+  const context = vm.createContext({ URLSearchParams, location: { search: '' } });
+  vm.runInContext('var window=globalThis; var GTMath={clamp:Math.min}; var GTLog=function(){};', context);
+  vm.runInContext(
+    fs.readFileSync(path.join(__dirname, '../../battle/battle-navigation.js'), 'utf8'),
+    context
+  );
+  vm.runInContext(
+    `var versionReads=0;
+    var nativeVersion=Object.getOwnPropertyDescriptor(BattleNavigation,'version').get;
+    Object.defineProperty(BattleNavigation,'version',{get:function(){versionReads++;return nativeVersion.call(this);}});
+    var SquadAI={hasLineOfSight:function(){return false;}};
+    var __battle__={time:0,_frame:function(){
+      BattleNavigation.movementClear({x:0,z:0},{x:1,z:1});
+      BattleNavigation.movementClear({x:0,z:0},{x:1,z:1});
+      SquadAI.hasLineOfSight({id:1},{id:2});
+    }};`,
+    context
+  );
+  vm.runInContext(helper, context);
+  vm.runInContext(profiler, context);
+  vm.runInContext('__battle__._frame()', context);
+  const c = JSON.parse(
+    vm.runInContext('JSON.stringify(BattleHotpathProfiler.snapshot(0).queryExactCensus)', context)
+  );
+  const row = c.rows['movementClear@unscoped'];
+  assert.equal(row.unknownInputs, 0, 'a context accessor must not erase exact endpoint observations');
+  assert.equal(row.answerAgreements, 1);
+  assert.equal(vm.runInContext('versionReads', context), 0, 'observer must not invoke the getter');
+  assert.equal(row.unknownContextCalls, 2, 'unread context is separately disclosed');
+  assert.equal(row.unknownContextFields.navigationVersion, 2);
+  assert.equal(
+    c.rows['hasLineOfSight@unscoped'].unknownInputReasons['private-los-inputs'],
+    1,
+    'a missing context field cannot overwrite the private-LOS reason'
+  );
+  assert.equal(c.certifiedReuse, 0);
+});
+test('partial context still exposes native answer disagreement without certifying reuse', () => {
+  const e = engine(true);
+  e.run(`Object.defineProperty(BattleNavigation,'version',{get:function(){throw new Error('must not read');}});
+    __battle__._frame=function(){
+      BattleNavigation.movementClear({x:0,z:0},{x:1,z:1});
+      answer=true;
+      BattleNavigation.movementClear({x:0,z:0},{x:1,z:1});
+    };
+    __battle__._frame();`);
+  const r = e.snapshot().queryExactCensus.rows['movementClear@unscoped'];
+  assert.equal(r.unknownInputs, 0);
+  assert.equal(r.unknownContextCalls, 2);
+  assert.equal(r.answerDisagreements, 1);
+  assert.equal(r.certifiedReuse, 0);
+  assert.equal(e.run('calls'), 2);
+});
 console.log(`${passed}/${passed} exact-query census checks passed (offline Node/VM).`);

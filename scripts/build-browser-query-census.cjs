@@ -1,5 +1,5 @@
 'use strict';
-// Keep the browser adapter on the exact same observer implementation as PR #750.
+// Keep browser and injected observers on the same canonical implementation.
 const fs = require('node:fs');
 const path = require('node:path');
 const repo = path.join(__dirname, '..');

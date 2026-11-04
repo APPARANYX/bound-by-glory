@@ -52,6 +52,8 @@
           answerDisagreements: 0,
           throws: 0,
           unknownInputs: 0,
+          unknownContextCalls: 0,
+          unknownContextFields: {},
           unknownAnswers: 0,
           droppedKeys: 0,
           unobservedFrameCalls: 0,
@@ -60,10 +62,16 @@
         })
       );
     }
-    function enter(kind, source, receiver, scope, inputs, context, complete, reason) {
+    function enter(kind, source, receiver, scope, inputs, context, complete, reason, unknownContextFields) {
       var label = kind + '@' + scope,
         r = row(label);
       r.calls++;
+      if (unknownContextFields && unknownContextFields.length) {
+        r.unknownContextCalls++;
+        unknownContextFields.forEach(function (field) {
+          r.unknownContextFields[field] = (r.unknownContextFields[field] || 0) + 1;
+        });
+      }
       if (!depth) r.unobservedFrameCalls++;
       if (!complete) {
         r.unknownInputs++;
@@ -147,10 +155,11 @@
       },
       snapshot: function () {
         return {
-          version: 1,
+          version: 2,
           stateAuthority: 'uncertified',
           certifiedReuse: 0,
-          meaning: 'Exact argument/context observations and native answer agreement; not safe cache hits.',
+          meaning:
+            'Exact readable arguments and partially observed context with native answer agreement; unknown context is disclosed separately. Not safe cache hits.',
           frame: frame,
           retainedKeys: seen.size,
           keyLimit: limit,

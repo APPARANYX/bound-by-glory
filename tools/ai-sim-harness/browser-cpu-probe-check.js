@@ -116,6 +116,11 @@ function fixture(search, opts = {}) {
     },
     SquadAI: { updateSquad() {}, updateSoldier() {} }
   };
+  Object.defineProperty(window.BattleNavigation, 'version', {
+    get() {
+      throw new Error('diagnostic invoked a navigation context getter');
+    }
+  });
   const initialLab = {
     rangeDistanceM: 120,
     coverLayout: 'mixed',
@@ -244,6 +249,8 @@ assert.equal(censusReport.queryExactCensus.frame, 1400, 'observe real _frame bou
 assert.equal(censusReport.queryExactCensus.stateAuthority, 'uncertified');
 assert.equal(censusReport.queryExactCensus.certifiedReuse, 0);
 const censusRows = Object.values(censusReport.queryExactCensus.rows);
+assert.equal(censusReport.queryCapture.readableInputCalls, 4200);
+assert.equal(censusReport.queryCapture.unknownContextCalls, 4200);
 assert.equal(
   censusRows.reduce((sum, row) => sum + row.calls, 0),
   4200
@@ -286,6 +293,35 @@ assert.equal(interruptedCensus.window.BattleBrowserCpuProbe.result().run.valid, 
 assert.equal(interruptedCensus.sim._frame, interruptedCensus.originalFrame);
 assert.equal(interruptedCensus.window.BattleHotpathProfiler, undefined);
 assert.equal(disabled.window.BattleBrowserQueryCensus, undefined);
+const emptyCensus = fixture(labLink, { lab: true });
+emptyCensus.window.BattleBrowserCpuProbe.start();
+emptyCensus.drain();
+assert.equal(emptyCensus.window.BattleBrowserCpuProbe.result().run.simulationValid, true);
+assert.equal(
+  emptyCensus.window.BattleBrowserCpuProbe.result().run.valid,
+  false,
+  'a complete simulation cannot pass an empty exact census'
+);
+const opaqueCensus = fixture(labLink, { lab: true, queryCalls: true });
+const startObserver = opaqueCensus.window.BattleBrowserQueryCensus.start;
+opaqueCensus.window.BattleBrowserQueryCensus.start = function () {
+  const session = startObserver();
+  return {
+    restore: session.restore,
+    snapshot() {
+      const report = session.snapshot();
+      for (const row of Object.values(report.queryExactCensus.rows)) row.unknownInputs = row.calls;
+      return report;
+    }
+  };
+};
+opaqueCensus.window.BattleBrowserCpuProbe.start();
+opaqueCensus.drain();
+const opaqueReport = opaqueCensus.window.BattleBrowserCpuProbe.result();
+assert.equal(opaqueReport.run.simulationValid, true);
+assert.equal(opaqueReport.queryCapture.calls, 4200);
+assert.equal(opaqueReport.queryCapture.readableInputCalls, 0);
+assert.equal(opaqueReport.run.valid, false, 'all-opaque inputs cannot pass census validity');
 const advancedLab = fixture(labLink, { lab: true, initialTime: 0.15 });
 advancedLab.window.BattleBrowserCpuProbe.start();
 assert.equal(advancedLab.sim.time, 0.15, 'canonical lab refuses an already advanced state');

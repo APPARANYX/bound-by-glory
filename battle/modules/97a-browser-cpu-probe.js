@@ -381,19 +381,30 @@
       .sort(function (a, b) {
         return b.inclusiveMs - a.inclusiveMs;
       });
-    var scenario = root.__scenario__ || {};
+    var scenario = root.__scenario__ || {},
+      queryCapture = { calls: 0, readableInputCalls: 0, unknownContextCalls: 0, answerComparisons: 0 };
+    if (queryProfile && queryProfile.queryExactCensus)
+      Object.keys(queryProfile.queryExactCensus.rows).forEach(function (label) {
+        var row = queryProfile.queryExactCensus.rows[label];
+        queryCapture.calls += row.calls;
+        queryCapture.readableInputCalls += row.calls - row.unknownInputs;
+        queryCapture.unknownContextCalls += row.unknownContextCalls || 0;
+        queryCapture.answerComparisons += row.answerAgreements + row.answerDisagreements;
+      });
     valid = !lastError && !hiddenSlices && !endedEarly && nSteps > 0 && nSteps === Math.round(seconds / STEP);
+    var simulationValid = valid;
     if (collectQueries)
       valid = !!(
         valid &&
         queryProfile &&
         queryProfile.queryExactCensus &&
-        queryProfile.queryExactCensus.frame === nSteps
+        queryProfile.queryExactCensus.frame === nSteps &&
+        queryCapture.readableInputCalls > 0
       );
     finishedEarly = endedEarly;
     result = {
       kind: 'grasstex-browser-cpu-probe',
-      version: 3,
+      version: 4,
       date: new Date().toISOString(),
       source: {
         url: location.href,
@@ -429,12 +440,14 @@
         slowestSteps: slowSteps,
         endReason: reason,
         early: endedEarly,
+        simulationValid: simulationValid,
         valid: valid
       },
       functions: functions,
       skillsLab: { required120m: lab120, initial: initialLab, final: finalLab },
       queryProfile: queryProfile,
       queryExactCensus: queryProfile ? queryProfile.queryExactCensus : null,
+      queryCapture: queryCapture,
       error: lastError,
       caveats: {
         runningTabHidden: hiddenSlices > 0,
@@ -474,6 +487,9 @@
         .join('\n') +
       (lastError ? '\nERROR: ' + lastError : '') +
       (hiddenSlices ? '\nWARNING: tab hidden in ' + hiddenSlices + ' slices' : '') +
+      (collectQueries && !queryCapture.readableInputCalls
+        ? '\nWARNING: exact observer captured no readable inputs; census unusable.'
+        : '') +
       '\nDownload the JSON and attach it in ChatGPT.';
     controlsState();
   }
