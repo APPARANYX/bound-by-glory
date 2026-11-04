@@ -7,8 +7,13 @@
   var q = new URLSearchParams(location.search || '');
   if (q.get('cpuBench') !== '1' || root.BattleBrowserCpuProbe) return;
 
+  var lab120 = q.get('cpuLab') === '120',
+    collectQueries = q.get('cpuQueries') === '1',
+    querySession = null,
+    initialLab = null;
   var seconds = Number(q.get('cpuSeconds'));
   if (!Number.isFinite(seconds) || seconds < 15 || seconds > 600) seconds = 600;
+  if (lab120) seconds = 210;
   var STEP = 0.15,
     SLICE_MS = 24,
     BUCKET_SECONDS = 30;
@@ -51,7 +56,7 @@
     panel = node('section');
     panel.id = 'browserCpuProbe';
     panel.style.cssText =
-      'position:fixed;z-index:96;top:12px;right:12px;width:min(380px,calc(100vw - 24px));max-height:calc(100vh - 24px);box-sizing:border-box;overflow:auto;padding:13px;background:rgba(15,20,15,.96);color:#eef1e6;border:1px solid #697958;border-radius:9px;font:12px/1.5 Arial,sans-serif;box-shadow:0 8px 25px #0009';
+      'position:fixed;z-index:100000;top:12px;right:12px;width:min(380px,calc(100vw - 24px));max-height:calc(100vh - 24px);box-sizing:border-box;overflow:auto;padding:13px;background:rgba(15,20,15,.96);color:#eef1e6;border:1px solid #697958;border-radius:9px;font:12px/1.5 Arial,sans-serif;box-shadow:0 8px 25px #0009';
     var heading = node('div', 'CPU simulation probe');
     heading.style.cssText = 'font-weight:700;font-size:15px;margin-bottom:6px';
     panel.appendChild(heading);
@@ -67,7 +72,7 @@
     panel.appendChild(status);
     var controls = node('div');
     controls.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px';
-    startButton = button('Run ' + seconds + ' s CPU test', start);
+    startButton = button(lab120 ? 'Run 120 m lab + export' : 'Run ' + seconds + ' s CPU test', start);
     stopButton = button('Stop & export', function () {
       finish('user-stopped');
     });
@@ -201,11 +206,34 @@
   function start() {
     if (running || !ready()) return;
     sim = root.__battle__;
+    initialLab = null;
+    if (lab120) {
+      initialLab = root.BattleSkillsLab && root.BattleSkillsLab.snapshot();
+      if (
+        !initialLab ||
+        initialLab.rangeDistanceM !== 120 ||
+        initialLab.coverLayout !== 'mixed' ||
+        initialLab.movementPace !== 'autonomous' ||
+        initialLab.rangeScale !== 1 ||
+        initialLab.durationLimitSeconds !== 210 ||
+        initialLab.seed !== 'skills-range-0001' ||
+        initialLab.controller !== 'new' ||
+        q.get('pinSeed') !== '1'
+      ) {
+        status.textContent = '120 m test settings mismatch. Use the complete test link and reload.';
+        return;
+      }
+    }
+    if (collectQueries && (!root.BattleBrowserQueryCensus || typeof sim._frame !== 'function')) {
+      status.textContent =
+        'Exact query observer or native frame boundary unavailable. Reload the test preview.';
+      return;
+    }
     if (sim.winner) {
       status.textContent = 'Battle already finished. Reload first.';
       return;
     }
-    if (sim.time > 0.3) {
+    if (sim.time > (lab120 ? 1e-7 : 0.3)) {
       status.textContent =
         'For a repeatable baseline, reload the page before running (battle already at ' +
         sim.time.toFixed(2) +
@@ -232,6 +260,7 @@
       engine.stopRenderLoop();
       sim.setTimeScale(1);
       sim.resume();
+      if (collectQueries) querySession = root.BattleBrowserQueryCensus.start();
       install();
       controlsState();
       status.textContent = 'Profiling… 0/' + seconds + ' simulated seconds. Keep tab visible.';
@@ -257,7 +286,7 @@
           t = performance.now();
         var steps = clock.advance(STEP);
         var elapsed = performance.now() - t;
-        if (steps !== 1 || sim.time <= beforeTime) {
+        if (steps !== 1 || Math.abs(sim.time - beforeTime - STEP) > 1e-7) {
           lastError = 'Fixed-step advance failed to progress exactly once (steps=' + steps + ').';
           return finish('clock-error');
         }
@@ -297,10 +326,24 @@
     var endWall = performance.now(),
       endSim = sim.time,
       endedEarly = endSim + 0.01 < finishAt;
+    var queryProfile = null,
+      finalLab = null;
+    // Restore the outer timing wrappers before the inner query observer.
+    restore();
+    if (querySession) {
+      try {
+        queryProfile = querySession.snapshot();
+      } catch (e) {
+        lastError = (lastError || '') + ' / census export: ' + String(e);
+      } finally {
+        querySession.restore();
+        querySession = null;
+      }
+    }
     try {
-      restore();
       if (root.BattleSkillsLab && root.BattleSkillsLab.setRunning) root.BattleSkillsLab.setRunning(false);
       else sim.pause();
+      if (root.BattleSkillsLab && root.BattleSkillsLab.snapshot) finalLab = root.BattleSkillsLab.snapshot();
       if (originalScale != null) sim.setTimeScale(originalScale);
       if (engine)
         engine.runRenderLoop(
@@ -340,10 +383,17 @@
       });
     var scenario = root.__scenario__ || {};
     valid = !lastError && !hiddenSlices && !endedEarly && nSteps > 0 && nSteps === Math.round(seconds / STEP);
+    if (collectQueries)
+      valid = !!(
+        valid &&
+        queryProfile &&
+        queryProfile.queryExactCensus &&
+        queryProfile.queryExactCensus.frame === nSteps
+      );
     finishedEarly = endedEarly;
     result = {
       kind: 'grasstex-browser-cpu-probe',
-      version: 2,
+      version: 3,
       date: new Date().toISOString(),
       source: {
         url: location.href,
@@ -382,12 +432,17 @@
         valid: valid
       },
       functions: functions,
+      skillsLab: { required120m: lab120, initial: initialLab, final: finalLab },
+      queryProfile: queryProfile,
+      queryExactCensus: queryProfile ? queryProfile.queryExactCensus : null,
       error: lastError,
       caveats: {
         runningTabHidden: hiddenSlices > 0,
         reachedFullDuration: !endedEarly,
         exactStepCount: nSteps === Math.round(seconds / STEP),
         timingType: 'inclusive instrumented JS elapsed',
+        exactQueryObserver: collectQueries,
+        queryReuseCertified: false,
         officialPerformanceGate: false
       },
       note: 'Instrumented inclusive JavaScript main-thread elapsed time, not OS CPU utilization. Function times can nest and must not be summed. Captured exports can miss internal closure call sites. Use the official uninstrumented paired benchmark for acceptance.'

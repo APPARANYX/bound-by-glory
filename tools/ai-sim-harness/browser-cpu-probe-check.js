@@ -6,6 +6,14 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '../../battle/modules/97a-browser-cpu-probe.js'), 'utf8');
+const querySource = fs.readFileSync(
+  path.join(__dirname, '../../battle/modules/97b-browser-query-census.js'),
+  'utf8'
+);
+require('node:child_process').execFileSync(process.execPath, [
+  path.join(__dirname, '../../scripts/build-browser-query-census.cjs'),
+  '--check'
+]);
 
 function fixture(search, opts = {}) {
   const queue = [];
@@ -38,7 +46,7 @@ function fixture(search, opts = {}) {
     }
   };
   const sim = {
-    time: 0,
+    time: opts.initialTime || 0,
     timeScale: 4,
     paused: true,
     winner: null,
@@ -58,9 +66,20 @@ function fixture(search, opts = {}) {
       this.paused = true;
     },
     step(delta) {
-      this.time += delta;
+      this._frame(delta);
     },
-    _liveCommanderTick() {}
+    _frame(delta) {
+      this.time += delta;
+      if (opts.queryCalls) {
+        window.BattleObstacleField.sightBlocked(this.obstacles, { x: 1, z: 2 }, { x: 3, z: 4 });
+        window.BattleObstacleField.sightBlocked(this.obstacles, { x: 1, z: 2 }, { x: 3, z: 4 });
+      }
+    },
+    _liveCommanderTick() {
+      if (opts.queryCalls)
+        window.BattleObstacleField.sightBlocked(this.obstacles, { x: 1, z: 2 }, { x: 3, z: 4 });
+    },
+    obstacles: []
   };
   const originalStep = sim.step;
   sim._fixedClock = {
@@ -88,12 +107,33 @@ function fixture(search, opts = {}) {
       }
     },
     BattleObstacleField: {
+      nativeCalls: 0,
       sightBlocked() {
+        this.nativeCalls++;
+        if (opts.throwQuery) throw new Error('native-query-test-error');
         return false;
       }
     },
     SquadAI: { updateSquad() {}, updateSoldier() {} }
   };
+  const initialLab = {
+    rangeDistanceM: 120,
+    coverLayout: 'mixed',
+    movementPace: 'autonomous',
+    rangeScale: 1,
+    durationLimitSeconds: 210,
+    seed: 'skills-range-0001',
+    controller: 'new'
+  };
+  if (opts.lab)
+    window.BattleSkillsLab = {
+      snapshot() {
+        return Object.assign({ time: sim.time }, initialLab, opts.labOverrides);
+      },
+      setRunning() {
+        sim.pause();
+      }
+    };
   const sandbox = {
     window,
     document,
@@ -114,12 +154,16 @@ function fixture(search, opts = {}) {
     Blob,
     console
   };
+  window.performance = sandbox.performance;
+  const originalSight = window.BattleObstacleField.sightBlocked;
+  const originalFrame = sim._frame;
+  vm.runInNewContext(querySource, sandbox, { filename: '97b-browser-query-census.js' });
   vm.runInNewContext(source, sandbox, { filename: '97a-browser-cpu-probe.js' });
   function drain() {
     for (let i = 0; queue.length && i < 5000; i++) queue.shift()();
     assert.ok(queue.length === 0, 'probe did not terminate');
   }
-  return { window, sim, originalStep, engine, drain };
+  return { window, sim, originalStep, originalSight, originalFrame, engine, drain, document };
 }
 
 const disabled = fixture('?tacticalController=new');
@@ -186,3 +230,73 @@ assert.equal(stopped.window.BattleBrowserCpuProbe.result().run.valid, false);
 assert.equal(stopped.sim.step, stopped.originalStep);
 
 console.log('browser-cpu-probe-check: opt-in, fixed-clock, export, invalidation and restoration passed');
+
+const labLink = '?cpuBench=1&cpuLab=120&cpuQueries=1&pinSeed=1&tacticalController=new';
+const census = fixture(labLink, { lab: true, queryCalls: true });
+census.window.BattleBrowserCpuProbe.start();
+census.drain();
+const censusReport = census.window.BattleBrowserCpuProbe.result();
+assert.equal(censusReport.run.valid, true);
+assert.equal(censusReport.run.steps, 1400);
+assert.equal(censusReport.skillsLab.initial.rangeDistanceM, 120);
+assert.ok(Math.abs(censusReport.skillsLab.final.time - 210) < 1e-7);
+assert.equal(censusReport.queryExactCensus.frame, 1400, 'observe real _frame boundaries');
+assert.equal(censusReport.queryExactCensus.stateAuthority, 'uncertified');
+assert.equal(censusReport.queryExactCensus.certifiedReuse, 0);
+const censusRows = Object.values(censusReport.queryExactCensus.rows);
+assert.equal(
+  censusRows.reduce((sum, row) => sum + row.calls, 0),
+  4200
+);
+assert.equal(
+  censusRows.reduce((sum, row) => sum + row.answerAgreements, 0),
+  1400
+);
+assert.equal(
+  censusRows.reduce((sum, row) => sum + row.unobservedFrameCalls, 0),
+  1400
+);
+assert.equal(census.window.BattleObstacleField.nativeCalls, 4200, 'every native query must execute');
+assert.equal(census.window.BattleObstacleField.sightBlocked, census.originalSight);
+assert.equal(census.sim._frame, census.originalFrame);
+assert.equal(census.sim.step, census.originalStep);
+assert.equal(census.window.BattleHotpathProfiler, undefined);
+assert.equal(census.window.BattleExactQueryCensus, undefined);
+assert.doesNotThrow(() => JSON.stringify(censusReport));
+
+for (const labOverrides of [
+  { rangeDistanceM: 70 },
+  { seed: 'wrong' },
+  { controller: 'legacy' },
+  { movementPace: 'baseline' }
+]) {
+  const mismatch = fixture(labLink, { lab: true, labOverrides });
+  mismatch.window.BattleBrowserCpuProbe.start();
+  assert.equal(mismatch.window.BattleBrowserCpuProbe.state(), 'ready');
+  assert.equal(mismatch.sim.time, 0, 'refuse mismatched effective lab settings before advancing');
+}
+const noLab = fixture(labLink);
+noLab.window.BattleBrowserCpuProbe.start();
+assert.equal(noLab.sim.time, 0);
+const interruptedCensus = fixture(labLink, { lab: true, queryCalls: true });
+interruptedCensus.window.BattleBrowserCpuProbe.start();
+interruptedCensus.window.BattleBrowserCpuProbe.stop();
+interruptedCensus.drain();
+assert.equal(interruptedCensus.window.BattleBrowserCpuProbe.result().run.valid, false);
+assert.equal(interruptedCensus.sim._frame, interruptedCensus.originalFrame);
+assert.equal(interruptedCensus.window.BattleHotpathProfiler, undefined);
+assert.equal(disabled.window.BattleBrowserQueryCensus, undefined);
+const advancedLab = fixture(labLink, { lab: true, initialTime: 0.15 });
+advancedLab.window.BattleBrowserCpuProbe.start();
+assert.equal(advancedLab.sim.time, 0.15, 'canonical lab refuses an already advanced state');
+const failedQuery = fixture(labLink, { lab: true, queryCalls: true, throwQuery: true });
+failedQuery.window.BattleBrowserCpuProbe.start();
+failedQuery.drain();
+assert.equal(failedQuery.window.BattleBrowserCpuProbe.result().run.valid, false);
+assert.match(failedQuery.window.BattleBrowserCpuProbe.result().error, /native-query-test-error/);
+assert.equal(failedQuery.sim._frame, failedQuery.originalFrame);
+assert.equal(failedQuery.window.BattleObstacleField.sightBlocked, failedQuery.originalSight);
+assert.equal(failedQuery.engine.stopped, false);
+console.log(
+  'browser-cpu-probe-check: exact 120m census, native calls, frame boundaries, scenario guards and cleanup passed'
+);

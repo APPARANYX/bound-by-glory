@@ -25,7 +25,12 @@ const range = [
   '97z-damage-range-view.js',
   '98-damage-range.js'
 ];
-const optional = graph.concat('97-device-benchmark.js', '97a-browser-cpu-probe.js', range);
+const optional = graph.concat(
+  '97-device-benchmark.js',
+  '97a-browser-cpu-probe.js',
+  '97b-browser-query-census.js',
+  range
+);
 const directory = path.join(repo, 'battle/modules');
 const available = fs
   .readdirSync(directory)
@@ -87,6 +92,12 @@ assert.deepEqual(
   normal.concat('97a-browser-cpu-probe.js').sort(),
   'browser CPU probe remains opt-in'
 );
+assert.deepEqual(
+  page('cpuBench=1&cpuQueries=1'),
+  normal.concat('97a-browser-cpu-probe.js', '97b-browser-query-census.js').sort(),
+  'exact query observer requires both diagnostic opt-ins'
+);
+assert.deepEqual(page('cpuQueries=1'), normal, 'query flag alone never loads diagnostic modules');
 assert.deepEqual(page('cpuBench=0'), normal, 'browser CPU probe opt-out retains normal profile');
 assert.deepEqual(page('damageRange=1'), normal.concat(range).sort(), 'damage range remains opt-in');
 for (const nonoptional of [

@@ -20,7 +20,188 @@
     scope = [],
     routeActive = null,
     routeLast = new WeakMap(),
-    routePlanning = routeStats();
+    routePlanning = routeStats(),
+    navigationPlanning = navigationStats(),
+    /* Query-pair repetition measurement (candidate 1: geometry query volume).
+       For each geometry query (sightBlocker, sightBlocked, hasLineOfSight,
+       movementClear, lineOfSightBlocked) record the endpoint pair, keyed by
+       the current simulation step (0.15 s) and the innermost scoped caller
+       (or 'contact-route.pick' when inside a pick, via routeActive). At each
+       step boundary the per-step sets are finalized into aggregates:
+       total = queries in the step, distinct = unique pairs, repeats =
+       total - distinct. A high repeat rate means a per-step cache would
+       eliminate those queries; a low rate means the volume is genuinely
+       distinct candidates and needs pruning, not caching.
+       Point keys round coordinates to 1 cm (Math.round(v*100)); soldier
+       pairs for hasLineOfSight use soldier ids (eye height differs by
+       stance, so position alone is not a sufficient key). Keys are
+       directional (as called) — a pair queried in the opposite direction
+       counts as distinct, so the repeat rate is a lower bound. */
+    pairStep = -1,
+    pairCurrent = Object.create(null),
+    pairTotals = Object.create(null);
+
+  // Opt-in observation only. No result is ever reused to answer a native query.
+  var exactCensus = root.BattleExactQueryCensus ? root.BattleExactQueryCensus.create() : null;
+  function dataField(obj, key) {
+    if (obj == null) return undefined;
+    for (var p = obj; p; p = Object.getPrototypeOf(p)) {
+      var d = Object.getOwnPropertyDescriptor(p, key);
+      if (!d) continue;
+      if (!Object.prototype.hasOwnProperty.call(d, 'value')) throw new Error('opaque accessor');
+      return d.value;
+    }
+    return undefined;
+  }
+  function exactPoint(p) {
+    return p == null ? p : { x: dataField(p, 'x'), y: dataField(p, 'y'), z: dataField(p, 'z') };
+  }
+  function exactOptions(options) {
+    if (options == null) return options;
+    if (Object.getPrototypeOf(options) !== Object.prototype && Object.getPrototypeOf(options) !== null)
+      throw new Error('opaque options prototype');
+    var out = Object.create(null);
+    Reflect.ownKeys(options).forEach(function (key) {
+      if (typeof key !== 'string') throw new Error('symbol option');
+      out[key] = dataField(options, key);
+    });
+    return { own: out, effectiveIgnoreDynamicId: dataField(options, 'ignoreDynamicId') };
+  }
+  function exactEnter(kind, fn, receiver, args) {
+    if (!exactCensus) return null;
+    var inputs,
+      context,
+      reason,
+      complete = true;
+    try {
+      var sim = root.__battle__,
+        N = root.BattleNavigation,
+        obstacles;
+      if (kind === 'hasLineOfSight') {
+        // Actual computed eyes/rays are captured at the nested native boundaries.
+        // IDs/objects alone do not describe the private eye-height/terrain/carrier computation.
+        complete = false;
+        reason = 'private-los-inputs';
+      } else if (kind === 'sightBlocked' || kind === 'sightBlocker') {
+        obstacles = args[0];
+        inputs = [
+          exactCensus.ref(obstacles),
+          exactPoint(args[1]),
+          exactPoint(args[2]),
+          exactOptions(args[3])
+        ];
+      } else if (kind === 'lineOfSightBlocked') {
+        inputs = [exactPoint(args[0]), exactPoint(args[1]), args[2], args[3]];
+      } else inputs = [exactPoint(args[0]), exactPoint(args[1]), exactOptions(args[2])];
+      context = {
+        battle: exactCensus.ref(sim),
+        time: dataField(sim, 'time'),
+        navigation: exactCensus.ref(N),
+        navigationVersion: dataField(N, 'version'),
+        physicalVersion: dataField(obstacles, '__physicalVersion'),
+        dynamicList: exactCensus.ref(dataField(obstacles, '__dynamicFootprints')),
+        phase: 'unclassified',
+        liveGeometry: 'uncertified',
+        generation: 'unavailable'
+      };
+    } catch (_) {
+      complete = false;
+      reason = 'opaque-input-or-context';
+    }
+    return exactCensus.enter(kind, fn, receiver, pairScope(), inputs, context, complete, reason);
+  }
+  function wrapExactFrame() {
+    var obj = root.__battle__;
+    if (!exactCensus || !obj || typeof obj._frame !== 'function') return;
+    var fn = obj._frame;
+    obj._frame = function () {
+      exactCensus.beginFrame();
+      try {
+        return fn.apply(this, arguments);
+      } finally {
+        exactCensus.endFrame();
+      }
+    };
+    obj._frame.__battleHotpathWrapped = false;
+    wrapped.push({ obj: obj, key: '_frame', fn: fn, exactBoundary: obj._frame });
+  }
+
+  function pairStepIndex() {
+    var t = root.__battle__ && +root.__battle__.time;
+    if (!isFinite(t)) return -1;
+    return Math.floor(t / 0.15);
+  }
+  function pairFinalizeStep() {
+    for (var label in pairCurrent) {
+      var cur = pairCurrent[label],
+        tot = pairTotals[label] || (pairTotals[label] = { total: 0, distinct: 0, repeats: 0 });
+      tot.total += cur.total;
+      tot.distinct += cur.distinct;
+      tot.repeats += cur.total - cur.distinct;
+    }
+    pairCurrent = Object.create(null);
+  }
+  function pairNoteStep() {
+    var idx = pairStepIndex();
+    if (idx < 0 || idx === pairStep) return;
+    if (pairStep >= 0) pairFinalizeStep();
+    pairStep = idx;
+  }
+  function pairScope() {
+    if (routeActive) return 'contact-route.pick';
+    return scope.length ? scope[scope.length - 1] : 'unscoped';
+  }
+  function pairKeyPoint(a, b) {
+    if (!a || !b) return null;
+    var ax = Math.round((+a.x || 0) * 100),
+      ay = Math.round((+a.y || 0) * 100),
+      az = Math.round((+a.z || 0) * 100),
+      bx = Math.round((+b.x || 0) * 100),
+      by = Math.round((+b.y || 0) * 100),
+      bz = Math.round((+b.z || 0) * 100);
+    return ax + ',' + ay + ',' + az + '>' + bx + ',' + by + ',' + bz;
+  }
+  function pairKeySoldiers(a, b) {
+    if (!a || !b) return null;
+    var ai = a.id != null ? String(a.id) : null,
+      bi = b.id != null ? String(b.id) : null;
+    if (ai != null && bi != null) return ai + '>' + bi;
+    var pa = a.root && a.root.position,
+      pb = b.root && b.root.position;
+    return pairKeyPoint(pa, pb);
+  }
+  function recordPair(kind, key) {
+    if (!key) return;
+    try {
+      pairNoteStep();
+      var label = kind + '@' + pairScope(),
+        cur = pairCurrent[label];
+      if (!cur) cur = pairCurrent[label] = { total: 0, distinct: 0, seen: Object.create(null) };
+      cur.total++;
+      if (!cur.seen[key]) {
+        cur.seen[key] = 1;
+        cur.distinct++;
+      }
+    } catch (e) {
+      /* Diagnostic only: never let pair bookkeeping disturb the simulation. */
+    }
+  }
+  function pairSnapshot() {
+    var out = {};
+    for (var label in pairTotals) {
+      var t = pairTotals[label];
+      out[label] = { total: t.total, distinct: t.distinct, repeats: t.repeats };
+    }
+    return out;
+  }
+  function pairCurrentSnapshot() {
+    var out = {};
+    for (var label in pairCurrent) {
+      var c = pairCurrent[label];
+      out[label] = { total: c.total, distinct: c.distinct, repeats: c.total - c.distinct };
+    }
+    return out;
+  }
 
   function routeStats() {
     return {
@@ -45,6 +226,32 @@
         detourQueries: 0
       }
     };
+  }
+  function navigationStats() {
+    return {
+      requests: 0,
+      nearGoalRequests: 0,
+      nearGoalPhysicalReuses: 0,
+      nearGoalPhysicalReplans: 0,
+      nearGoalRouteStates: Object.create(null),
+      nearGoalStandStates: Object.create(null),
+      nearGoalGoalStates: Object.create(null),
+      stoppedRequests: 0,
+      stoppedPhysicalReuses: 0,
+      physicalReplans: 0,
+      physicalReuses: 0,
+      replanReasons: Object.create(null),
+      replanByOwnerKind: Object.create(null),
+      reuseWithPoints: 0,
+      reusedSameWaypoint: 0,
+      reusedAdvancedWaypoint: 0,
+      reusedQueueExtended: 0,
+      reuseWithMovingFootprints: 0,
+      priorSegmentClearanceChecks: 0
+    };
+  }
+  function bump(o, key) {
+    o[key] = (o[key] || 0) + 1;
   }
   function routeInputs(s, sim, reports, goal, taken) {
     var p = s && s.root && s.root.position;
@@ -249,6 +456,35 @@
     wrapped.push({ obj: obj, key: key, fn: fn });
     return true;
   }
+  /* Like wrap(), but also records the query's endpoint pair for the
+     per-step repetition measurement. keyFn receives the call's arguments
+     and returns the pair key (or null to skip). */
+  function wrapPair(obj, key, label, kind, keyFn) {
+    if (!obj || typeof obj[key] !== 'function') return false;
+    var fn = obj[key];
+    if (fn.__battleHotpathWrapped) return false;
+    function profiled() {
+      var start = clock();
+      var token = exactCensus ? exactEnter(kind, fn, this, arguments) : null,
+        result,
+        threw = true;
+      try {
+        result = fn.apply(this, arguments);
+        threw = false;
+        return result;
+      } finally {
+        if (exactCensus) exactCensus.leave(token, result, threw);
+        record(label, clock() - start);
+        recordRouteCheck(label, result);
+        recordPair(kind, keyFn(arguments));
+      }
+    }
+    profiled.__battleHotpathWrapped = true;
+    profiled.__battleHotpathOriginal = fn;
+    obj[key] = profiled;
+    wrapped.push({ obj: obj, key: key, fn: fn });
+    return true;
+  }
   function wrapMany(obj, prefix, names) {
     for (var i = 0; i < names.length; i++) wrap(obj, names[i], prefix + '.' + names[i]);
   }
@@ -263,13 +499,20 @@
     var label = 'obstacle.' + key;
     function profiled() {
       var parent = currentScope(),
-        start = clock();
+        start = clock(),
+        token = exactCensus ? exactEnter(key, fn, this, arguments) : null,
+        result,
+        threw = true;
       try {
-        return fn.apply(this, arguments);
+        result = fn.apply(this, arguments);
+        threw = false;
+        return result;
       } finally {
+        if (exactCensus) exactCensus.leave(token, result, threw);
         var elapsed = clock() - start;
         record(label, elapsed);
         record(label + '@' + parent, elapsed);
+        recordPair(key, pairKeyPoint(arguments[1], arguments[2]));
       }
     }
     profiled.__battleHotpathWrapped = true;
@@ -339,6 +582,12 @@
     function profiled(sim, soldier, dest) {
       var beforeNav = soldier && soldier._navCache,
         beforePhysical = soldier && soldier._physicalPath,
+        beforeFirst = beforePhysical && beforePhysical.points && beforePhysical.points[0],
+        beforeTail =
+          beforePhysical && beforePhysical.points && beforePhysical.points[beforePhysical.points.length - 1],
+        at = soldier && soldier.root && soldier.root.position,
+        nearGoal = !!(at && dest && Math.hypot(+dest.x - at.x, +dest.z - at.z) <= 0.35),
+        stopped = !!(soldier && soldier.moving === false),
         start = clock();
       try {
         return fn.apply(this, arguments);
@@ -347,6 +596,67 @@
           afterNav = soldier && soldier._navCache,
           afterPhysical = soldier && soldier._physicalPath;
         record('navigation.nextWaypoint', elapsed);
+        // Inclusive, mutually exclusive timing buckets. These are benchmark-only observations:
+        // they include caller overhead and cannot isolate private clearance helpers.
+        var timingClass = 'other';
+        if (afterPhysical !== beforePhysical) timingClass = 'physical-rebuild';
+        else if (beforePhysical && beforePhysical.points && beforePhysical.points.length) {
+          timingClass =
+            beforeFirst === beforePhysical.points[0]
+              ? 'populated-same-waypoint'
+              : 'populated-advanced-waypoint';
+        } else if (beforePhysical && beforePhysical.blocked) timingClass = 'blocked-empty-reuse';
+        else if (beforePhysical) timingClass = 'unblocked-empty-reuse';
+        record('navigation.nextWaypoint.class.' + timingClass, elapsed);
+        navigationPlanning.requests++;
+        if (nearGoal) {
+          navigationPlanning.nearGoalRequests++;
+          bump(
+            navigationPlanning.nearGoalRouteStates,
+            !beforePhysical
+              ? 'no-plan'
+              : beforePhysical.blocked
+                ? 'blocked'
+                : beforePhysical.points && beforePhysical.points.length
+                  ? 'populated'
+                  : 'empty-unblocked'
+          );
+          if (beforePhysical && beforePhysical.standGoal) {
+            var standDistance = Math.hypot(
+              at.x - beforePhysical.standGoal.x,
+              at.z - beforePhysical.standGoal.z
+            );
+            bump(
+              navigationPlanning.nearGoalStandStates,
+              standDistance <= 0.35 ? 'physically-at-stand-goal' : 'stand-goal-different'
+            );
+          }
+          if (beforePhysical && sim) {
+            var currentGoal =
+              Math.hypot(+dest.x - beforePhysical.finalGoalX, +dest.z - beforePhysical.finalGoalZ) <= 1.4;
+            bump(
+              navigationPlanning.nearGoalGoalStates,
+              !currentGoal
+                ? 'destination-changed'
+                : beforePhysical.version !== physicalVersion(sim)
+                  ? 'geometry-changed'
+                  : sim.time >= beforePhysical.replanAt
+                    ? 'periodic-refresh-due'
+                    : 'goal-and-version-stable'
+            );
+          }
+        }
+        if (stopped) navigationPlanning.stoppedRequests++;
+        if (
+          beforePhysical &&
+          beforePhysical.points &&
+          beforePhysical.points.length &&
+          sim &&
+          beforePhysical.version === physicalVersion(sim) &&
+          dest &&
+          Math.hypot(+dest.x - beforePhysical.finalGoalX, +dest.z - beforePhysical.finalGoalZ) <= 1.4
+        )
+          navigationPlanning.priorSegmentClearanceChecks++;
         if (afterNav !== beforeNav) {
           var br = baseRebuildReason(sim, soldier, dest, beforeNav);
           record('navigation.nextWaypoint.baseCacheRebuild', elapsed);
@@ -355,12 +665,36 @@
             recordMovementAttribution('navigation.baseRebuild.' + br, soldier);
         } else record('navigation.nextWaypoint.baseCacheReuse', elapsed);
         if (afterPhysical !== beforePhysical) {
+          navigationPlanning.physicalReplans++;
+          if (nearGoal) navigationPlanning.nearGoalPhysicalReplans++;
           var pr = physicalReplanReason(sim, soldier, dest, beforePhysical);
+          bump(navigationPlanning.replanReasons, pr);
+          var origin = movementProducer(soldier);
+          bump(navigationPlanning.replanByOwnerKind, origin.owner + '__' + origin.kind);
           record('navigation.nextWaypoint.physicalReplan', elapsed);
           recordCount('navigation.physicalReplanReason.' + pr);
           if (pr === 'goal-shift' || pr === 'missing')
             recordMovementAttribution('navigation.physicalReplan.' + pr, soldier);
-        } else record('navigation.nextWaypoint.physicalReuse', elapsed);
+        } else {
+          record('navigation.nextWaypoint.physicalReuse', elapsed);
+          navigationPlanning.physicalReuses++;
+          if (nearGoal) navigationPlanning.nearGoalPhysicalReuses++;
+          if (stopped) navigationPlanning.stoppedPhysicalReuses++;
+          if (beforePhysical && beforePhysical.points && beforePhysical.points.length) {
+            navigationPlanning.reuseWithPoints++;
+            if (beforeFirst === beforePhysical.points[0]) navigationPlanning.reusedSameWaypoint++;
+            else navigationPlanning.reusedAdvancedWaypoint++;
+            if (beforeTail && beforeTail !== beforePhysical.points[beforePhysical.points.length - 1])
+              navigationPlanning.reusedQueueExtended++;
+            if (
+              sim &&
+              sim.obstacles &&
+              sim.obstacles.__dynamicFootprints &&
+              sim.obstacles.__dynamicFootprints.length
+            )
+              navigationPlanning.reuseWithMovingFootprints++;
+          }
+        }
       }
     }
     profiled.__battleHotpathWrapped = true;
@@ -381,6 +715,7 @@
     }
   }
   function install() {
+    wrapExactFrame();
     /* Parent timings first: these make it possible to reconcile expensive leaves against the
        enclosing simulation/command work without changing production scheduling. */
     wrapMany(root.__battle__, 'simulation', ['step', '_frame', '_checkWinner']);
@@ -404,22 +739,47 @@
     wrapSightQuery('sightBlocker');
     wrapMany(root.BattleObstacleField, 'obstacle', ['coverAt', 'coverPotentialAt', 'nearby']);
     wrapNavigationWaypoint();
-    wrapMany(root.BattleNavigation, 'navigation', [
-      'findPath',
+    wrapMany(root.BattleNavigation, 'navigation', ['findPath', 'resolveStep']);
+    wrapPair(
+      root.BattleNavigation,
       'movementClear',
-      'resolveStep',
-      'lineOfSightBlocked'
-    ]);
+      'navigation.movementClear',
+      'movementClear',
+      function (args) {
+        return pairKeyPoint(args[0], args[1]);
+      }
+    );
+    wrapPair(
+      root.BattleNavigation,
+      'lineOfSightBlocked',
+      'navigation.lineOfSightBlocked',
+      'lineOfSightBlocked',
+      function (args) {
+        var a = args[0],
+          b = args[1];
+        if (!a || !b) return null;
+        return (
+          Math.round((+a.x || 0) * 100) +
+          ',' +
+          Math.round((+a.z || 0) * 100) +
+          ',' +
+          Math.round((+args[2] || 0) * 100) +
+          '>' +
+          Math.round((+b.x || 0) * 100) +
+          ',' +
+          Math.round((+b.z || 0) * 100) +
+          ',' +
+          Math.round((+args[3] || 0) * 100)
+        );
+      }
+    );
     wrapMany(root.BattleMovementResolver, 'movement-resolver', ['proposeOrder', 'proposeCombat', 'resolve']);
     wrapScoped(root.SquadAI, 'updateSoldier', 'squad.updateSoldier');
     wrapScoped(root.SquadAI, 'updateSquad', 'squad.updateSquad');
-    wrapMany(root.SquadAI, 'squad', [
-      'hasLineOfSight',
-      'findTarget',
-      'canSuppress',
-      'areaFire',
-      'resolveFire'
-    ]);
+    wrapPair(root.SquadAI, 'hasLineOfSight', 'squad.hasLineOfSight', 'hasLineOfSight', function (args) {
+      return pairKeySoldiers(args[0], args[1]);
+    });
+    wrapMany(root.SquadAI, 'squad', ['findTarget', 'canSuppress', 'areaFire', 'resolveFire']);
     wrapMany(root.BattleTacticalPositions, 'tactical-position', [
       'claim',
       'release',
@@ -451,6 +811,11 @@
     routeActive = null;
     routeLast = new WeakMap();
     routePlanning = routeStats();
+    navigationPlanning = navigationStats();
+    pairStep = -1;
+    pairCurrent = Object.create(null);
+    pairTotals = Object.create(null);
+    if (exactCensus) exactCensus.reset();
   }
   function snapshot(limit) {
     var wallMs = Math.max(0, clock() - startedAt),
@@ -470,9 +835,33 @@
     });
     if (limit > 0) rows = rows.slice(0, limit);
     return {
-      version: '1.6',
+      version: '1.8',
       wallMs: +wallMs.toFixed(3),
       rows: rows,
+      queryPairs: pairSnapshot(),
+      queryPairsCurrent: pairCurrentSnapshot(),
+      queryExactCensus: exactCensus ? exactCensus.snapshot() : null,
+      navigationPlanning: {
+        requests: navigationPlanning.requests,
+        nearGoalRequests: navigationPlanning.nearGoalRequests,
+        nearGoalPhysicalReuses: navigationPlanning.nearGoalPhysicalReuses,
+        nearGoalPhysicalReplans: navigationPlanning.nearGoalPhysicalReplans,
+        nearGoalRouteStates: Object.assign({}, navigationPlanning.nearGoalRouteStates),
+        nearGoalStandStates: Object.assign({}, navigationPlanning.nearGoalStandStates),
+        nearGoalGoalStates: Object.assign({}, navigationPlanning.nearGoalGoalStates),
+        stoppedRequests: navigationPlanning.stoppedRequests,
+        stoppedPhysicalReuses: navigationPlanning.stoppedPhysicalReuses,
+        physicalReplans: navigationPlanning.physicalReplans,
+        physicalReuses: navigationPlanning.physicalReuses,
+        replanReasons: Object.assign({}, navigationPlanning.replanReasons),
+        replanByOwnerKind: Object.assign({}, navigationPlanning.replanByOwnerKind),
+        reuseWithPoints: navigationPlanning.reuseWithPoints,
+        reusedSameWaypoint: navigationPlanning.reusedSameWaypoint,
+        reusedAdvancedWaypoint: navigationPlanning.reusedAdvancedWaypoint,
+        reusedQueueExtended: navigationPlanning.reusedQueueExtended,
+        reuseWithMovingFootprints: navigationPlanning.reuseWithMovingFootprints,
+        priorSegmentClearanceChecks: navigationPlanning.priorSegmentClearanceChecks
+      },
       routePlanning: {
         calls: routePlanning.calls,
         fresh: routePlanning.fresh,
@@ -492,12 +881,13 @@
   function restore() {
     for (var i = wrapped.length - 1; i >= 0; i--) {
       var w = wrapped[i];
-      if (w.obj && w.obj[w.key] && w.obj[w.key].__battleHotpathWrapped) w.obj[w.key] = w.fn;
+      if (w.obj && w.obj[w.key] && (w.obj[w.key].__battleHotpathWrapped || w.obj[w.key] === w.exactBoundary))
+        w.obj[w.key] = w.fn;
     }
     wrapped = [];
     scope.length = 0;
   }
 
   install();
-  root.BattleHotpathProfiler = { version: '1.6', reset: reset, snapshot: snapshot, restore: restore };
+  root.BattleHotpathProfiler = { version: '1.8', reset: reset, snapshot: snapshot, restore: restore };
 })(typeof window !== 'undefined' ? window : globalThis);
