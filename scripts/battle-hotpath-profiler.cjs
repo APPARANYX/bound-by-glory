@@ -552,6 +552,7 @@
     wrapSystems();
   }
   function reset() {
+    root.__navClearancePhaseCensus = Object.create(null);
     stats = Object.create(null);
     startedAt = clock();
     scope.length = 0;
@@ -581,6 +582,11 @@
       version: '1.6',
       wallMs: +wallMs.toFixed(3),
       rows: rows,
+      clearancePhases: Object.keys(root.__navClearancePhaseCensus || {}).reduce(function (out, k) {
+        var row = root.__navClearancePhaseCensus[k];
+        out[k] = { calls: row.calls, ms: +row.ms.toFixed(3) };
+        return out;
+      }, {}),
       navigationPlanning: {
         requests: navigationPlanning.requests,
         nearGoalRequests: navigationPlanning.nearGoalRequests,
@@ -619,6 +625,7 @@
     };
   }
   function restore() {
+    delete root.__navClearancePhaseCensus;
     for (var i = wrapped.length - 1; i >= 0; i--) {
       var w = wrapped[i];
       if (w.obj && w.obj[w.key] && w.obj[w.key].__battleHotpathWrapped) w.obj[w.key] = w.fn;
@@ -627,6 +634,7 @@
     scope.length = 0;
   }
 
+  root.__navClearancePhaseCensus = Object.create(null);
   install();
   root.BattleHotpathProfiler = { version: '1.6', reset: reset, snapshot: snapshot, restore: restore };
 })(typeof window !== 'undefined' ? window : globalThis);
