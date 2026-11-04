@@ -162,5 +162,21 @@ test('?controllerRetreat=0: the men walk home past their rally point and the squ
   assert.equal(w.q.state, 'retreat');
   assert.ok(w.r.BattleLeases.get(w.q, 'rally-recovery'), 'recovery still waits for a reform');
 });
+test('a retreat phase alone is carried too: the provider stands down on it, so the Squad Leader orders run', () => {
+  for (const [extra, want] of [
+    ['', true],
+    ['&controllerRetreat=0', false]
+  ]) {
+    const w = rallyWorld(extra);
+    w.q.state = 'advance';
+    w.q.commandPhase = 'retreat';
+    w.q._fireteamOrders = {};
+    w.b.time += 0.5;
+    tick(w.r, w.b, w.q);
+    assert.ok(w.q.commandPhase === 'retreat' || w.q.state === 'retreat', 'still a retreat phase');
+    assert.equal(w.TC.summary(w.b).actions, 0, 'the provider stood down');
+    assert.equal(Object.keys(w.q._fireteamOrders).length > 0, want, 'fireteam orders' + extra);
+  }
+});
 
 log(n + ' controlled retreat checks passed');

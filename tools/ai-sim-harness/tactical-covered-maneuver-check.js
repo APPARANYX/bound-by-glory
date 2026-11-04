@@ -653,4 +653,30 @@ test('a stalled no-hop squad searches again once a route exists, without its bas
   );
   clean(w);
 });
+test('a covered retreat and the Squad Leader retreat orders never move a man together (#705)', () => {
+  const w = world();
+  w.q.establishment = 25; // fixed casualty ratio keeps the native morale owner in retreat
+  w.q.home = { x: 0, z: -200 };
+  const L = w.r.BattleLeases,
+    Q = w.r.BattleSquadStability;
+  let boundTicks = 0,
+    gapTicks = 0,
+    moverChecks = 0;
+  for (let i = 0; i < 40 / 0.15; i++) {
+    tick(w);
+    if (w.q.state !== 'retreat') continue;
+    if (L.get(w.q, 'bound')) {
+      boundTicks++;
+      for (const s of w.q.members) {
+        if (s.dead || !Q.controllerBound.role(s, w.b)) continue;
+        moverChecks++;
+        const g = w.r.BattleMovementResolver.resolve(s, w.b);
+        assert.notEqual(g && g.kind, 'retreat', 'a bound man is not also walked by the squad retreat order');
+      }
+    } else if (Object.keys(w.q._fireteamOrders || {}).length) gapTicks++;
+  }
+  assert.ok(boundTicks > 0 && moverChecks > 0, 'the covered retreat ran');
+  assert.ok(gapTicks > 0, 'between hops the Squad Leader retreat orders carry the squad');
+  clean(w);
+});
 console.log(count + ' tactical covered maneuver checks passed');

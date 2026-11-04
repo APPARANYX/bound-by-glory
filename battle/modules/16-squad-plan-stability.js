@@ -307,7 +307,12 @@
     typeof location !== 'undefined' ? location.search || '' : ''
   );
   function retainedRetreat(sq) {
-    return CONTROLLER_RETREAT_ON && sq.state === 'retreat' && !L.get(sq, 'bound');
+    /* The provider stands down on either, as the resolver does; so the Squad Leader carries either. */
+    return (
+      CONTROLLER_RETREAT_ON &&
+      (sq.state === 'retreat' || sq.commandPhase === 'retreat') &&
+      !L.get(sq, 'bound')
+    );
   }
   var ORDER_STRIDE = 13,
     ORDER_ARRIVAL_RADIUS = 8,
