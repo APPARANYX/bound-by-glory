@@ -1,0 +1,18 @@
+{
+  "branch": "work/benchmark-launch/meso706-profile-meeting-2e4086dc",
+  "launch_parent_sha": "2e4086dc14372006fcecf029b4ddd45d73b7f57b",
+  "launch_sha": "721cbdb8fd9c68737ad03cf7f207135df9347abb",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/2e4086dc14372006fcecf029b4ddd45d73b7f57b",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "hotpath",
+    "query": "strategicInterception=0&tacticalController=new",
+    "ref": "work/profile-source/meso706-2e4086dc",
+    "seed": "controller-natural-20261026-0002",
+    "sim_seconds": "600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/profile-source/meso706-2e4086dc",
+  "source_sha_at_archive": "2e4086dc14372006fcecf029b4ddd45d73b7f57b"
+}
