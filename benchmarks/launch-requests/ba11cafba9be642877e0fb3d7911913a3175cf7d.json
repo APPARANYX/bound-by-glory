@@ -1,0 +1,24 @@
+{
+  "branch": "work/benchmark-launch/meso709-physical-3seed-2da5f5dd",
+  "launch_parent_sha": "2da5f5ddbadda0e9e5659fc4b70e05682441c477",
+  "launch_sha": "ba11cafba9be642877e0fb3d7911913a3175cf7d",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/2da5f5ddbadda0e9e5659fc4b70e05682441c477",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "standard",
+    "correlation_id": "meso709-physical-fastpath-2da5f5dd",
+    "origin_agent": "chatgpt",
+    "purpose": "Exact head 2da5f5dd green CI 41383276273 and Native Skills Lab 41383276246; profile 41383536360. Compare 600s 3-seed ON/OFF acceptance gate <=1.25x; prior #708 #1593 1.939x; no runner-noise causal assumptions.",
+    "query_off": "strategicInterception=0",
+    "query_on": "strategicInterception=0&tacticalController=new",
+    "ref": "work/meso708-physical-query-fastpath-20261102",
+    "seed": "controller-natural-20261026",
+    "seeds": "3",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/meso708-physical-query-fastpath-20261102",
+  "source_sha_at_archive": "2da5f5ddbadda0e9e5659fc4b70e05682441c477"
+}
