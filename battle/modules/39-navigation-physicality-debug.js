@@ -202,7 +202,10 @@
   function navPhaseBegin() {
     var census = root.__navClearancePhaseCensus;
     if (!census) return null;
-    return { census: census, start: (root.performance && root.performance.now ? root.performance.now() : Date.now()) };
+    return {
+      census: census,
+      start: root.performance && root.performance.now ? root.performance.now() : Date.now()
+    };
   }
   function navPhaseEnd(mark, phase) {
     if (!mark) return;
@@ -412,15 +415,19 @@
     var nearby = gatherStatic(sim, a, b, margin * 1.5 + 0.01);
     navPhaseEnd(gatherMark, 'edgeStaticGather');
     var collisionMark = navPhaseBegin();
-    for (var i = 0; i < nearby.length; i++) if (shapeHit(a, b, nearby[i], margin)) {
-      navPhaseEnd(collisionMark, 'edgeStaticCollision');
-      return false;
+    for (var i = 0; i < nearby.length; i++) {
+      if (shapeHit(a, b, nearby[i], margin)) {
+        navPhaseEnd(collisionMark, 'edgeStaticCollision');
+        return false;
+      }
     }
     navPhaseEnd(collisionMark, 'edgeStaticCollision');
     collisionMark = navPhaseBegin();
-    for (i = 0; i < shapes.length; i++) if (shapeHit(a, b, shapes[i], margin)) {
-      navPhaseEnd(collisionMark, 'edgeCandidateCollision');
-      return false;
+    for (i = 0; i < shapes.length; i++) {
+      if (shapeHit(a, b, shapes[i], margin)) {
+        navPhaseEnd(collisionMark, 'edgeCandidateCollision');
+        return false;
+      }
     }
     navPhaseEnd(collisionMark, 'edgeCandidateCollision');
     return true;
