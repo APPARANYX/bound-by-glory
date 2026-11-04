@@ -2410,7 +2410,8 @@
       } else task.reason = 'blocked:no-personal-target';
     } else if (drill === 'grenade') {
       var G = root.BattleGrenades,
-        plan = G && G.assaultThrow(s, battle);
+        CS = root.BattleTacticalContactSkills,
+        plan = G && G.assaultThrow(s, battle, !!(CS && CS.grenadePolicy));
       if (plan) {
         if (['orient', 'bound', 'engage', 'pinned', 'alert'].indexOf(e.state) < 0)
           transition(s, battle, 'alert', 0, 'controller:grenade-ready');

@@ -106,17 +106,26 @@ function clean(w) {
   assert.equal(s.pending, 0);
 }
 
-test('a selected grenade finisher commits and releases through native owners without a rifle-line veto', () => {
-  const w = world(24);
-  /* Authentic waist-height physical cover shields the close assault's own
-     firing team from the 22m grenade fragment field, while the throw arc clears. */
+/* A close fight behind a wall: authentic physical cover shields the squad's own firing team from
+   the 22m grenade fragment field, while the throw arc clears. */
+function grenadeWorld(flags) {
+  const w = world(24, flags === undefined ? undefined : flags);
   w.b.obstacles = [{ shape: 'obb', x: 0, z: 12, hx: 40, hz: 0.35, y: 0, height: 2.5, type: 'wall' }];
-  const systems = {};
-  w.r.BattleModules.registerSystem = (id, s) => (systems[id] = s);
+  w.systems = {};
+  w.r.BattleModules.registerSystem = (id, s) => (w.systems[id] = s);
   loadModule(w.r, 'battle/modules/14-z-ballistic-raycast.js', { location: w.r.location });
   delete w.r.BattleGrenades;
   loadModule(w.r, 'battle/modules/23-grenades.js', { location: w.r.location });
-  const G = w.r.BattleGrenades;
+  w.G = w.r.BattleGrenades;
+  return w;
+}
+function pendingMen(w) {
+  return w.q.members.filter(s => w.G.pendingOf(s, w.b));
+}
+test('a selected grenade finisher commits and releases through native owners without a rifle-line veto', () => {
+  const w = grenadeWorld(),
+    systems = w.systems,
+    G = w.G;
   squad(w);
   w.b.time = 26;
   see(w);
@@ -127,7 +136,7 @@ test('a selected grenade finisher commits and releases through native owners wit
   const s = pending[0],
     plan = G.pendingOf(s, w.b),
     carried = G.count(s);
-  assert.equal(plan.source, 'covered-assault');
+  assert.equal(plan.source, 'contact-policy');
   assert.equal(w.E.stateOf(s).state, 'throw');
   assert.ok(Math.hypot(s.root.position.x - plan.aim.x, s.root.position.z - plan.aim.z) <= G.TUNING.RANGE);
   w.b.time = plan.releaseAt + 0.01;
@@ -143,6 +152,89 @@ test('a selected grenade finisher commits and releases through native owners wit
     'the live projectile prevents a simultaneous second squad grenade'
   );
   clean(w);
+});
+test('grenade policy: a man walking on the march stops to throw; ?controllerGrenade=0 leaves it to men standing still', () => {
+  for (const [flags, throws, source] of [
+    [undefined, 1, 'contact-policy'],
+    ['&commandPosture=0&controllerGrenade=0', 0, null]
+  ]) {
+    const w = grenadeWorld(flags);
+    squad(w);
+    w.b.time = 26;
+    see(w);
+    w.q.members.forEach(s => (s.moving = true));
+    squad(w);
+    micro(w);
+    const pending = pendingMen(w);
+    assert.equal(pending.length, throws, 'grenade commitments with ' + (flags || 'the policy on'));
+    if (source) {
+      assert.equal(w.G.pendingOf(pending[0], w.b).source, source);
+      assert.equal(w.E.stateOf(pending[0]).state, 'throw', 'the windup holds the walking man');
+    } else
+      assert.ok(
+        (w.S.summary(w.q).grenadeDiagnostic.reasons['already-moving'] || 0) > 0,
+        'the old finisher refused every walking man'
+      );
+    clean(w);
+  }
+});
+test('grenade policy: the man whose rifle cannot reach his contact throws, not the first in the roster', () => {
+  for (const [flags, expectBlocked] of [
+    [undefined, true],
+    ['&commandPosture=0&controllerGrenade=0', false]
+  ]) {
+    const w = grenadeWorld(flags),
+      A = w.r.SquadAI,
+      canSuppress = A.canSuppress;
+    squad(w);
+    w.b.time = 26;
+    see(w);
+    squad(w);
+    /* The rifle-line query stubbed: the last eligible man in the roster cannot reach his contact, every
+       other man can (the wall itself would blind them all). */
+    const eligible = w.q.members.filter(s => w.G.assaultAssessment(s, w.b).ok),
+      blind = eligible[eligible.length - 1];
+    assert.ok(eligible.length >= 2, 'the fixture needs two eligible throwers');
+    A.canSuppress = shooter => shooter !== blind;
+    try {
+      squad(w);
+      micro(w);
+    } finally {
+      A.canSuppress = canSuppress;
+    }
+    const pending = pendingMen(w);
+    assert.equal(pending.length, 1);
+    assert.equal(pending[0] === blind, expectBlocked, 'grenadier with ' + (flags || 'the policy on'));
+    if (expectBlocked) assert.equal(w.S.summary(w.q).grenadeDiagnostic.rifleBlocked, true);
+    clean(w);
+  }
+});
+test('grenade policy: a fresh personal sighting is still a grenade decision after the squad contact clears', () => {
+  for (const [flags, throws] of [
+    [undefined, 1],
+    ['&commandPosture=0&controllerGrenade=0', 0]
+  ]) {
+    const w = grenadeWorld(flags);
+    squad(w);
+    w.b.time = 26;
+    see(w);
+    /* The squad's aggregate contact is gone; each man's own memory of the sighting is not. */
+    w.q.contact = null;
+    w.q.inContact = false;
+    w.q.members.forEach(s => (s.target = null));
+    const A = w.r.SquadAI,
+      squadContact = A.squadContact;
+    A.squadContact = () => null;
+    try {
+      squad(w);
+      assert.equal(w.S.summary(w.q).reason, 'contact-clear');
+      micro(w);
+    } finally {
+      A.squadContact = squadContact;
+    }
+    assert.equal(pendingMen(w).length, throws, 'grenade commitments with ' + (flags || 'the policy on'));
+    clean(w);
+  }
 });
 test('grenade owner explains unavailable personal opportunities without creating an order', () => {
   const w = world(24);

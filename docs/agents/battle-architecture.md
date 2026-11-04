@@ -80,8 +80,15 @@ contact skill for one eligible non-moving rifleman per squad. The grenade owner'
 `assaultOpportunity` checks personally known fresh contact, 30 m range, inventory/cooldown,
 fire permission, a clear physical throw arc and native friendly clearance. Engagement calls
 `assaultThrow` to revalidate and commit; the native grenade clock alone releases and detonates.
-A usable rifle line does not veto this explicitly requested finisher. Legacy opportunistic
-grenade policy is unchanged. A live squad grenade prevents another finisher until it bursts.
+A usable rifle line does not veto this explicitly requested finisher. A live squad grenade
+prevents another finisher until it bursts. The controller's grenade policy (on under the
+controller, `?controllerGrenade=0` restores the finisher alone) carries the legacy reason for a
+grenade into that one choice: among the eligible men, the one whose rifle cannot reach his
+contact (`SquadAI.canSuppress`, read-only) throws first, then the nearest to his aim; a man walking
+on the march may stop to throw (the windup holds him; a covered-bound or urgent mover still
+finishes his hop); and a man's own fresh sighting is still a grenade decision after the squad's
+contact clears. The grenade owner's gates, the one-per-squad rule and the gunner's exclusion are
+unchanged. Legacy opportunistic grenade policy is unchanged for squads the controller does not own.
 The Skills Lab assault objective is at the target line, with actual final physical shelters;
 capturing a midpoint must not turn the unfinished assault into a defensive deployment.
 
