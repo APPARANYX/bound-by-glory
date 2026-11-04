@@ -197,6 +197,20 @@
     physicalIndexCache = idx;
     return idx;
   }
+  /* Diagnostic-only phase census. No clock calls or allocations unless a profiler explicitly
+     supplies __navClearancePhaseCensus; never used to decide navigation or collision. */
+  function navPhaseBegin() {
+    var census = root.__navClearancePhaseCensus;
+    if (!census) return null;
+    return { census: census, start: (root.performance && root.performance.now ? root.performance.now() : Date.now()) };
+  }
+  function navPhaseEnd(mark, phase) {
+    if (!mark) return;
+    var elapsed = (root.performance && root.performance.now ? root.performance.now() : Date.now()) - mark.start;
+    var row = mark.census[phase] || (mark.census[phase] = { calls: 0, ms: 0 });
+    row.calls++;
+    row.ms += elapsed;
+  }
   function gatherStatic(sim, a, b, pad) {
     /* Most infantry searches have no moving hulls. Avoid allocating an empty filtered
        array for each clearance query, but inspect all live vehicle getters when present. */
@@ -388,12 +402,27 @@
     return out;
   }
   function edgeClear(sim, a, b, shapes, margin) {
-    if (!baseMovementClear(a, b)) return false;
+    var wallMark = navPhaseBegin();
+    var wallClear = baseMovementClear(a, b);
+    navPhaseEnd(wallMark, 'edgeBaseWall');
+    if (!wallClear) return false;
     /* Candidate nodes are capped, collision geometry is not. A detour may leave the original
      corridor or meet a footprint excluded from the candidate budget. */
+    var gatherMark = navPhaseBegin();
     var nearby = gatherStatic(sim, a, b, margin * 1.5 + 0.01);
-    for (var i = 0; i < nearby.length; i++) if (shapeHit(a, b, nearby[i], margin)) return false;
-    for (i = 0; i < shapes.length; i++) if (shapeHit(a, b, shapes[i], margin)) return false;
+    navPhaseEnd(gatherMark, 'edgeStaticGather');
+    var collisionMark = navPhaseBegin();
+    for (var i = 0; i < nearby.length; i++) if (shapeHit(a, b, nearby[i], margin)) {
+      navPhaseEnd(collisionMark, 'edgeStaticCollision');
+      return false;
+    }
+    navPhaseEnd(collisionMark, 'edgeStaticCollision');
+    collisionMark = navPhaseBegin();
+    for (i = 0; i < shapes.length; i++) if (shapeHit(a, b, shapes[i], margin)) {
+      navPhaseEnd(collisionMark, 'edgeCandidateCollision');
+      return false;
+    }
+    navPhaseEnd(collisionMark, 'edgeCandidateCollision');
     return true;
   }
 
@@ -406,8 +435,11 @@
   );
   function routeFootprints(sim, start, goal, soldier, limit, corridor) {
     corridor = corridor || ROUTE_CORRIDOR;
-    var list = gatherStatic(sim, start, goal, corridor + ROUTE_MARGIN + 1),
-      scored = [],
+    var staticMark = navPhaseBegin();
+    var list = gatherStatic(sim, start, goal, corridor + ROUTE_MARGIN + 1);
+    navPhaseEnd(staticMark, 'routeStaticGather');
+    staticMark = navPhaseBegin();
+    var scored = [],
       i;
     for (i = 0; i < list.length; i++) {
       var fp = list[i],
@@ -417,7 +449,11 @@
       if (direct === 0 || clearance <= corridor)
         scored.push({ fp: fp, direct: direct, clearance: clearance });
     }
+    navPhaseEnd(staticMark, 'routeStaticScoring');
+    var stationMark = navPhaseBegin();
     var occ = refreshOccupied(sim, false);
+    navPhaseEnd(stationMark, 'routeOccupiedRefresh');
+    stationMark = navPhaseBegin();
     for (i = 0; i < occ.length; i++) {
       var st = occ[i];
       if (st.soldier === soldier) continue;
@@ -430,6 +466,7 @@
       if (c <= corridor)
         scored.push({ fp: st, direct: shapeHit(start, goal, st, ROUTE_MARGIN) ? 0 : 1, clearance: c });
     }
+    navPhaseEnd(stationMark, 'routeStationScoring');
     scored.sort(function (a, b) {
       return a.direct - b.direct || a.clearance - b.clearance;
     });
@@ -814,8 +851,13 @@
   function firstSegmentClear(sim, soldier, start, c) {
     var p = c && c.points && c.points[0];
     if (!p) return false;
+    var mark = navPhaseBegin();
     var shapes = routeFootprints(sim, start, p, soldier);
-    return edgeClear(sim, start, p, shapes, ROUTE_MARGIN);
+    navPhaseEnd(mark, 'firstSegmentCandidatesInclusive');
+    mark = navPhaseBegin();
+    var clear = edgeClear(sim, start, p, shapes, ROUTE_MARGIN);
+    navPhaseEnd(mark, 'firstSegmentEdgeInclusive');
+    return clear;
   }
   function needsReplan(soldier, sim, dest, start) {
     var c = soldier._physicalPath;
