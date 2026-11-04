@@ -1,0 +1,18 @@
+{
+  "branch": "work/benchmark-launch/meso706-profile-ge-defend-2e4086dc",
+  "launch_parent_sha": "2e4086dc14372006fcecf029b4ddd45d73b7f57b",
+  "launch_sha": "c16baf0cd9a412d917331b60f081427bb181a368",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/2e4086dc14372006fcecf029b4ddd45d73b7f57b",
+  "request": {
+    "battle_type": "ge-defend",
+    "benchmark": "hotpath",
+    "query": "strategicInterception=0&tacticalController=new",
+    "ref": "work/profile-source/meso706-2e4086dc",
+    "seed": "controller-natural-20261026-0002",
+    "sim_seconds": "600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/profile-source/meso706-2e4086dc",
+  "source_sha_at_archive": "2e4086dc14372006fcecf029b4ddd45d73b7f57b"
+}
