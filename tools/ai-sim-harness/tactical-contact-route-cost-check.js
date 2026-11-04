@@ -12,7 +12,10 @@ assert.equal(source.split(hit).length, 2, 'uncached control must disable exactly
 const uncached = source.replace(hit, '/* Deliberately query every sample in the control. */');
 const clearance = '!direct && !N.movementClear(cursor, p)';
 assert.equal(source.split(clearance).length, 2, 'control restores exactly one duplicate clearance');
-const rechecking = source.replace(clearance, '!N.movementClear(cursor, p)');
+const fastPath = 'if (length >= MIN_HOP &&';
+assert.equal(source.split(fastPath).length, 2, 'one direct-leg fast path');
+const generalPath = source.replace(fastPath, 'if (false && length >= MIN_HOP &&');
+const rechecking = generalPath.replace(clearance, '!N.movementClear(cursor, p)');
 function world(text, exposure, detour, coverOverride) {
   let calls = 0,
     nativeCalls = 0;
@@ -113,6 +116,21 @@ for (const detour of [false, true]) {
   assert.deepEqual(run(fast), run(control), 'dense graph selection, rejection counts and native budgets');
   assert.equal(fast.nativeCalls(), control.nativeCalls(), 'dense graph physical work is unchanged');
   assert.deepEqual(fast.nativeTrace(), control.nativeTrace(), 'dense graph live physical transcript');
+}
+// Compare route decisions and every live query against the general transit loop.
+for (const detour of [false, true]) {
+  const fastSight = [],
+    controlSight = [];
+  const observe = trace => (a, b) => {
+    trace.push([a.x, a.y, a.z, b.x, b.y, b.z]);
+    return a.x > 7 && a.z < 48;
+  };
+  const fast = world(source, observe(fastSight), detour);
+  const control = world(generalPath, observe(controlSight), detour);
+  const run = w => w.root.BattleTacticalContactRoute.pick(w.soldier, w.sim, reports, goal, []);
+  assert.deepEqual(run(fast), run(control));
+  assert.deepEqual(fast.nativeTrace(), control.nativeTrace());
+  assert.deepEqual(fastSight, controlSight);
 }
 // A straight leg has already passed its native clearance query. Rechecking
 // that identical segment during this synchronous evaluation buys no safety.

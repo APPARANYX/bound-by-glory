@@ -57,8 +57,16 @@
       path = null;
     if (!N || !N.movementClear) return { ok: false, reason: 'navigation-unavailable' };
     var direct = N.movementClear(from, to);
-    if (direct) path = [point(to)];
-    else {
+    if (direct) {
+      var end = point(to),
+        start = point(from),
+        length = distance(start, end);
+      /* The navigator approved one straight segment. A normal in-range hop
+         already has its complete transit geometry for exposure sampling. */
+      if (length >= MIN_HOP && length <= MAX_HOP && straight <= MAX_HOP && end.x === to.x && end.z === to.z)
+        return { ok: true, distance: length, points: [start, end], detour: false };
+      path = [end];
+    } else {
       if (!N.findPath) return { ok: false, reason: 'no-native-ingress-egress' };
       if (budget && budget.left <= 0) return { ok: false, reason: 'nav-detour-budget' };
       if (budget) {
