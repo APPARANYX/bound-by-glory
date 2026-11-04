@@ -1,0 +1,24 @@
+{
+  "branch": "work/benchmark-launch/meso712-cover-standard-20261102",
+  "launch_parent_sha": "cde94bb0d62e16c8a541d92878004a8e70a614b8",
+  "launch_sha": "ab7bbb969abaace1d6196c70b79a03400609271f",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/cde94bb0d62e16c8a541d92878004a8e70a614b8",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "standard",
+    "correlation_id": "meso712-cover-neighborhood",
+    "origin_agent": "chatgpt",
+    "purpose": "Exact-head CI 41431349865 and native Lab 41431349812 passed; profile 41431658096 preserved 20/20 slim states and final state. Match #1594 parameters; unchanged 1.25x wall gate.",
+    "query_off": "strategicInterception=0",
+    "query_on": "strategicInterception=0&tacticalController=new",
+    "ref": "work/meso710-cover-candidate-20261102",
+    "seed": "controller-natural-20261026",
+    "seeds": "3",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/meso710-cover-candidate-20261102",
+  "source_sha_at_archive": "cde94bb0d62e16c8a541d92878004a8e70a614b8"
+}
