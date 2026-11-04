@@ -1,0 +1,18 @@
+{
+  "branch": "work/benchmark-launch/meso713-axis-profile-20261102",
+  "launch_parent_sha": "9f9d8b787c700caa110823e3fec5d6860bb0e5ee",
+  "launch_sha": "65af670203ee396c2f4d2585568bf641acc6f8b1",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/9f9d8b787c700caa110823e3fec5d6860bb0e5ee",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "hotpath",
+    "query": "strategicInterception=0&tacticalController=new",
+    "ref": "work/meso712-obstacle-axis-cache-20261102",
+    "seed": "controller-natural-20261026-0002",
+    "sim_seconds": "600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/meso712-obstacle-axis-cache-20261102",
+  "source_sha_at_archive": "9f9d8b787c700caa110823e3fec5d6860bb0e5ee"
+}
