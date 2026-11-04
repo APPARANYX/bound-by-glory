@@ -1,0 +1,22 @@
+{
+  "branch": "work/benchmark-launch/nse2-legacy-us-defend-20261031",
+  "launch_parent_sha": "dd28010c52f7459af59cf778a5fa76cdf9bb8576",
+  "launch_sha": "551d849a66185645751331215912039a5556f78a",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "battle_type": "us-defend",
+    "benchmark": "standard",
+    "origin_agent": "claude",
+    "purpose": "navStationExit pair, controller off (default play)",
+    "query_off": "strategicInterception=0&navStationExit=0",
+    "query_on": "strategicInterception=0",
+    "ref": "work/pin/nse-c4a65b24",
+    "seed": "nse-l",
+    "seeds": "60",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/nse-c4a65b24",
+  "source_sha_at_archive": "c4a65b240cfe50eb044cd1931cdf8aa96d2103c4"
+}
