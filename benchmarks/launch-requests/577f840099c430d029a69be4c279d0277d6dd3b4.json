@@ -1,0 +1,24 @@
+{
+  "branch": "work/benchmark-launch/meso707-cover-quality-3seed-bbc217d8",
+  "launch_parent_sha": "bbc217d8e643813f2ea91fba1d4e9c78d518836a",
+  "launch_sha": "577f840099c430d029a69be4c279d0277d6dd3b4",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/bbc217d8e643813f2ea91fba1d4e9c78d518836a",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "standard",
+    "correlation_id": "meso707-quality-cache-bbc217d8",
+    "origin_agent": "chatgpt",
+    "purpose": "Exact-head after green CI41348409548 and native Skills Lab41348409546: measure static shelter quality reuse against existing 1.25 wall gate, preserve tactical ownership.",
+    "query_off": "strategicInterception=0",
+    "query_on": "strategicInterception=0&tacticalController=new",
+    "ref": "work/meso706-cover-slot-static-quality-20261101",
+    "seed": "controller-natural-20261026",
+    "seeds": "3",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/meso706-cover-slot-static-quality-20261101",
+  "source_sha_at_archive": "bbc217d8e643813f2ea91fba1d4e9c78d518836a"
+}
