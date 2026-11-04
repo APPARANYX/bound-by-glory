@@ -178,6 +178,53 @@ test('grenade policy: a man walking on the march stops to throw; ?controllerGren
     clean(w);
   }
 });
+test('grenade policy: a man on a live march order hands it back before his throw; nothing is left half-owned', () => {
+  for (const [flags, throws] of [
+    [undefined, 1],
+    ['&commandPosture=0&controllerGrenade=0', 0]
+  ]) {
+    const w = grenadeWorld(flags);
+    squad(w);
+    w.b.time = 26;
+    see(w);
+    squad(w);
+    assert.equal(w.q.fireControl.state, 'open');
+    /* Contact clears and the squad marches on its route orders. */
+    w.r.SquadAI.resetPerceptionBattleState(w.b);
+    w.q.members.forEach(s => (s.target = null));
+    w.q.inContact = false;
+    w.q.contact = null;
+    w.b.time = 27;
+    squad(w);
+    micro(w);
+    squad(w);
+    micro(w);
+    const marching = new Set(live(w, 'movement.move').map(a => a.actorId));
+    assert.ok(marching.size >= 2, 'the squad is on live march orders');
+    /* The enemy is seen again while the men walk: OPEN resumes. */
+    w.b.time = 28;
+    see(w);
+    w.q.members.forEach(s => (s.moving = true));
+    squad(w);
+    micro(w);
+    const pending = pendingMen(w);
+    assert.equal(pending.length, throws, 'grenade commitments with ' + (flags || 'the policy on'));
+    if (throws) {
+      const id = String(pending[0].id);
+      assert.ok(marching.has(id), 'the thrower was walking on a live march order');
+      assert.ok(!live(w, 'movement.move').some(a => a.actorId === id), 'his march order ended at its owner');
+      assert.equal(w.E.stateOf(pending[0]).state, 'throw');
+    }
+    const actors = new Set();
+    live(w)
+      .filter(a => a.actorId !== null && a.capability !== 'combat.march')
+      .forEach(a => {
+        assert.ok(!actors.has(a.actorId), 'one locomotion action per actor');
+        actors.add(a.actorId);
+      });
+    clean(w);
+  }
+});
 test('grenade policy: the man whose rifle cannot reach his contact throws, not the first in the roster', () => {
   for (const [flags, expectBlocked] of [
     [undefined, true],
