@@ -253,11 +253,11 @@ test('shipping navigation version getter cannot discard readable native query in
   const row = c.rows['movementClear@unscoped'];
   assert.equal(row.unknownInputs, 0, 'a context accessor must not erase exact endpoint observations');
   assert.equal(row.answerAgreements, 1);
-  assert.equal(vm.runInContext('versionReads', context), 0, 'observer must not invoke the getter');
-  assert.equal(row.unknownContextCalls, 2, 'unread context is separately disclosed');
-  assert.equal(row.unknownContextFields.navigationVersion, 2);
+  assert.equal(vm.runInContext('versionReads', context), 3, 'sample the known version once per query');
+  assert.equal(row.unknownContextCalls, 0, 'shipping numeric version is observed');
+  assert.equal(row.unknownContextFields.navigationVersion, undefined);
   assert.equal(
-    c.rows['hasLineOfSight@unscoped'].unknownInputReasons['private-los-inputs'],
+    c.rows['hasLineOfSight@unscoped'].unknownInputReasons['private-los-dynamic-dependencies-unobserved'],
     1,
     'a missing context field cannot overwrite the private-LOS reason'
   );
@@ -278,5 +278,30 @@ test('partial context still exposes native answer disagreement without certifyin
   assert.equal(r.answerDisagreements, 1);
   assert.equal(r.certifiedReuse, 0);
   assert.equal(e.run('calls'), 2);
+});
+test('version changes separate exact keys and the getter is sampled once per query', () => {
+  const e = engine(true);
+  e.run(`var versionReads=0;
+    Object.defineProperty(BattleNavigation,'version',{get:function(){return ++versionReads;}});
+    __battle__._frame();`);
+  const r = e.snapshot().queryExactCensus.rows['movementClear@unscoped'];
+  assert.equal(e.run('versionReads'), 2);
+  assert.equal(e.run('calls'), 2);
+  assert.equal(r.unknownInputs, 0);
+  assert.equal(r.unknownContextCalls, 0);
+  assert.equal(r.argumentRepeats, 0);
+  assert.equal(r.certifiedReuse, 0);
+});
+test('invalid navigation versions stay unknown without losing native query evidence', () => {
+  for (const value of ['undefined', 'null', '"7"', 'NaN', 'Infinity']) {
+    const e = engine(true);
+    e.run(`BattleNavigation.version=${value}; __battle__._frame();`);
+    const r = e.snapshot().queryExactCensus.rows['movementClear@unscoped'];
+    assert.equal(e.run('calls'), 2);
+    assert.equal(r.unknownInputs, 0);
+    assert.equal(r.unknownContextFields.navigationVersion, 2);
+    assert.equal(r.answerAgreements, 1);
+    assert.equal(r.certifiedReuse, 0);
+  }
 });
 console.log(`${passed}/${passed} exact-query census checks passed (offline Node/VM).`);

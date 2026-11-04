@@ -118,6 +118,7 @@ function fixture(search, opts = {}) {
   };
   Object.defineProperty(window.BattleNavigation, 'version', {
     get() {
+      if (opts.numericVersion) return 7;
       throw new Error('diagnostic invoked a navigation context getter');
     }
   });
@@ -336,3 +337,14 @@ assert.equal(failedQuery.engine.stopped, false);
 console.log(
   'browser-cpu-probe-check: exact 120m census, native calls, frame boundaries, scenario guards and cleanup passed'
 );
+
+const numericVersion = fixture(labLink, { lab: true, queryCalls: true, numericVersion: true });
+numericVersion.window.BattleBrowserCpuProbe.start();
+numericVersion.drain();
+const numericReport = numericVersion.window.BattleBrowserCpuProbe.result();
+assert.equal(numericReport.run.valid, true);
+assert.equal(numericReport.queryCapture.readableInputCalls, 4200);
+assert.equal(numericReport.queryCapture.unknownContextCalls, 0);
+assert.equal(numericVersion.window.BattleObstacleField.nativeCalls, 4200);
+assert.equal(numericVersion.window.BattleObstacleField.sightBlocked, numericVersion.originalSight);
+assert.equal(numericReport.queryExactCensus.certifiedReuse, 0);

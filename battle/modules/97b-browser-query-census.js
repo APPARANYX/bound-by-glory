@@ -261,8 +261,8 @@
       reason,
       complete = true,
       unknownContextFields = [];
-    // Navigation exposes version through a getter. Never invoke a context
-    // accessor merely for diagnostics, and never let it erase readable inputs.
+    // Only the known numeric navigation version is allowed an accessor read.
+    // Other context accessors remain opaque and cannot erase readable inputs.
     // A matching partial context is explicitly NOT a live-state certificate.
     function contextField(obj, key, label, reference) {
       try {
@@ -273,6 +273,16 @@
         return { unobserved: 'accessor-or-opaque' };
       }
     }
+    function navigationVersion() {
+      try {
+        // The shipping getter reads a closed-over counter. Sample once; a
+        // throwing or nonnumeric replacement must not suppress native calls.
+        var value = N && N.version;
+        if (typeof value === 'number' && isFinite(value)) return value;
+      } catch (_) {}
+      unknownContextFields.push('navigationVersion');
+      return { unobserved: 'accessor-or-opaque' };
+    }
     var sim = root.__battle__,
       N = root.BattleNavigation,
       obstacles;
@@ -281,16 +291,17 @@
         // Record the outer private LOS inputs without invoking heightAt or any
         // other gameplay callback. Nested native rays do not cover terrain
         // sampling, stance-dependent eye heights, or carrier exclusions.
-        var observer = args[0], target = args[1];
+        var observer = args[0],
+          target = args[1];
         inputs = [
           exactCensus.ref(observer),
           exactCensus.ref(target),
-          exactPoint(observer && observer.root && observer.root.position),
-          exactPoint(target && target.root && target.root.position),
+          exactPoint(dataField(dataField(observer, 'root'), 'position')),
+          exactPoint(dataField(dataField(target, 'root'), 'position')),
           exactCensus.ref(args[2]),
           exactCensus.ref(args[3]),
-          observer && observer.stance,
-          target && target.stance
+          dataField(observer, 'stance'),
+          dataField(target, 'stance')
         ];
         obstacles = args[3];
         complete = false;
@@ -314,11 +325,7 @@
       battle: exactCensus.ref(sim),
       time: contextField(sim, 'time', 'time'),
       navigation: exactCensus.ref(N),
-      // The shipping BattleNavigation.version getter only reads its closed-over
-      // counter. Read it explicitly; never invoke arbitrary context accessors.
-      navigationVersion: N && typeof N.version === 'number'
-        ? N.version
-        : contextField(N, 'version', 'navigationVersion'),
+      navigationVersion: navigationVersion(),
       physicalVersion: contextField(obstacles, '__physicalVersion', 'physicalVersion'),
       dynamicList: contextField(obstacles, '__dynamicFootprints', 'dynamicList', true),
       phase: 'unclassified',
