@@ -418,7 +418,8 @@
   function changes(h, field, threshold) {
     var n = 0;
     for (var i = 1; i < h.length; i++) {
-      var previous = h[i - 1][field], current = h[i][field];
+      var previous = h[i - 1][field],
+        current = h[i][field];
       if ((previous || current) && dist(previous, current) > threshold) n++;
     }
     return n;
