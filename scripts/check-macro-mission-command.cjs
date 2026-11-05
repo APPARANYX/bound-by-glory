@@ -49,6 +49,22 @@ test('owned defense is an ongoing mission, not completion every commander tick',
   const f=fixture();f.sim._objectives[0].state.owner='us';f.sq._preparedDefenseRequest={objectiveId:'a',point:{x:100,z:0}};f.tick();
   const mission=f.sq._macroMission;assert.ok(mission);for(let i=0;i<30;i++)f.tick();assert.strictEqual(f.sq._macroMission,mission);assert.equal(mission.intent,'defend');assert.equal(mission.status,'executing');
 });
+test('a withdrawing squad releases its capture assignment and can resume it after rally', () => {
+  const f = fixture();
+  f.tick();
+  const old = f.sq._macroMission;
+  f.sq.state = 'retreat';
+  f.tick();
+  assert.equal(old.endReason, 'squad-retreat');
+  assert.equal(f.sq.targetObjective, null);
+  f.tick();
+  assert.strictEqual(f.sq._macroMission, old);
+  f.sq.state = 'advance';
+  f.tick();
+  assert.equal(f.sq._macroMission.status, 'executing');
+  assert.equal(f.sq.targetObjective, old.objectiveId);
+  assert.ok(f.sq._macroMission.version > old.version);
+});
 test('capture completes exactly once and selects a remaining objective',()=>{
   const f=fixture();f.tick();const old=f.sq._macroMission;assert.ok(old);f.sim._objectives[0].state.owner='us';f.tick();
   assert.equal(old.status,'completed');assert.equal(f.sq._macroMission.objectiveId,'b');const next=f.sq._macroMission;f.tick();assert.strictEqual(f.sq._macroMission,next);

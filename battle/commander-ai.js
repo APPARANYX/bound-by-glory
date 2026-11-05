@@ -305,6 +305,15 @@
     } else {
       m.endedAt = +sim.time || 0;
       m.endReason = reason;
+      // Keep the destination in the failed brief for history and mission-resume.
+      // The live assignment must stop advertising a capture to the rest of the force.
+      if (
+        next === 'failed' &&
+        reason === 'squad-retreat' &&
+        m.objectiveId &&
+        sq.targetObjective === m.objectiveId
+      )
+        sq.targetObjective = null;
       sq._lastMacroMission = m;
       telemetry(sim, 'decision-mission-end', {
         faction: sq.faction,

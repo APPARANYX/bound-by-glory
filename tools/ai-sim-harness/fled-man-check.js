@@ -238,6 +238,8 @@ test('an ordinary one-man remnant retreats and cannot continue as a one-man assa
   assert.equal(man.eng.state, 'withdraw', 'the last man executes retreat, not the stale assault phase');
   assert.equal(q._macroMission.status, 'failed', 'the assault brief is ended');
   assert.equal(q._macroMission.endReason, 'squad-retreat');
+  assert.equal(q._macroMission.objectiveId, 'obj-center', 'the failed brief keeps its history');
+  assert.equal(q.targetObjective, null, 'the withdrawing remnant releases its active capture assignment');
   assert.ok(q._assembly && q._assembly.phase === 'to-base', 'he is in the survivor/reconstitution pipeline');
   assert.equal(q.fledId, undefined, 'an ordinary remnant is not a fled detachment');
   assert.notEqual(man.countsForElimination, false, 'an ordinary surviving soldier still counts for his side');
