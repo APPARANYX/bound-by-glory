@@ -1,0 +1,18 @@
+{
+  "branch": "work/benchmark-launch/meso742-numeric-buckets-e4bb034f",
+  "launch_parent_sha": "e4bb034f06e07d945acba313e3b26c17792884ec",
+  "launch_sha": "b4536278d2c7a06db109d30aa0501dcb3cf78c6d",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/e4bb034f06e07d945acba313e3b26c17792884ec",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "hotpath",
+    "query": "strategicInterception=0&tacticalController=new",
+    "ref": "work/meso739-personal-space-numeric-buckets-20261103",
+    "seed": "controller-natural-20261026-0002",
+    "sim_seconds": "600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/meso739-personal-space-numeric-buckets-20261103",
+  "source_sha_at_archive": "e4bb034f06e07d945acba313e3b26c17792884ec"
+}
