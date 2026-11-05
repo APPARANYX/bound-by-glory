@@ -1,0 +1,24 @@
+{
+  "branch": "work/benchmark-launch/meso742-official-e4bb034f",
+  "launch_parent_sha": "e4bb034f06e07d945acba313e3b26c17792884ec",
+  "launch_sha": "b83a5cb1ca85c6af889219cc3fd8566cc5d04a4c",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/e4bb034f06e07d945acba313e3b26c17792884ec",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "standard",
+    "correlation_id": "meso742-official-e4bb034f",
+    "origin_agent": "chatgpt",
+    "purpose": "One official #742 exact e4bb034f after passing CI41635258871/Lab41635259067/raw13229344805 review and useful full51+GC reduction in profile41639001920/raw13230873816 with all20states/final/fullroute/correction counters equal739; unchanged1.25gate and per-arm parent739/1608 artifact comparison.",
+    "query_off": "strategicInterception=0",
+    "query_on": "strategicInterception=0&tacticalController=new",
+    "ref": "work/meso739-personal-space-numeric-buckets-20261103",
+    "seed": "controller-natural-20261026",
+    "seeds": "3",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/meso739-personal-space-numeric-buckets-20261103",
+  "source_sha_at_archive": "e4bb034f06e07d945acba313e3b26c17792884ec"
+}
