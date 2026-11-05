@@ -227,6 +227,22 @@ test('a firing station cannot raise a temporary lower stance request',()=>{
   assert.equal(s.eng.stance,'stand','station pose resumes when the lower-stance request expires');
 });
 
+test('LoopWatch counts acquiring and dropping an order once each',()=>{
+  const {r,b,s}=oneMan();
+  load(r,'battle/modules/32-ai-loop-watch.js');
+  const L=r.BattleAILoopWatch;
+  for(let i=0;i<12;i++){
+    b.time=i;
+    for(const man of s.squad.members){
+      man.root.position.x=i%2?2:0;
+      man._fireteamDestination=i===4?{x:20,z:0}:null;
+      man.orderDestination=null;
+    }
+    L.sample(b);
+  }
+  assert.ok(!L.alerts(b).some(x=>x.kind==='order-churn'&&x.squadId===s.squad.id));
+});
+
 test('LoopWatch keeps genuine squad order churn inside one command phase',()=>{
   const {r,b,s}=oneMan();
   load(r,'battle/modules/32-ai-loop-watch.js');
