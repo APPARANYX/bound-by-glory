@@ -147,13 +147,23 @@ try {
     const telemetrySaved = telemetry ? { record: telemetry.record, start: telemetry.start, ensure: telemetry.ensure, end: telemetry.end, checkpoint: telemetry.checkpoint, flush: telemetry.flush } : null;
     const telemetryConsole = telemetry?.setConsoleLogging ? telemetry.setConsoleLogging(false) : null;
     let emissions = null, ownerTrace = null;
-    function retainDiagnostic(type, data, source) {
-      if (!emissions || source !== sim) return;
-      if (type === 'ai-loop-detected') emissions.loops.push(structuredClone(sim._aiLoopWatch.alerts[0]));
-      if (type === 'order-writer-conflict') emissions.conflicts.push(structuredClone(sim._orderProvenance.conflicts[0]));
+    // Both diagnostic owners prepend immutable records. Read after every normal
+    // step and require overlap when the UI ring fills; fail closed on any gap.
+    function collectEvents(ring, archive, capacity, kind) {
+      if (!ring) return;
+      const last = archive[archive.length - 1];
+      if (ring[0] === last) return;
+      const count = last ? ring.indexOf(last) : ring.length;
+      if (count < 0 || (!last && count >= capacity))
+        throw new Error('Benchmark lost ' + kind + ' archive continuity at ' + sim.time);
+      for (let i = count - 1; i >= 0; i--) archive.push(ring[i]);
+    }
+    function collectDiagnostics() {
+      collectEvents(sim._aiLoopWatch?.alerts, emissions.loops, 16, 'loop');
+      collectEvents(sim._orderProvenance?.conflicts, emissions.conflicts, 80, 'writer conflict');
     }
     if (telemetry) {
-      telemetry.record = retainDiagnostic; telemetry.start = function(){}; telemetry.ensure = function(){};
+      telemetry.record = function(){}; telemetry.start = function(){}; telemetry.ensure = function(){};
       telemetry.end = async function(){ return true; }; telemetry.checkpoint = async function(){ return true; }; telemetry.flush = async function(){ return true; };
     }
 
@@ -470,7 +480,7 @@ try {
           // means this runtime's telemetry cannot certify a complete stream.
           for (const [captured, retained] of [[allLoops, loopAlerts()], [allConflicts, provenanceConflicts()]]) {
             if (JSON.stringify(captured.slice(0, retained.length)) !== JSON.stringify(retained)) {
-              throw new Error('Benchmark event archive disagrees with the retained diagnostic buffer');
+              throw new Error('Diagnostic archive tail mismatch at ' + sim.time + ': ' + captured.length + ' captured, ' + retained.length + ' retained');
             }
           }
         }
@@ -488,7 +498,7 @@ try {
           window: extra?.window ? { openedAt: extra.window.openedAt, closedAt: extra.window.closedAt } : null,
           conflicts,
           loops,
-          retention: emissions ? 'on-emission' : 'final-buffer',
+          retention: emissions ? 'per-step-contiguous' : 'final-buffer',
           sourcesActive: { loopWatch: !!sim._aiLoopWatch, orderProvenance: !!sim._orderProvenance },
           sourceTotals: { conflicts: allConflicts.length, loops: allLoops.length }
         };
@@ -690,7 +700,8 @@ try {
         root.BattleSoldierModel?.setImportedEnabled?.(sim.scene, false); rawRestart();
         sim.manualEnded = false; sim.winner = null; sim.winReason = null; sim.paused = false; sim.timeScale = 1; sim.timeLimit = timeLimit;
 
-        emissions = telemetry ? { loops: [], conflicts: [] } : null;
+        emissions = { loops: [], conflicts: [] };
+        collectDiagnostics();
         ownerTrace = traceSquad ? { initial: root.benchmarkOwnerSnapshot(sim, traceSquad), frames: [] } : null;
         let commandAccum = 0, steps = 0, nextSample = 0;
         const live = () => !sim.winner && sim.time < timeLimit + 0.5 && steps < maxSteps;
@@ -698,6 +709,7 @@ try {
           sim._trainerStepActive = true; try { sim.step ? sim.step(fixedDt) : sim._frame(fixedDt); } finally { sim._trainerStepActive = false; }
           steps++; commandAccum += fixedDt;
           while (commandAccum + 1e-9 >= commandTick && !sim.winner) { commandAccum -= commandTick; root.BattleCommanderAI.update(sim, scenario, commandTick); }
+          collectDiagnostics();
           if (ownerTrace && sim.time + 1e-9 >= traceFrom) ownerTrace.frames.push(root.benchmarkOwnerSnapshot(sim, traceSquad));
           sampleAcquisitions();
         };
