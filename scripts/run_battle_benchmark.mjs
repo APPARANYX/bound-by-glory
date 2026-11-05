@@ -147,20 +147,31 @@ try {
     const telemetrySaved = telemetry ? { record: telemetry.record, start: telemetry.start, ensure: telemetry.ensure, end: telemetry.end, checkpoint: telemetry.checkpoint, flush: telemetry.flush } : null;
     const telemetryConsole = telemetry?.setConsoleLogging ? telemetry.setConsoleLogging(false) : null;
     let emissions = null, ownerTrace = null;
-    // Both diagnostic owners prepend immutable records. Read after every normal
-    // step and require overlap when the UI ring fills; fail closed on any gap.
-    function collectEvents(ring, archive, capacity, kind) {
-      if (!ring) return;
-      const last = archive[archive.length - 1];
-      if (ring[0] === last) return;
-      const count = last ? ring.indexOf(last) : ring.length;
-      if (count < 0 || (!last && count >= capacity))
-        throw new Error('Benchmark lost ' + kind + ' archive continuity at ' + sim.time);
-      for (let i = count - 1; i >= 0; i--) archive.push(ring[i]);
+    // LoopWatch prepends; Forward Progress appends to that same UI buffer.
+    // Observe both insertions before a subsequent write can trim either end.
+    function watchBuffer(ring) {
+      if (!Array.isArray(ring)) return null;
+      const records = ring.slice();
+      for (const method of ['push', 'unshift']) {
+        Object.defineProperty(ring, method, { configurable: true, value(...items) {
+          const length = Array.prototype[method].apply(this, items);
+          records.push(...items);
+          return length;
+        } });
+      }
+      return { ring, records, stop() { delete ring.push; delete ring.unshift; } };
     }
-    function collectDiagnostics() {
-      collectEvents(sim._aiLoopWatch?.alerts, emissions.loops, 16, 'loop');
-      collectEvents(sim._orderProvenance?.conflicts, emissions.conflicts, 80, 'writer conflict');
+    function archived(stream, current, fallback) {
+      if (!stream) return fallback();
+      if (current !== stream.ring) throw new Error('Benchmark diagnostic store replaced at ' + sim.time);
+      const seen = new Set(stream.records);
+      if (current.some(row => !seen.has(row))) throw new Error('Unobserved diagnostic record at ' + sim.time);
+      return stream.records.slice().reverse();
+    }
+    function stopArchive() {
+      emissions?.loops?.stop();
+      emissions?.conflicts?.stop();
+      emissions = null;
     }
     if (telemetry) {
       telemetry.record = function(){}; telemetry.start = function(){}; telemetry.ensure = function(){};
@@ -474,16 +485,9 @@ try {
     function buildRecord({ index, seed, scenario, diag, wallStart, steps, extra }) {
         const control = sim.objectiveControl || {}, counts = control.counts || { us: control.us || 0, ge: control.ge || 0 }, stats = sim.objectiveStats || {};
         const objectiveStates = (sim._objectives || []).map(o => { const st = objectiveStatus(o); return { id: o.id, owner: st.owner || 'neutral', active: st.active || null, vacantOwner: !!st.vacantOwner, us: +(st.us || st.weights?.us || 0), ge: +(st.ge || st.weights?.ge || 0) }; });
-        const recovery = sim._objectiveRecovery || {}, allConflicts = emissions ? emissions.conflicts.slice().reverse() : provenanceConflicts(), allLoops = emissions ? emissions.loops.slice().reverse() : loopAlerts();
-        if (emissions) {
-          // Both owners retain their newest events first. Any disagreement
-          // means this runtime's telemetry cannot certify a complete stream.
-          for (const [captured, retained] of [[allLoops, loopAlerts()], [allConflicts, provenanceConflicts()]]) {
-            if (JSON.stringify(captured.slice(0, retained.length)) !== JSON.stringify(retained)) {
-              throw new Error('Diagnostic archive tail mismatch at ' + sim.time + ': ' + captured.length + ' captured, ' + retained.length + ' retained');
-            }
-          }
-        }
+        const recovery = sim._objectiveRecovery || {};
+        const allLoops = archived(emissions.loops, sim._aiLoopWatch?.alerts, loopAlerts);
+        const allConflicts = archived(emissions.conflicts, sim._orderProvenance?.conflicts, provenanceConflicts);
         const diagnosticTime = item => Number.isFinite(+item?.at) ? +item.at : Number.isFinite(+item?.time) ? +item.time : null;
         const inRecordWindow = item => {
           if (!extra?.window) return true;
@@ -498,7 +502,7 @@ try {
           window: extra?.window ? { openedAt: extra.window.openedAt, closedAt: extra.window.closedAt } : null,
           conflicts,
           loops,
-          retention: emissions ? 'per-step-contiguous' : 'final-buffer',
+          retention: emissions.loops && emissions.conflicts ? 'on-insertion' : 'final-buffer',
           sourcesActive: { loopWatch: !!sim._aiLoopWatch, orderProvenance: !!sim._orderProvenance },
           sourceTotals: { conflicts: allConflicts.length, loops: allLoops.length }
         };
@@ -700,8 +704,7 @@ try {
         root.BattleSoldierModel?.setImportedEnabled?.(sim.scene, false); rawRestart();
         sim.manualEnded = false; sim.winner = null; sim.winReason = null; sim.paused = false; sim.timeScale = 1; sim.timeLimit = timeLimit;
 
-        emissions = { loops: [], conflicts: [] };
-        collectDiagnostics();
+        emissions = { loops: watchBuffer(sim._aiLoopWatch?.alerts), conflicts: watchBuffer(sim._orderProvenance?.conflicts) };
         ownerTrace = traceSquad ? { initial: root.benchmarkOwnerSnapshot(sim, traceSquad), frames: [] } : null;
         let commandAccum = 0, steps = 0, nextSample = 0;
         const live = () => !sim.winner && sim.time < timeLimit + 0.5 && steps < maxSteps;
@@ -709,7 +712,6 @@ try {
           sim._trainerStepActive = true; try { sim.step ? sim.step(fixedDt) : sim._frame(fixedDt); } finally { sim._trainerStepActive = false; }
           steps++; commandAccum += fixedDt;
           while (commandAccum + 1e-9 >= commandTick && !sim.winner) { commandAccum -= commandTick; root.BattleCommanderAI.update(sim, scenario, commandTick); }
-          collectDiagnostics();
           if (ownerTrace && sim.time + 1e-9 >= traceFrom) ownerTrace.frames.push(root.benchmarkOwnerSnapshot(sim, traceSquad));
           sampleAcquisitions();
         };
@@ -781,9 +783,10 @@ try {
             measure(() => label, spec, openedAt => sim.time + 1e-9 >= openedAt + spec.seconds);
           }
         }
-        emissions = null; ownerTrace = null; activeCombat = null; activeAcquisition = null; finishBattle(); if ((index + 1) % 5 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+        stopArchive(); ownerTrace = null; activeCombat = null; activeAcquisition = null; finishBattle(); if ((index + 1) % 5 === 0) await new Promise(resolve => setTimeout(resolve, 0));
       }
     } finally {
+      stopArchive();
       activeCombat = null; activeAcquisition = null; root.BattleAIPolicy.clearMatchPolicies(sim); finishBattle();
       if (originalSeed) root.BattleTownObjectives.regenerate(sim.scene, sim.heightAt, originalSeed, { restoredAfterBenchmark: true }, sim);
       sim.trainingMode = false; root.BattleSoldierModel?.setImportedEnabled?.(sim.scene, true); rawRestart();
