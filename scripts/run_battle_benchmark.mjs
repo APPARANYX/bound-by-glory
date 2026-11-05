@@ -125,7 +125,10 @@ try {
   /* The page silences its console while a benchmark runs, so progress comes out through this instead. */
   await page.exposeFunction('__benchLog', text => console.log(text));
   await page.addScriptTag({ path: path.resolve('scripts/battle-benchmark-intent.cjs') });
-  const result = await page.evaluate(async ({ count, seedPrefix, fixedDt, timeLimit, suppliedPolicy, windows, battleType, numbered, firstIndex }) => {
+  const traceSquad = process.env.BATTLE_BENCHMARK_TRACE_SQUAD || '';
+  const traceFrom = Number(process.env.BATTLE_BENCHMARK_TRACE_FROM || 0);
+  if (traceSquad) await page.addScriptTag({ path: path.resolve('scripts/probes/benchmark-owner-trace.cjs') });
+  const result = await page.evaluate(async ({ count, seedPrefix, fixedDt, timeLimit, suppliedPolicy, windows, battleType, numbered, firstIndex, traceSquad, traceFrom }) => {
     const root = window, sim = root.__battle__, engine = sim.scene?.getEngine?.(), renderLoop = root.__battleRenderLoop__;
     if (engine && renderLoop) engine.stopRenderLoop(renderLoop);
     sim.pause();
@@ -143,8 +146,14 @@ try {
     if (telemetry?.end) { try { await telemetry.end(sim, 'benchmark-start'); } catch (_) {} }
     const telemetrySaved = telemetry ? { record: telemetry.record, start: telemetry.start, ensure: telemetry.ensure, end: telemetry.end, checkpoint: telemetry.checkpoint, flush: telemetry.flush } : null;
     const telemetryConsole = telemetry?.setConsoleLogging ? telemetry.setConsoleLogging(false) : null;
+    let emissions = null, ownerTrace = null;
+    function retainDiagnostic(type, data, source) {
+      if (!emissions || source !== sim) return;
+      if (type === 'ai-loop-detected') emissions.loops.push(structuredClone(sim._aiLoopWatch.alerts[0]));
+      if (type === 'order-writer-conflict') emissions.conflicts.push(structuredClone(sim._orderProvenance.conflicts[0]));
+    }
     if (telemetry) {
-      telemetry.record = function(){}; telemetry.start = function(){}; telemetry.ensure = function(){};
+      telemetry.record = retainDiagnostic; telemetry.start = function(){}; telemetry.ensure = function(){};
       telemetry.end = async function(){ return true; }; telemetry.checkpoint = async function(){ return true; }; telemetry.flush = async function(){ return true; };
     }
 
@@ -455,7 +464,16 @@ try {
     function buildRecord({ index, seed, scenario, diag, wallStart, steps, extra }) {
         const control = sim.objectiveControl || {}, counts = control.counts || { us: control.us || 0, ge: control.ge || 0 }, stats = sim.objectiveStats || {};
         const objectiveStates = (sim._objectives || []).map(o => { const st = objectiveStatus(o); return { id: o.id, owner: st.owner || 'neutral', active: st.active || null, vacantOwner: !!st.vacantOwner, us: +(st.us || st.weights?.us || 0), ge: +(st.ge || st.weights?.ge || 0) }; });
-        const recovery = sim._objectiveRecovery || {}, allConflicts = provenanceConflicts(), allLoops = loopAlerts();
+        const recovery = sim._objectiveRecovery || {}, allConflicts = emissions ? emissions.conflicts.slice().reverse() : provenanceConflicts(), allLoops = emissions ? emissions.loops.slice().reverse() : loopAlerts();
+        if (emissions) {
+          // Both owners retain their newest events first. Any disagreement
+          // means this runtime's telemetry cannot certify a complete stream.
+          for (const [captured, retained] of [[allLoops, loopAlerts()], [allConflicts, provenanceConflicts()]]) {
+            if (JSON.stringify(captured.slice(0, retained.length)) !== JSON.stringify(retained)) {
+              throw new Error('Benchmark event archive disagrees with the retained diagnostic buffer');
+            }
+          }
+        }
         const diagnosticTime = item => Number.isFinite(+item?.at) ? +item.at : Number.isFinite(+item?.time) ? +item.time : null;
         const inRecordWindow = item => {
           if (!extra?.window) return true;
@@ -470,6 +488,8 @@ try {
           window: extra?.window ? { openedAt: extra.window.openedAt, closedAt: extra.window.closedAt } : null,
           conflicts,
           loops,
+          retention: emissions ? 'on-emission' : 'final-buffer',
+          sourcesActive: { loopWatch: !!sim._aiLoopWatch, orderProvenance: !!sim._orderProvenance },
           sourceTotals: { conflicts: allConflicts.length, loops: allLoops.length }
         };
         const strategicFields = new Set(['commandPhase','targetObjective','objective','orderAnchor','rally']);
@@ -651,6 +671,7 @@ try {
           record.grenades = Object.fromEntries(Object.entries(current).filter(([, v]) => typeof v === 'number').map(([k, v]) => [k, v - (start[k] || 0)]));
           record.grenades.byFaction = Object.fromEntries(['us', 'ge'].map(f => [f, current.byFaction[f] - (start.byFaction?.[f] || 0)]));
         }
+        if (ownerTrace) record.ownerTrace = { squad: traceSquad, initial: ownerTrace.initial, frames: ownerTrace.frames.filter(inRecordWindow) };
         if (extra) Object.assign(record, extra);
         return record;
     }
@@ -669,12 +690,15 @@ try {
         root.BattleSoldierModel?.setImportedEnabled?.(sim.scene, false); rawRestart();
         sim.manualEnded = false; sim.winner = null; sim.winReason = null; sim.paused = false; sim.timeScale = 1; sim.timeLimit = timeLimit;
 
+        emissions = telemetry ? { loops: [], conflicts: [] } : null;
+        ownerTrace = traceSquad ? { initial: root.benchmarkOwnerSnapshot(sim, traceSquad), frames: [] } : null;
         let commandAccum = 0, steps = 0, nextSample = 0;
         const live = () => !sim.winner && sim.time < timeLimit + 0.5 && steps < maxSteps;
         const stepOnce = () => {
           sim._trainerStepActive = true; try { sim.step ? sim.step(fixedDt) : sim._frame(fixedDt); } finally { sim._trainerStepActive = false; }
           steps++; commandAccum += fixedDt;
           while (commandAccum + 1e-9 >= commandTick && !sim.winner) { commandAccum -= commandTick; root.BattleCommanderAI.update(sim, scenario, commandTick); }
+          if (ownerTrace && sim.time + 1e-9 >= traceFrom) ownerTrace.frames.push(root.benchmarkOwnerSnapshot(sim, traceSquad));
           sampleAcquisitions();
         };
         const wallStart = performance.now();
@@ -745,7 +769,7 @@ try {
             measure(() => label, spec, openedAt => sim.time + 1e-9 >= openedAt + spec.seconds);
           }
         }
-        activeCombat = null; activeAcquisition = null; finishBattle(); if ((index + 1) % 5 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+        emissions = null; ownerTrace = null; activeCombat = null; activeAcquisition = null; finishBattle(); if ((index + 1) % 5 === 0) await new Promise(resolve => setTimeout(resolve, 0));
       }
     } finally {
       activeCombat = null; activeAcquisition = null; root.BattleAIPolicy.clearMatchPolicies(sim); finishBattle();
@@ -757,7 +781,7 @@ try {
       if (telemetryConsole !== null && telemetry?.setConsoleLogging) telemetry.setConsoleLogging(telemetryConsole);
     }
     return { build: root.BATTLE_BUILD || null, policyRevision: root.BattleAIPolicy.stashed ? 0 : suppliedPolicy?.revision || root.BattleAIPolicy.revision || 0, policySource: root.BattleAIPolicy.stashed ? 'stashed-defaults' : suppliedPolicy?.source || 'runtime-default', fixedDt, timeLimit, sampleSeconds: SAMPLE_SECONDS, scripted, battles };
-  }, { count, seedPrefix, fixedDt, timeLimit, suppliedPolicy: policy, windows, battleType, numbered, firstIndex });
+  }, { count, seedPrefix, fixedDt, timeLimit, suppliedPolicy: policy, windows, battleType, numbered, firstIndex, traceSquad, traceFrom });
 
   const wallSeconds = (Date.now() - startedWall) / 1000, battles = result.battles || [];
   for (const b of battles) {
