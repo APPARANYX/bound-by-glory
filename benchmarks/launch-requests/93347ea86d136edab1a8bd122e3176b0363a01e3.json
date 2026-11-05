@@ -1,0 +1,24 @@
+{
+  "branch": "work/benchmark-launch/meso706-f469-meeting-20261102",
+  "launch_parent_sha": "f469a6993d490bf101fe17026c73f9c4bb5e81ed",
+  "launch_sha": "93347ea86d136edab1a8bd122e3176b0363a01e3",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/f469a6993d490bf101fe17026c73f9c4bb5e81ed",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "standard",
+    "correlation_id": "meso706-f469a699-meeting",
+    "origin_agent": "chatgpt",
+    "purpose": "Exact f469a699 Meso route-query optimization 3-pair acceptance after green current head CI and native lab",
+    "query_off": "strategicInterception=0",
+    "query_on": "strategicInterception=0&tacticalController=new",
+    "ref": "work/controller-meso-wrap-20261101",
+    "seed": "controller-natural-20261026",
+    "seeds": "3",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/controller-meso-wrap-20261101",
+  "source_sha_at_archive": "f469a6993d490bf101fe17026c73f9c4bb5e81ed"
+}
