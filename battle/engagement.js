@@ -974,6 +974,7 @@
       telemetry: telemetry,
       combatThreat: combatThreat,
       commitStance: commitStance,
+      commitStanceRespectHold: commitStanceRespectHold,
       facingError: facingError,
       holdPosition: holdPosition,
       markUrgent: markUrgent,

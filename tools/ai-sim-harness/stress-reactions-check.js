@@ -377,6 +377,22 @@ test("flee: he leaves his weapons, runs to the squad's last safe point, never fi
   assert.equal(s.crouching || s.prone, true, 'down at the refuge');
 });
 
+test('a fled rifleman keeps his refuge posture across short gaps in suppression', () => {
+  const { ctx, s } = broke('?stressAct=flee', [0.9, 0, 0], 60, { safe: { x: 0, z: -40 } });
+  put(s, s.eng.refuge.x, s.eng.refuge.z);
+  for (let burst = 0; burst < 4; burst++) {
+    s.suppressedUntil = ctx.b.time + 0.25;
+    tick(ctx, s, 0.15);
+    assert.equal(s.eng.stance, 'prone');
+    tick(ctx, s, 0.3);
+    assert.equal(s.eng.stance, 'prone', 'brief quiet gap at the same refuge');
+  }
+  tick(ctx, s, 1.2);
+  assert.equal(s.eng.fledPhase, 'wait');
+  assert.equal(s.eng.stance, 'crouch', 'recovers after sustained quiet');
+  assert.ok(dist(s.destination, s.eng.refuge) < 0.5);
+});
+
 test('flee: the goal stands until he is there, and a man who cannot get there waits where he is', () => {
   const safe = { x: 0, z: -40 },
     { ctx, s, g } = broke('?stressAct=flee', [0.9, 0, 0], 60, { safe }),

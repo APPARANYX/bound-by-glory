@@ -394,7 +394,12 @@
         else {
           noteAct(s, 'flee', 'waiting', dt);
           move(s, battle, { x: p.x, z: p.z }, 'flee'); // a hold that beats his squad of one's order home
-          commitStance(s, battle, PRONE_ROLES[s.role] && s.suppressedUntil > now ? 'prone' : 'crouch', 1.0);
+          ctx.commitStanceRespectHold(
+            s,
+            battle,
+            PRONE_ROLES[s.role] && s.suppressedUntil > now ? 'prone' : 'crouch',
+            1.0
+          );
           return;
         }
       }

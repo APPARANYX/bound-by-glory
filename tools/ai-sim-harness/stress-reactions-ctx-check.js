@@ -110,6 +110,7 @@ test('the module installs the verbatim set back into engagement.js through the c
       'clamp',
       'combatThreat',
       'commitStance',
+      'commitStanceRespectHold',
       'dist',
       'facingError',
       'holdPosition',
