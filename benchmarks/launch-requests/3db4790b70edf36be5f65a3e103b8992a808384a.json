@@ -1,0 +1,24 @@
+{
+  "branch": "work/benchmark-launch/nav730-standard-3seed-20261102",
+  "launch_parent_sha": "744b9ef350cfcca82f1de90c83959cb913bd9ed4",
+  "launch_sha": "3db4790b70edf36be5f65a3e103b8992a808384a",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/744b9ef350cfcca82f1de90c83959cb913bd9ed4",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "standard",
+    "correlation_id": "nav730-segment-certificate-20261102",
+    "origin_agent": "chatgpt",
+    "purpose": "paired 600s wall-clock acceptance after exact CI, Native Skills Lab, and 20/20 slim same-seed profile",
+    "query_off": "strategicInterception=0",
+    "query_on": "strategicInterception=0&tacticalController=new",
+    "ref": "work/nav-validated-segment-reuse-20261102",
+    "seed": "controller-natural-20261026",
+    "seeds": "3",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/nav-validated-segment-reuse-20261102",
+  "source_sha_at_archive": "744b9ef350cfcca82f1de90c83959cb913bd9ed4"
+}
