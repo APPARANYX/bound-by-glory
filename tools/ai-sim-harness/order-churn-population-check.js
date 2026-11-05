@@ -39,7 +39,7 @@ function world(search) {
 
 /* The squad shuffles 1 m per sample (travel without progress); `orderAt(i, man, k)` sets each
    man's order (or null) for sample i. */
-function run(search, orderAt) {
+function run(search, orderAt, kind) {
   const w = world(search),
     men = w.sq.members;
   men.forEach((s, k) => {
@@ -56,7 +56,7 @@ function run(search, orderAt) {
     });
     w.r.BattleAILoopWatch.sample(w.b);
   }
-  return w.r.BattleAILoopWatch.alerts(w.b).filter(a => a.kind === 'order-churn');
+  return w.r.BattleAILoopWatch.alerts(w.b).filter(a => a.kind === (kind || 'order-churn'));
 }
 
 /* Fixed slot orders 40 m ahead; men 1.. drop their order on odd samples (contact stand-down and
@@ -75,6 +75,19 @@ assert.ok(
 assert.equal(run('', handoffs).length, 0, 'men gaining and losing an order is not order churn');
 assert.equal(run('', emptyGaps).length, 0, 'samples with no order are not destination changes');
 
+/* The handoffs are a real authority flap when the squad goes nowhere: their own kind, not hidden. */
+const flap = run('', handoffs, 'order-handoff-churn');
+assert.ok(flap.length >= 1, 'repeated order handoffs without progress raise order-handoff-churn');
+assert.ok(flap[0].orderPopulationChanges >= 4);
+assert.ok(run('', emptyGaps, 'order-handoff-churn').length >= 1);
+assert.equal(
+  run('&orderChurnSameMen=0', handoffs, 'order-handoff-churn').length,
+  0,
+  'the old count has no handoff kind'
+);
+/* Real moved orders raise order churn only, never both kinds for the same window. */
+assert.equal(run('', flipping, 'order-handoff-churn').length, 0);
+
 const real = run('', flipping);
 assert.ok(real.length >= 1, 'orders that really move are still order churn');
 assert.ok(real[0].destinationChanges >= 4);
@@ -86,4 +99,6 @@ const mixed = run('', (i, s, k) => (k > 5 && i % 4 === 1 ? null : flipping(i, s,
 assert.ok(mixed.length >= 1);
 assert.ok(mixed[0].orderPopulationChanges >= 1, 'population changes are reported, not hidden');
 
-console.log('PASS order churn counts moved orders on the same men; order handoffs are reported apart');
+console.log(
+  'PASS order churn counts moved orders on the same men; repeated order handoffs raise their own kind'
+);

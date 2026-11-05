@@ -29,8 +29,9 @@
     /* Order churn compares each sample's orders only across the men who held an order in both
        samples. A man who gains or loses an order (a contact stand-down, a resumed march, a covered
        bound ending) is an authority handoff for him, not a moved destination; averaging a changing
-       set of men turned those handoffs into fake destination changes. Population changes are still
-       counted and reported on the alert. ?orderChurnSameMen=0 restores the whole-population mean. */
+       set of men turned those handoffs into fake destination changes. Repeated handoffs with no
+       progress raise their own kind, order-handoff-churn, and every order-churn alert reports its
+       population changes. ?orderChurnSameMen=0 restores the whole-population mean (and no handoff kind). */
     ORDER_CHURN_SAME_MEN = !/[?&]orderChurnSameMen=0(?:&|#|$)/i.test(
       (root.location && root.location.search) || ''
     );
@@ -651,6 +652,33 @@
           orderPopulationChanges: omoves ? omoves.population : null,
           inContact: !!orderRecent[orderRecent.length - 1].inContact
         });
+      } else if (
+        omoves &&
+        omoves.population >= 4 &&
+        omove.travel >= 5 &&
+        omove.net < 4.5 &&
+        omove.duration >= 5
+      ) {
+        /* The set of men holding an order keeps changing (stand down, resume, stand down) while the
+           squad goes nowhere. No order moved, so it is not order churn, but an authority flap is a
+           real loop: it gets its own kind so churn is split by cause, not hidden. */
+        emitAlert(sim, {
+          kind: 'order-handoff-churn',
+          severity: 'warn',
+          faction: sq.faction,
+          squadId: sq.id,
+          message: 'Men keep gaining and losing orders while the squad goes nowhere',
+          phases: ophases,
+          rules: Array.from(new Set(orules)),
+          sequence: orderRecent.slice(-6).map(function (s) {
+            return Object.keys(s.orders || {}).length + ' with orders';
+          }),
+          travel: +omove.travel.toFixed(1),
+          net: +omove.net.toFixed(1),
+          destinationChanges: ochanges,
+          orderPopulationChanges: omoves.population,
+          inContact: !!orderRecent[orderRecent.length - 1].inContact
+        });
       }
     }
   }
@@ -883,7 +911,9 @@
           changeMeta =
             a.kind === 'posture-churn'
               ? (a.stanceChanges || 0) + ' stance changes'
-              : (a.destinationChanges || 0) + ' destination changes',
+              : a.kind === 'order-handoff-churn'
+                ? (a.orderPopulationChanges || 0) + ' order handoffs'
+                : (a.destinationChanges || 0) + ' destination changes',
           meta =
             'travel ' +
             a.travel +
