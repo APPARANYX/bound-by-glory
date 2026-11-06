@@ -26,7 +26,75 @@
        Controller only; ?fastRouteChecks=0 asks every sample again (the old cost). */
     SEARCH = typeof location !== 'undefined' ? location.search || '' : '',
     FAST =
-      /[?&]tacticalController=new(?:&|#|$)/i.test(SEARCH) && !/[?&]fastRouteChecks=0(?:&|#|$)/i.test(SEARCH);
+      /[?&]tacticalController=new(?:&|#|$)/i.test(SEARCH) && !/[?&]fastRouteChecks=0(?:&|#|$)/i.test(SEARCH),
+    /* The exposure samples of a plan sit on the straight lines between fixed cover slots, and every
+       squadmate's plan, and the next plan, samples the same lines toward the same reported positions.
+       Whether one sample point sees one reported position is a question about terrain and static
+       obstacles only (the eye heights come from the stance), so its answer is kept for the battle and
+       reused by any later plan (see geometryEpoch for when it is dropped). Same answers, same plans.
+       Controller only; ?controllerRouteSight=0 asks every line again (the old cost). */
+    SIGHT_STORE =
+      /[?&]tacticalController=new(?:&|#|$)/i.test(SEARCH) &&
+      !/[?&]controllerRouteSight=0(?:&|#|$)/i.test(SEARCH),
+    /* Dijkstra never lowers a node's distance through an edge whose cheapest possible cost (its
+       length plus the node's cover penalty, i.e. no exposure at all) already fails to beat it, so
+       such an edge is not walked and sampled. It still spends the plan's edge budget and, when its
+       straight leg is blocked, the native-detour budget it would have spent, so every later edge
+       sees the same budgets: same distances, same route. Only the rejection counters of the
+       planner's audit no longer count edges that could not matter (stats.pruned counts them).
+       Controller only; ?controllerRoutePrune=0 walks every edge (the old cost). */
+    PRUNE =
+      /[?&]tacticalController=new(?:&|#|$)/i.test(SEARCH) &&
+      !/[?&]controllerRoutePrune=0(?:&|#|$)/i.test(SEARCH),
+    STORE_LIMIT = 500000,
+    epoch = null,
+    sightStore = { epoch: null, lines: null, size: 0 };
+  /* Answers that depend on terrain and static geometry alone (a line of sight between two fixed
+     points, a fire line from a man who has not moved) stay true while this token does. A new token
+     is issued when the obstacle set, its physical version, the navigation version, the terrain
+     function or the sight/fire functions change. While a vehicle footprint is on the map there is
+     no token: a moving truck can block a line, so nothing is reused. */
+  function geometryEpoch(sim) {
+    var o = sim && sim.obstacles,
+      A = root.SquadAI,
+      N = root.BattleNavigation;
+    if (!o || !sim.heightAt || (o.__dynamicFootprints && o.__dynamicFootprints.length)) return null;
+    var version = o.length + '|' + (+o.__physicalVersion || 0) + '|' + (N ? N.version : '');
+    if (
+      !epoch ||
+      epoch.obstacles !== o ||
+      epoch.version !== version ||
+      epoch.heightAt !== sim.heightAt ||
+      epoch.sight !== (A && A.hasLineOfSight) ||
+      epoch.suppress !== (A && A.canSuppress)
+    )
+      epoch = {
+        obstacles: o,
+        version: version,
+        heightAt: sim.heightAt,
+        sight: A && A.hasLineOfSight,
+        suppress: A && A.canSuppress
+      };
+    return epoch;
+  }
+  /* The stored answers from one sample point at one eye height (report x -> report z -> seen), or
+     null when nothing may be stored. */
+  function sightRow(sim, at, stance) {
+    if (!SIGHT_STORE) return null;
+    var e = geometryEpoch(sim);
+    if (!e) return null;
+    if (sightStore.epoch !== e || sightStore.size > STORE_LIMIT) {
+      sightStore.epoch = e;
+      sightStore.lines = new Map();
+      sightStore.size = 0;
+    }
+    var byX = sightStore.lines.get(at.x);
+    if (!byX) sightStore.lines.set(at.x, (byX = new Map()));
+    var point = byX.get(at.z);
+    if (!point) byX.set(at.z, (point = { stand: null, low: null }));
+    var key = stance === 'stand' ? 'stand' : 'low';
+    return point[key] || (point[key] = new Map());
+  }
   function distance(a, b) {
     return Math.hypot(a.x - b.x, a.z - b.z);
   }
@@ -39,12 +107,16 @@
     var row = memo ? memo.points.get(at.x) : null,
       known = row ? row.get(at.z) : undefined;
     if (known !== undefined) return known;
-    var h = sim.heightAt(at.x, at.z),
-      seen = false;
+    var h = null,
+      seen = false,
+      lines = sightRow(sim, at, stance);
     for (var k = 0; k < reports.length; k++) {
-      var p = reports[k];
-      if (
-        A.hasLineOfSight(
+      var p = reports[k],
+        toX = lines ? lines.get(p.x) : null,
+        stored = toX ? toX.get(p.z) : undefined;
+      if (stored === undefined) {
+        if (h === null) h = sim.heightAt(at.x, at.z);
+        stored = A.hasLineOfSight(
           {
             root: { position: { x: at.x, z: at.z, y: h + (stance === 'stand' ? 1.6 : 1.0) } },
             crouching: stance !== 'stand'
@@ -54,8 +126,14 @@
             : { root: { position: { x: p.x, z: p.z, y: sim.heightAt(p.x, p.z) + 1.6 } } },
           sim.heightAt,
           sim.obstacles
-        )
-      ) {
+        );
+        if (lines) {
+          if (!toX) lines.set(p.x, (toX = new Map()));
+          toX.set(p.z, stored);
+          sightStore.size++;
+        }
+      }
+      if (stored) {
         seen = true;
         break;
       }
@@ -196,6 +274,7 @@
         nativePathQueries: 0,
         admittedDetours: 0,
         expanded: 0,
+        pruned: 0,
         planLength: 0,
         terminal: 'none'
       };
@@ -281,6 +360,15 @@
         var leg = distance(nodes[from], nodes[k]);
         if (leg < MIN_HOP || leg > MAX_HOP) continue;
         if (++stats.evaluatedEdges > MAX_EDGE_QUERIES) break;
+        if (PRUNE && !(d[from] + leg + Math.max(0, +nodes[k].quality || 0) * 5 < d[k] - 0.0001)) {
+          stats.pruned++;
+          /* physicalLeg's budget step, without the detour it would have planned. */
+          if (detourBudget.left > 0 && N.findPath && !N.movementClear(nodes[from], nodes[k])) {
+            detourBudget.left--;
+            detourBudget.queries++;
+          }
+          continue;
+        }
         var result = edge(
           sim,
           nodes[from],
@@ -554,6 +642,7 @@
     pick: pick,
     pickDefense: pickDefense,
     evaluate: evaluate,
+    geometryEpoch: geometryEpoch,
     tuning: {
       maxHop: MAX_HOP,
       maxExposure: MAX_EXPOSURE,

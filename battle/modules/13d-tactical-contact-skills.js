@@ -16,7 +16,58 @@
        only while the squad's contact is live, only a man standing still, the first eligible in roster order. */
     GRENADE = !(
       typeof location !== 'undefined' && /[?&]controllerGrenade=0(?:&|#|$)/i.test(location.search || '')
-    );
+    ),
+    /* The suppressor scan (update, desired OPEN) asks, every step, whether each free man can put
+       rounds into each sector the squad has seen. A man lying still asks the same question again and
+       again: the answer is a fire line from his spot (muzzle and eye heights come from the stance
+       tried, the range from his weapon) over terrain and static obstacles, so it is kept until he
+       moves, changes weapon or the static geometry changes (BattleTacticalContactRoute.geometryEpoch),
+       and the sectors are asked nearest first. Same answers, same suppressors.
+       ?controllerSuppressorScan=0 asks every sector again every step (the old cost). */
+    SUPPRESSOR_SCAN = !(
+      typeof location !== 'undefined' &&
+      /[?&]controllerSuppressorScan=0(?:&|#|$)/i.test(location.search || '')
+    ),
+    POSTURE_LIMIT = 200000,
+    postures = { epoch: null, men: new WeakMap(), size: 0 };
+  /* E.suppressionStance with the answers of a man who has not moved kept (see SUPPRESSOR_SCAN). */
+  function suppressionPosture(E, s, sim, rec) {
+    if (!E.suppressionStance) return null;
+    var R = root.BattleTacticalContactRoute,
+      e = R && R.geometryEpoch && R.geometryEpoch(sim),
+      w = s.weapon,
+      p = s.root && s.root.position;
+    /* Not a fire line question (no weapon, pinned, the player's yaw-aimed muzzle): ask it live. */
+    if (!e || !w || !p || s.isPlayer || s.dead || s.suppressedUntil > sim.time)
+      return E.suppressionStance(s, sim, rec);
+    if (postures.epoch !== e || postures.size > POSTURE_LIMIT) {
+      postures.epoch = e;
+      postures.men = new WeakMap();
+      postures.size = 0;
+    }
+    var spot = postures.men.get(s);
+    var range = w.stats && w.stats.range;
+    if (
+      !spot ||
+      spot.x !== p.x ||
+      spot.z !== p.z ||
+      spot.weapon !== w ||
+      spot.kind !== w.kind ||
+      spot.range !== range
+    )
+      postures.men.set(
+        s,
+        (spot = { x: p.x, z: p.z, weapon: w, kind: w.kind, range: range, lines: new Map() })
+      );
+    var toX = spot.lines.get(rec.x),
+      known = toX ? toX.get(rec.z) : undefined;
+    if (known !== undefined) return known;
+    known = E.suppressionStance(s, sim, rec) || null;
+    if (!toX) spot.lines.set(rec.x, (toX = new Map()));
+    toX.set(rec.z, known);
+    postures.size++;
+    return known;
+  }
   function state(ctx) {
     var t = ctx.token,
       key = [t.battleId, t.generation, t.controllerEpoch, t.missionVersion].join(':'),
@@ -338,15 +389,35 @@
         if (s.target && observation(s, sim, st).ready) return;
         var best = null,
           rating = Infinity;
-        sectors.forEach(function (rec) {
-          var posture = E.suppressionStance && E.suppressionStance(s, sim, rec);
-          if (!posture) return;
-          var d = Math.hypot(rec.x - s.root.position.x, rec.z - s.root.position.z);
-          if (d < rating) {
-            best = rec;
-            rating = d;
-          }
-        });
+        if (SUPPRESSOR_SCAN) {
+          /* Nearest sector first, stopping at the first he can suppress from where he lies: the same
+             pick as asking every sector and keeping the nearest (ties keep sector order). */
+          var order = sectors
+            .map(function (rec, i) {
+              return { rec: rec, i: i, d: Math.hypot(rec.x - s.root.position.x, rec.z - s.root.position.z) };
+            })
+            .filter(function (o) {
+              return o.d < Infinity;
+            })
+            .sort(function (a, b) {
+              return a.d - b.d || a.i - b.i;
+            });
+          for (var oi = 0; oi < order.length; oi++)
+            if (suppressionPosture(E, s, sim, order[oi].rec)) {
+              best = order[oi].rec;
+              rating = order[oi].d;
+              break;
+            }
+        } else
+          sectors.forEach(function (rec) {
+            var posture = E.suppressionStance && E.suppressionStance(s, sim, rec);
+            if (!posture) return;
+            var d = Math.hypot(rec.x - s.root.position.x, rec.z - s.root.position.z);
+            if (d < rating) {
+              best = rec;
+              rating = d;
+            }
+          });
         if (best) opportunities.push({ man: s, point: { x: best.x, z: best.z }, distance: rating });
       });
     opportunities.sort(function (a, b) {
