@@ -583,6 +583,9 @@
   function coverCandidates(s, battle, threat, maxRange) {
     return coverImpl().coverCandidates(s, battle, threat, maxRange);
   }
+  function coverCandidatesWhere(s, battle, threat, maxRange, keep) {
+    return coverImpl().candidatesWhere(s, battle, threat, maxRange, keep);
+  }
   function coverSnapshot(battle) {
     return coverImpl().coverSnapshot(battle);
   }
@@ -2456,6 +2459,7 @@
   root.BattleCoverPositions = {
     warm: warmCover,
     candidates: coverCandidates,
+    candidatesWhere: coverCandidatesWhere,
     reserve: reserveCover,
     release: releaseCover,
     current: currentCover,
