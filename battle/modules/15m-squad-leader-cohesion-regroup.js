@@ -89,10 +89,11 @@
       }
       return true;
     }
-    /* ?regroupUndeliverable=0 restores the old rule: only a physical stall escalates a regroup. */
-    var UNDELIVERABLE_ON = !/(?:^|[?&])regroupUndeliverable=0(?:&|$)/.test(
-      (root.location && root.location.search) || ''
-    );
+    /* Under ?tacticalController=new only; ?regroupUndeliverable=0 restores the old rule: only a physical stall
+       escalates a regroup. */
+    var UNDELIVERABLE_ON =
+      /(?:^|[?&])tacticalController=new(?:&|#|$)/i.test((root.location && root.location.search) || '') &&
+      !/(?:^|[?&])regroupUndeliverable=0(?:&|$)/.test((root.location && root.location.search) || '');
     function undeliverableMembers(sim, sq, anchor, radius, lease) {
       var CR = root.BattleCommandReception;
       if (!UNDELIVERABLE_ON) return [];
