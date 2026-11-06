@@ -1247,6 +1247,9 @@
     if (CONTACT_STANCE && lowNow)
       e.advanceLowUntil = Math.max(+e.advanceLowUntil || 0, battle.time + LOW_GAP_HOLD);
     var low = lowNow || (CONTACT_STANCE && battle.time < (+e.advanceLowUntil || 0));
+    // An arrived rifleman already lies low. Prepare a crouched march once
+    // movement actually has a leg to walk; a prone-hold is such a leg.
+    if (low && e.stance === 'prone' && s._movementStopReason === 'arrived') return true;
     if (!holdStance(s, battle))
       transitStance(
         s,

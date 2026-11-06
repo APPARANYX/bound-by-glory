@@ -313,6 +313,41 @@ test('an active bound finishes under hold fire before preparation takes over', (
   assert.notEqual(e.state, 'bound', 'preparation cannot resurrect the completed bound');
 });
 
+test('contact march between suppression tasks keeps a prone rifleman down at his arrived position', () => {
+  const { r, b, s } = oneMan();
+  const E = r.BattleEngagement;
+  r.BattleTacticalController = { controls: () => true, dispatch: () => true };
+  load(r, 'battle/movement-resolver.js');
+  s.target = null;
+  s.squad.inContact = true;
+  const start = { x: s.root.position.x, z: s.root.position.z };
+  const sector = { x: start.x, z: start.z + 20 };
+  s.destination = { ...start };
+  function runDrill(drill) {
+    b.time += 1;
+    const task = E.controllerCombat.start(s, b, drill, sector);
+    assert.ok(task);
+    E.updateSoldier(s, b);
+    E.controllerCombat.end(s, b, task);
+  }
+  for (let i = 0; i < 3; i++) {
+    H.stepMovement(b, s, H.AI_TICK);
+    assert.equal(s._movementStopReason, 'arrived');
+    runDrill('suppress');
+    assert.equal(s.eng.stance, 'prone');
+    runDrill('march');
+    assert.equal(s.eng.stance, 'prone', 'no displacement to prepare for');
+  }
+  r.BattleMovementResolver.proposeOrder(s, sector, b, false, 'squad-stability');
+  r.BattleMovementResolver.resolve(s, b);
+  H.stepMovement(b, s, H.AI_TICK);
+  assert.equal(s._movementStopReason, 'prone-hold');
+  runDrill('march');
+  assert.equal(s.eng.stance, 'crouch', 'a real displacement gets its contact march posture');
+  H.stepMovement(b, s, H.AI_TICK);
+  assert.ok(s.root.position.z > start.z, 'physically moves toward the new goal');
+});
+
 test('withdrawal suppression expiry has hysteresis instead of stand-crouch flutter', () => {
   const { r, b, s } = oneMan(),
     E = r.BattleEngagement,
