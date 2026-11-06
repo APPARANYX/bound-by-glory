@@ -32,6 +32,19 @@
      forever. */
   var START_SKIN = 0.06;
   var PORT = !(typeof location !== 'undefined' && /[?&]windowPort=0\b/.test(location.search || ''));
+  /* Wall grid (controller only). Every blocked() query used to test all walls' boxes; the grid hands it only
+     the walls whose boxes share a cell with the query's box, still in wall order, so the first wall hit (the
+     one resolveStep slides along) is the same wall. Long queries crossing many cells keep the full scan.
+     ?fastRouteChecks=0 keeps the full scan everywhere. */
+  var SEARCH = typeof location !== 'undefined' ? location.search || '' : '',
+    WALL_GRID_ON =
+      /[?&]tacticalController=new(?:&|#|$)/i.test(SEARCH) && !/[?&]fastRouteChecks=0(?:&|#|$)/i.test(SEARCH),
+    WALL_CELL = 16,
+    WALL_GRID_MAX_CELLS = 9,
+    wallGrid = null,
+    wallMark = null,
+    wallStamp = 0,
+    wallPick = [];
   /* Firing port (metres). The wall is drawn .32 thick around its plane, so its inner face is .16 behind
      it; a man's body is ~.25 in radius, so .45 is the closest anchor that keeps him off the wall. The old
      inset was .775. FRAME is the margin a ray keeps from the jamb, sill and lintel. EYE and the muzzle
@@ -104,25 +117,98 @@
     }
     return null;
   }
+  function buildWallGrid() {
+    wallGrid = null;
+    if (!WALL_GRID_ON || !walls.length) return;
+    var x0 = Infinity,
+      z0 = Infinity,
+      x1 = -Infinity,
+      z1 = -Infinity;
+    for (var i = 0; i < walls.length; i++) {
+      x0 = Math.min(x0, walls[i].minX);
+      z0 = Math.min(z0, walls[i].minZ);
+      x1 = Math.max(x1, walls[i].maxX);
+      z1 = Math.max(z1, walls[i].maxZ);
+    }
+    if (!(x1 >= x0 && z1 >= z0)) return;
+    var nx = Math.floor((x1 - x0) / WALL_CELL) + 1,
+      nz = Math.floor((z1 - z0) / WALL_CELL) + 1,
+      cells = new Array(nx * nz);
+    for (var w = 0; w < walls.length; w++) {
+      var cx0 = Math.floor((walls[w].minX - x0) / WALL_CELL),
+        cx1 = Math.floor((walls[w].maxX - x0) / WALL_CELL),
+        cz0 = Math.floor((walls[w].minZ - z0) / WALL_CELL),
+        cz1 = Math.floor((walls[w].maxZ - z0) / WALL_CELL);
+      for (var cz = cz0; cz <= cz1; cz++)
+        for (var cx = cx0; cx <= cx1; cx++) (cells[cz * nx + cx] || (cells[cz * nx + cx] = [])).push(w);
+    }
+    wallGrid = { x0: x0, z0: z0, x1: x1, z1: z1, nx: nx, nz: nz, cells: cells };
+    wallMark = new Uint32Array(walls.length);
+    wallStamp = 0;
+  }
+  function wallHit(w, a, b, mode, segLen, minX, maxX, minZ, maxZ) {
+    /* intersection() accepts parameters within EPS of each segment, so boxes padded by that much
+       that do not overlap cannot intersect. */
+    if (w.maxX < minX || w.minX > maxX || w.maxZ < minZ || w.minZ > maxZ) return false;
+    var hit = intersection(a, b, w.a, w.b);
+    if (!hit) return false;
+    if (hit.t * segLen < START_SKIN) return false;
+    if (openingAt(w, hit.u, mode)) return false;
+    return true;
+  }
   function blocked(a, b, mode, ay, by) {
     var segLen = Math.hypot(b.x - a.x, b.z - a.z) || EPS,
       pad = EPS * segLen,
       minX = Math.min(a.x, b.x) - pad,
       maxX = Math.max(a.x, b.x) + pad,
       minZ = Math.min(a.z, b.z) - pad,
-      maxZ = Math.max(a.z, b.z) + pad;
+      maxZ = Math.max(a.z, b.z) + pad,
+      g = wallGrid;
+    if (g) {
+      /* No wall box reaches outside the grid's box, so a query box missing it hits nothing. */
+      if (maxX < g.x0 || minX > g.x1 || maxZ < g.z0 || minZ > g.z1) return null;
+      var cx0 = Math.max(0, Math.floor((minX - g.x0) / WALL_CELL)),
+        cx1 = Math.min(g.nx - 1, Math.floor((maxX - g.x0) / WALL_CELL)),
+        cz0 = Math.max(0, Math.floor((minZ - g.z0) / WALL_CELL)),
+        cz1 = Math.min(g.nz - 1, Math.floor((maxZ - g.z0) / WALL_CELL));
+      if ((cx1 - cx0 + 1) * (cz1 - cz0 + 1) <= WALL_GRID_MAX_CELLS) {
+        var list;
+        if (cx0 === cx1 && cz0 === cz1) list = g.cells[cz0 * g.nx + cx0] || [];
+        else {
+          /* A wall can sit in several of the cells: take it once, then test in wall order. */
+          if (++wallStamp === 0xffffffff) {
+            wallMark.fill(0);
+            wallStamp = 1;
+          }
+          list = wallPick;
+          list.length = 0;
+          for (var cz = cz0; cz <= cz1; cz++)
+            for (var cx = cx0; cx <= cx1; cx++) {
+              var cell = g.cells[cz * g.nx + cx];
+              if (!cell) continue;
+              for (var c = 0; c < cell.length; c++)
+                if (wallMark[cell[c]] !== wallStamp) {
+                  wallMark[cell[c]] = wallStamp;
+                  list.push(cell[c]);
+                }
+            }
+          if (list.length > 1) list.sort(byNumber);
+        }
+        for (var j = 0; j < list.length; j++) {
+          var cw = walls[list[j]];
+          if (wallHit(cw, a, b, mode, segLen, minX, maxX, minZ, maxZ)) return cw;
+        }
+        return null;
+      }
+    }
     for (var i = 0; i < walls.length; i++) {
       var w = walls[i];
-      /* intersection() accepts parameters within EPS of each segment, so boxes padded by that much
-         that do not overlap cannot intersect. */
-      if (w.maxX < minX || w.minX > maxX || w.maxZ < minZ || w.minZ > maxZ) continue;
-      var hit = intersection(a, b, w.a, w.b);
-      if (!hit) continue;
-      if (hit.t * segLen < START_SKIN) continue;
-      if (openingAt(w, hit.u, mode)) continue;
-      return w;
+      if (wallHit(w, a, b, mode, segLen, minX, maxX, minZ, maxZ)) return w;
     }
     return null;
+  }
+  function byNumber(x, y) {
+    return x - y;
   }
   function movementClear(a, b) {
     return !blocked(a, b, 'move');
@@ -253,6 +339,7 @@
     firingStations = [];
     doorPortals = [];
     rejectedWindows = [];
+    wallGrid = null;
     version++;
     if (!s) return;
     (s.buildings || []).forEach(function (b) {
@@ -356,6 +443,7 @@
         }
       });
     });
+    buildWallGrid();
     /* Widely separated 5 km hamlets cannot rely on a 300 m local corner
        graph to connect their approaches. Add public road junction anchors,
        then link only actual, building-clear road segments after the local graph.
