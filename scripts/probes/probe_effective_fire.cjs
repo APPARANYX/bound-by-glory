@@ -99,10 +99,14 @@ const { requestPreview } = require('./preview_request.cjs');
       E.updateSoldier(rifle, b);
       b.onFire = onFire;
       // Sound-ready seam proves the actual shipping scheduler rechecks state.
+      // The backend captures Babylon.Sound during bootstrap, so intercept both constructors.
+      // Otherwise this synthetic filename escapes into real network audio loading (404).
       const NativeSound = BABYLON.Sound,
+        backend = window.BattleAudioBackend,
+        NativeBackendSound = backend && backend.Sound,
         readyCallbacks = [];
       let played = 0;
-      BABYLON.Sound = class {
+      class FixtureSound {
         constructor(name, url, scene, ready) {
           readyCallbacks.push(ready);
           this.onEndedObservable = { addOnce() {} };
@@ -114,24 +118,32 @@ const { requestPreview } = require('./preview_request.cjs');
         play() {
           played++;
         }
-      };
+      }
+      BABYLON.Sound = FixtureSound;
+      if (backend) backend.Sound = FixtureSound;
       const ev = BATTLE_AUDIO_MANIFEST.callouts.ge.events;
       const oldFiles = ev.engage;
-      ev.engage = ['voices/ge/c3-queued-order-fixture.mp3'];
-      const handle = BattleVoiceScheduler.enqueue(leader, 'engage', null);
-      if (!handle) throw Error('fresh staged leader order was not accepted');
-      leader.eng.state = 'freeze';
-      readyCallbacks.forEach(fn => fn());
-      const voice = {
-        accepted: handle.accepted,
-        started: handle.started,
-        ended: handle.ended,
-        played,
-        dazedAllowed: BattleVoiceEligibility.allows(leader, 'dazed'),
-        contactAllowed: BattleVoiceEligibility.allows(leader, 'contactFront')
-      };
-      ev.engage = oldFiles;
-      BABYLON.Sound = NativeSound;
+      let voice;
+      try {
+        ev.engage = ['voices/ge/c3-queued-order-fixture.mp3'];
+        const handle = BattleVoiceScheduler.enqueue(leader, 'engage', null);
+        if (!handle) throw Error('fresh staged leader order was not accepted');
+        if (readyCallbacks.length !== 1) throw Error('fixture must intercept the active audio backend');
+        leader.eng.state = 'freeze';
+        readyCallbacks.forEach(fn => fn());
+        voice = {
+          accepted: handle.accepted,
+          started: handle.started,
+          ended: handle.ended,
+          played,
+          dazedAllowed: BattleVoiceEligibility.allows(leader, 'dazed'),
+          contactAllowed: BattleVoiceEligibility.allows(leader, 'contactFront')
+        };
+      } finally {
+        ev.engage = oldFiles;
+        if (backend) backend.Sound = NativeBackendSound;
+        BABYLON.Sound = NativeSound;
+      }
       b.restart();
       b.pause();
       const recovered = b.factions.ge.squads[0].members.find(s => s.role === 'sergeant');
