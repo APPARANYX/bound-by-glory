@@ -175,6 +175,38 @@ function until(w, predicate, seconds = 20) {
     'condition did not occur: ' + JSON.stringify(w.M.summary(w.q)) + ' ' + JSON.stringify(w.TC.summary(w.b))
   );
 }
+test('no-window early exits do not build unused maneuver basis; eligible updates still build it', () => {
+  const w = world();
+  const A = w.r.BattleAmmunition;
+  const original = A.shotEvidence;
+  let evidenceReads = 0;
+  A.shotEvidence = function (s, sim) {
+    evidenceReads++;
+    return original(s, sim);
+  };
+  const ctx = {
+    sim: w.b,
+    squad: w.q,
+    token: { battleId: 'fixture', generation: 1, controllerEpoch: 1, missionVersion: 1, rosterRevision: 1 },
+    stage: () => null,
+    request: () => ({ ok: false, reason: 'fixture-refusal' }),
+    finish: () => true
+  };
+  w.q.inContact = false;
+  for (let i = 0; i < 20; i++) w.M.update(ctx);
+  assert.equal(evidenceReads, 0, 'no contact requires no per-soldier shot-evidence basis');
+  assert.equal(w.M.summary(w.q).pendingCover, false);
+  assert.equal(w.M.summary(w.q).reason, 'no-authorized-contact');
+  w.q.inContact = true;
+  const Q = w.r.BattleSquadStability;
+  const succession = Q.controllerSuccession;
+  Q.controllerSuccession = () => false;
+  w.M.update(ctx);
+  assert.ok(evidenceReads > 0, 'first eligible decision still rebuilds the authoritative basis');
+  Q.controllerSuccession = succession;
+  A.shotEvidence = original;
+  clean(w);
+});
 test('leader and machine gun require two real forward firing riflemen before a single covered relocation', () => {
   const w = world();
   const Q = w.r.BattleSquadStability;

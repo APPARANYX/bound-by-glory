@@ -714,7 +714,7 @@
       Q = root.BattleSquadStability,
       C = root.BattleCoverPositions,
       rs = reports(ctx),
-      b = basis(ctx, rs),
+      b = st.window ? basis(ctx, rs) : null,
       a = men(ctx.squad),
       defense = defenseBrief(ctx, rs),
       back = ctx.squad.state === 'retreat' || ctx.squad.commandPhase === 'retreat',
@@ -873,6 +873,9 @@
       st.reason = 'stall-released:no-hop';
       return;
     }
+    /* Only a live decision/retry needs the full soldier/contact basis. Early
+       no-window exits consumed none of it; active windows still capture it first. */
+    b = basis(ctx, rs);
     if (st.blocked === b && !(STALL_ON && st.stall && cycle !== st.stall.cycle)) return;
     /* Retreating squads retain immediate replanning even while other stalls are paced. */
     var coarse = STALL_PACE && STALL_ON && st.stall && !back ? stallBasis(ctx, rs) : null;
