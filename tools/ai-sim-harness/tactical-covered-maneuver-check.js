@@ -653,6 +653,69 @@ test('a stalled no-hop squad searches again once a route exists, without its bas
   );
   clean(w);
 });
+function stalledSearches(flags) {
+  // A stalled squad whose men drift a metre each tick (the rounded positions in its basis change every
+  // tick) and whose reported enemy stays put. Counts route plans over three bound cycles.
+  const w = world(150, '&commandPosture=0' + flags);
+  let plans = 0;
+  w.r.BattleTacticalContactRoute.pick = () => {
+    plans++;
+    return {
+      point: null,
+      score: null,
+      exposure: 0,
+      stats: { total: 0, progressing: 0, safe: 0, rejected: { 'no-connected-progress-route': 1 } }
+    };
+  };
+  const drifter = w.q.members[3];
+  for (let i = 0; i < 21 / 0.15; i++) {
+    drifter.root.position.x += i % 2 ? -1.2 : 1.2;
+    tick(w);
+  }
+  const m = w.M.summary(w.q);
+  assert.ok(m.stall, 'the refusal is reported as a stall');
+  return { w, plans, m };
+}
+test('a stalled squad searches again once per bound cycle, not on every metre of drift (?controllerStallPace=0)', () => {
+  const paced = stalledSearches(''),
+    old = stalledSearches('&controllerStallPace=0'),
+    men = paced.w.q.members.length;
+  // 21 s is three 7 s cycles: one search per cycle plus the first, each planning at most every man.
+  assert.ok(paced.plans <= 5 * men, 'paced plans ' + paced.plans + ' for ' + men + ' men');
+  assert.ok(old.plans > 4 * paced.plans, 'old plans ' + old.plans + ' vs paced ' + paced.plans);
+  clean(paced.w);
+});
+test('a stalled squad searches at once when a new contact is reported, inside the same bound cycle', () => {
+  const w = world(150);
+  let plans = 0;
+  w.r.BattleTacticalContactRoute.pick = () => {
+    plans++;
+    return {
+      point: null,
+      score: null,
+      exposure: 0,
+      stats: { total: 0, progressing: 0, safe: 0, rejected: {} }
+    };
+  };
+  w.b.time = 14.05; // the start of a 7 s bound cycle
+  const drifter = w.q.members[3];
+  let i = 0;
+  while (!(w.M.summary(w.q) || {}).stall && i++ < 40) tick(w);
+  assert.ok((w.M.summary(w.q) || {}).stall, 'the refusal is reported as a stall');
+  const stalledAt = plans;
+  for (let k = 0; k < 8; k++) {
+    drifter.root.position.x += k % 2 ? -1.2 : 1.2;
+    tick(w);
+  }
+  assert.equal(plans, stalledAt, 'drift alone waits for the next cycle');
+  const one = w.r.BattleCoverPositions.boundThreats;
+  w.r.BattleCoverPositions.boundThreats = (s, sim) =>
+    one(s, sim).concat([{ x: 40, z: 150, at: w.b.time, confidence: 1, source: 'seen' }]);
+  tick(w);
+  assert.ok(Math.floor(w.b.time / 7) === 2, 'still inside the same cycle');
+  assert.ok(plans > stalledAt, 'a second reported contact searched again at once');
+  clean(w);
+});
 test('a covered retreat and the Squad Leader retreat orders never move a man together (#705)', () => {
   const w = world();
   w.q.establishment = 25; // fixed casualty ratio keeps the native morale owner in retreat
