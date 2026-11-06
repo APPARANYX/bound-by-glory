@@ -27,7 +27,10 @@
     /* ?enrollMissing=0 is the legacy control: a man absent from an unchanged envelope is never enrolled. */
     ENROLL_MISSING = !/[?&]enrollMissing=(?:0|off|false)(?:&|#|$)/i.test(SEARCH),
     /* Other personally reached squadmates may relay an otherwise undeliverable referenced order. */
-    SQUAD_RELAY_ON = RELAY_ON && !/[?&]squadRelay=(?:0|off|false)(?:&|#|$)/i.test(SEARCH);
+    SQUAD_RELAY_ON = RELAY_ON && !/[?&]squadRelay=(?:0|off|false)(?:&|#|$)/i.test(SEARCH),
+    /* ?pendingKeyRead=0 is the control: pendingKey() reports itself unavailable, so the movement
+       publisher reads its pending slot from a full snapshot() copy again. Same answer, more work. */
+    PENDING_KEY_READ = !/[?&]pendingKeyRead=(?:0|off|false)(?:&|#|$)/i.test(SEARCH);
   var FORMAT = 4;
   var TUNING = {
     SOUND: 343,
@@ -599,6 +602,22 @@
       adopted: adoptedOut
     };
   }
+  /* The publish key of a man's still-pending record in one slot, or null when the slot is empty,
+     adopted, unreachable or carries no data. It answers exactly what snapshot().records[slot]
+     would (the phase settle() stored), without copying every record of the man: the movement
+     publisher asks this once per man per Meso tick. */
+  function pendingKey(soldier, battle, category, scope) {
+    if (!ON || !soldier || !battle) return null;
+    var st = settle(battle),
+      by = st && st.bySoldier[String(soldier.id)],
+      rec = by && by[String(category || 'command') + '|' + String(scope || 'squad')];
+    if (!rec || rec.phase === 'adopted' || rec.phase === 'unreachable') return null;
+    if (!rec.data || typeof rec.data !== 'object') return null;
+    /* copyData keeps only primitive fields, so any other key reads as absent, as it did in the copy. */
+    var k = rec.data.publishKey,
+      t = typeof k;
+    return t === 'string' || t === 'number' || t === 'boolean' ? String(k || '') : '';
+  }
   function squadSnapshot(sq, battle) {
     if (!ON || !sq || !battle) return null;
     var st = settle(battle),
@@ -689,6 +708,7 @@
     adoptedView: adoptedView,
     executionCurrent: executionCurrent,
     peek: peek,
+    pendingKey: PENDING_KEY_READ ? pendingKey : null,
     snapshot: snapshot,
     squadSnapshot: squadSnapshot,
     telemetry: telemetry,
