@@ -16,6 +16,16 @@
     ],
     CORRELATION = TOKEN.concat(['actionId', 'actorId', 'capability']),
     REQUEST = CORRELATION.concat(['params']);
+  /* A normalized request is deeply frozen and shape() is a pure function of it, so under the controller
+     (`?tacticalController=new`) re-validating one (every held action, each resourceConflicts call)
+     returns its first result instead of rebuilding it. `?controllerFastChecks=0` restores the rebuild. */
+  var SEARCH = typeof location !== 'undefined' ? location.search || '' : '',
+    shaped =
+      typeof WeakMap === 'function' &&
+      /[?&]tacticalController=new(?:&|#|$)/i.test(SEARCH) &&
+      !/[?&]controllerFastChecks=0(?:&|#|$)/i.test(SEARCH)
+        ? new WeakMap()
+        : null;
   function frozen(value) {
     if (value && typeof value === 'object') {
       Object.keys(value).forEach(function (key) {
@@ -195,6 +205,8 @@
     )
   });
   function shape(request) {
+    var known = shaped && request && typeof request === 'object' ? shaped.get(request) : null;
+    if (known) return known;
     if (!record(request, REQUEST) || !owns(request, REQUEST)) return fail('invalid-request');
     if (!text(request.capability) || !Object.hasOwn(CAPABILITIES, request.capability))
       return fail('unknown-capability');
@@ -283,7 +295,9 @@
       out.params[k] =
         k === 'moverIds' ? p[k].slice() : p[k] && typeof p[k] === 'object' ? { x: p[k].x, z: p[k].z } : p[k];
     });
-    return frozen({ ok: true, reason: 'valid-shape', request: out });
+    var result = frozen({ ok: true, reason: 'valid-shape', request: out });
+    if (shaped) shaped.set(out, result);
+    return result;
   }
   function contextShape(context) {
     if (

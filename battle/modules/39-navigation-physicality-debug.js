@@ -49,6 +49,16 @@
     occupiedRevision = -1,
     legacyCache = null,
     physicalIndexCache = null;
+  /* Cheaper collision checks under the controller (`?tacticalController=new`): footprint axes and the
+     physical version string are cached, and a yes/no clearance query walks the footprint grid with an
+     exact bounding-circle rejection and stops at the first hit instead of collecting every candidate.
+     Every answer is the same; only the work changes. `?controllerFastChecks=0` restores the old path. */
+  var NAV_SEARCH = typeof location !== 'undefined' ? location.search || '' : '',
+    FAST_CHECKS =
+      /[?&]tacticalController=new(?:&|#|$)/i.test(NAV_SEARCH) &&
+      !/[?&]controllerFastChecks=0(?:&|#|$)/i.test(NAV_SEARCH),
+    axesCache = typeof WeakMap === 'function' ? new WeakMap() : null,
+    versionCache = { nav: null, physical: null, count: -1, text: '' };
   var debug = {
     visible: false,
     version: -1,
@@ -109,10 +119,31 @@
   }
   function physicalVersion(sim) {
     var o = sim && sim.obstacles;
-    return N.version + '|' + ((o && o.__physicalVersion) || 0) + '|' + staticFootprints(sim).length;
+    if (!FAST_CHECKS)
+      return N.version + '|' + ((o && o.__physicalVersion) || 0) + '|' + staticFootprints(sim).length;
+    var physical = (o && o.__physicalVersion) || 0,
+      count = staticFootprints(sim).length,
+      v = versionCache;
+    if (v.nav !== N.version || v.physical !== physical || v.count !== count) {
+      v.nav = N.version;
+      v.physical = physical;
+      v.count = count;
+      v.text = N.version + '|' + physical + '|' + count;
+    }
+    return v.text;
   }
   var PHYS_CELL = 28;
+  /* The unit axes are a pure function of the four raw fields, so a cached copy is reused only while
+     those fields are unchanged (a truck footprint can turn). Callers only read the result. */
   function axes(fp) {
+    if (!FAST_CHECKS || !axesCache || !fp || typeof fp !== 'object') return computeAxes(fp);
+    var c = axesCache.get(fp);
+    if (c && c.ux === fp.ux && c.uz === fp.uz && c.vx === fp.vx && c.vz === fp.vz) return c.axes;
+    var a = computeAxes(fp);
+    axesCache.set(fp, { ux: fp.ux, uz: fp.uz, vx: fp.vx, vz: fp.vz, axes: a });
+    return a;
+  }
+  function computeAxes(fp) {
     var ux = isFinite(+fp.ux) ? +fp.ux : 1,
       uz = isFinite(+fp.uz) ? +fp.uz : 0,
       len = Math.hypot(ux, uz) || 1;
@@ -381,13 +412,104 @@
     }
     return out;
   }
+  /* Squared distance from footprint centre (cx, cz) to segment a-b. */
+  function segmentDistance2(a, b, cx, cz) {
+    var dx = b.x - a.x,
+      dz = b.z - a.z,
+      l2 = dx * dx + dz * dz,
+      t = l2 > 1e-12 ? clamp(((cx - a.x) * dx + (cz - a.z) * dz) / l2, 0, 1) : 0,
+      px = a.x + dx * t - cx,
+      pz = a.z + dz * t - cz;
+    return px * px + pz * pz;
+  }
+  /* True only when shapeHit(a, b, fp, margin) is certainly null: every point a hit can report lies
+     inside the margin-inflated shape, so within its bounding circle. A small tolerance keeps rounding
+     on the safe side; anything close is left to the exact test. NaN never rejects. */
+  function certainlyClear(a, b, fp, margin) {
+    var m = shapeMargin(fp, margin || 0),
+      cx,
+      cz,
+      r2;
+    if (fp.shape === 'obb') {
+      var hx = (+fp.hx || 0.5) + m,
+        hz = (+fp.hz || 0.5) + m;
+      cx = +fp.x || 0;
+      cz = +fp.z || 0;
+      r2 = hx * hx + hz * hz;
+    } else {
+      var r = (+fp.radius || 1) + m;
+      cx = fp.x;
+      cz = fp.z;
+      r2 = r * r;
+    }
+    return segmentDistance2(a, b, cx, cz) > r2 * 1.000001 + 1e-6;
+  }
+  /* The yes/no form of gatherStatic + shapeHit used by movementClear and edgeClear: the same candidate
+     set (same grid cells, same dynamic filter, same truck exemption), tested until the first hit.
+     `options` is movementClear's (ignoreDynamicId), null for edgeClear. */
+  function anyFootprintHit(sim, a, b, pad, margin, options) {
+    var p = pad || 0,
+      minX = Math.min(a.x, b.x),
+      maxX = Math.max(a.x, b.x),
+      minZ = Math.min(a.z, b.z),
+      maxZ = Math.max(a.z, b.z),
+      dyn = sim.obstacles && sim.obstacles.__dynamicFootprints,
+      fp,
+      i;
+    if (dyn && dyn.length)
+      for (i = 0; i < dyn.length; i++) {
+        fp = dyn[i];
+        var e = footprintExtents(fp);
+        if (
+          !(
+            fp.x + e.x + p >= minX &&
+            fp.x - e.x - p <= maxX &&
+            fp.z + e.z + p >= minZ &&
+            fp.z - e.z - p <= maxZ
+          )
+        )
+          continue;
+        if (options && options.ignoreDynamicId === fp.id && fp.type === 'truck') continue;
+        if (shapeHit(a, b, fp, margin)) return true;
+      }
+    var idx = physicalIndex(sim);
+    if (!idx || idx.empty) return false;
+    idx.epoch++;
+    if (idx.epoch >= 2147483000) {
+      idx.stamp.fill(0);
+      idx.epoch = 1;
+    }
+    var c0 = clamp(Math.floor((minX - p - idx.minX) / PHYS_CELL), 0, idx.cols - 1),
+      c1 = clamp(Math.floor((maxX + p - idx.minX) / PHYS_CELL), 0, idx.cols - 1),
+      r0 = clamp(Math.floor((minZ - p - idx.minZ) / PHYS_CELL), 0, idx.rows - 1),
+      r1 = clamp(Math.floor((maxZ + p - idx.minZ) / PHYS_CELL), 0, idx.rows - 1);
+    for (var c = c0; c <= c1; c++)
+      for (var r = r0; r <= r1; r++) {
+        var bucket = idx.buckets[c + r * idx.cols];
+        if (!bucket) continue;
+        for (var j = 0; j < bucket.length; j++) {
+          var id = bucket[j];
+          if (idx.stamp[id] === idx.epoch) continue;
+          idx.stamp[id] = idx.epoch;
+          fp = idx.list[id];
+          if (options && options.ignoreDynamicId === fp.id && fp.type === 'truck') continue;
+          if (certainlyClear(a, b, fp, margin)) continue;
+          if (shapeHit(a, b, fp, margin)) return true;
+        }
+      }
+    return false;
+  }
   function edgeClear(sim, a, b, shapes, margin) {
     if (!baseMovementClear(a, b)) return false;
     /* Candidate nodes are capped, collision geometry is not. A detour may leave the original
      corridor or meet a footprint excluded from the candidate budget. */
-    var nearby = gatherStatic(sim, a, b, margin * 1.5 + 0.01);
-    for (var i = 0; i < nearby.length; i++) if (shapeHit(a, b, nearby[i], margin)) return false;
-    for (i = 0; i < shapes.length; i++) if (shapeHit(a, b, shapes[i], margin)) return false;
+    if (FAST_CHECKS) {
+      if (anyFootprintHit(sim, a, b, margin * 1.5 + 0.01, margin, null)) return false;
+    } else {
+      var nearby = gatherStatic(sim, a, b, margin * 1.5 + 0.01);
+      for (var i = 0; i < nearby.length; i++) if (shapeHit(a, b, nearby[i], margin)) return false;
+    }
+    for (var k = 0; k < shapes.length; k++) if (shapeHit(a, b, shapes[k], margin)) return false;
     return true;
   }
 
@@ -888,6 +1010,7 @@
     if (!baseMovementClear(a, b)) return false;
     var sim = currentSim();
     if (!sim) return true;
+    if (FAST_CHECKS) return !anyFootprintHit(sim, a, b, COLLISION_MARGIN + 0.8, COLLISION_MARGIN, options);
     var shapes = gatherStatic(sim, a, b, COLLISION_MARGIN + 0.8);
     for (var i = 0; i < shapes.length; i++) {
       // Only the carrier owner may exempt its own dynamic volume for seat/drive checks.
