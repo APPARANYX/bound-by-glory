@@ -1,9 +1,9 @@
 'use strict';
 /* Controller route planner (13g) work reuse, under ?tacticalController=new:
-   - ?controllerRouteSight: a sample point's line of sight to a reported position is kept for the battle
-     (terrain and static obstacles only) and reused by later plans, by every squadmate's plan and by the
-     next plan; it is dropped when the static geometry changes and not used while a vehicle footprint is
-     on the map.
+   - ?controllerRouteSight: a sample point's line of sight to a reported position is kept (terrain and
+     static obstacles only) and reused by later plans, by every squadmate's plan and by the next plan; it
+     is dropped when the static geometry changes, not used while a vehicle footprint is on the map, and
+     the store starts over at its bound (25k answers, about 4 MB).
    - ?controllerRoutePrune: Dijkstra does not walk an edge whose cheapest possible cost cannot lower the
      node's distance, but still spends the edge and detour budgets it would have spent.
    Both must plan exactly the same routes with less work. Fails on the old code: no store and no pruning
@@ -134,6 +134,32 @@ function route(p) {
     losOff = off.counts.los;
   assert.deepEqual(plans(on), plans(off), 'same routes with a vehicle on the map');
   assert.equal(on.counts.los - losOn, off.counts.los - losOff, 'no stored line is used beside a vehicle');
+}
+/* ---------- the sight store is bounded (about 4 MB) ---------- */
+{
+  const w = world(PRUNE_OFF, sight),
+    limit = w.R.tuning.sightStoreAnswers;
+  assert.ok(limit > 0 && limit <= 25000, 'the sight store keeps at most 25k answers (' + limit + ')');
+  const ask = rs => {
+    const before = w.counts.los;
+    w.R.pick(men[0], w.sim, rs, goals[0], []);
+    return w.counts.los - before;
+  };
+  const first = [reports[0]],
+    cold = ask(first);
+  assert.ok(cold > 0, 'fixture asks lines');
+  assert.equal(ask(first), 0, 'a repeated plan reads every line from the store');
+  /* Each plan toward a new reported position stores the lines it had to ask, until the store starts
+     over and the first plan's lines are asked again. */
+  let kept = cold,
+    most = cold;
+  for (let i = 1; ask(first) === 0; i++) {
+    const n = ask([{ ...reports[0], x: reports[0].x + i / 64 }]);
+    kept += n;
+    most = Math.max(most, n);
+    assert.ok(kept <= limit + most, 'the store starts over at its bound (' + kept + ' lines kept)');
+  }
+  assert.ok(kept > limit, 'and not before it (' + kept + ' of ' + limit + ')');
 }
 /* ---------- edge pruning ---------- */
 {

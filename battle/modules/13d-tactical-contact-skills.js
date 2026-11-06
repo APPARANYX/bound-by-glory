@@ -28,7 +28,11 @@
       typeof location !== 'undefined' &&
       /[?&]controllerSuppressorScan=0(?:&|#|$)/i.test(location.search || '')
     ),
-    POSTURE_LIMIT = 200000,
+    /* The fire-line store starts over after this many answers (about 4 MB, like 13g's sight store).
+       It counts every answer kept since the last start, but a moved man's old answers are already
+       garbage, so far fewer are alive: two meeting battles of up to 600 s kept 14k-22k in all, and
+       the store added no measurable heap. */
+    POSTURE_LIMIT = 25000,
     postures = { epoch: null, men: new WeakMap(), size: 0 };
   /* E.suppressionStance with the answers of a man who has not moved kept (see SUPPRESSOR_SCAN). */
   function suppressionPosture(E, s, sim, rec) {

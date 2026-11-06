@@ -30,8 +30,9 @@
     /* The exposure samples of a plan sit on the straight lines between fixed cover slots, and every
        squadmate's plan, and the next plan, samples the same lines toward the same reported positions.
        Whether one sample point sees one reported position is a question about terrain and static
-       obstacles only (the eye heights come from the stance), so its answer is kept for the battle and
-       reused by any later plan (see geometryEpoch for when it is dropped). Same answers, same plans.
+       obstacles only (the eye heights come from the stance), so its answer is kept and reused by any
+       later plan (see geometryEpoch for when it is dropped, STORE_LIMIT for the bound). Same answers,
+       same plans.
        Controller only; ?controllerRouteSight=0 asks every line again (the old cost). */
     SIGHT_STORE =
       /[?&]tacticalController=new(?:&|#|$)/i.test(SEARCH) &&
@@ -46,7 +47,11 @@
     PRUNE =
       /[?&]tacticalController=new(?:&|#|$)/i.test(SEARCH) &&
       !/[?&]controllerRoutePrune=0(?:&|#|$)/i.test(SEARCH),
-    STORE_LIMIT = 500000,
+    /* The sight store starts over once it holds this many answers, about 4 MB at roughly 165 bytes
+       an answer. Reuse is short-lived (squadmates' plans and the next step's plan against the same
+       reports), so the bound costs little: on two 600 s meeting battles an unbounded store grew to
+       84k-166k answers (+15-27 MB of heap), and this bound kept 97-99% of its reuse. */
+    STORE_LIMIT = 25000,
     epoch = null,
     sightStore = { epoch: null, lines: null, size: 0 };
   /* Answers that depend on terrain and static geometry alone (a line of sight between two fixed
@@ -649,7 +654,8 @@
       maxUnderFireExposure: MAX_UNDER_FIRE_EXPOSURE,
       graphNodes: MAX_NODES,
       graphEdgeBudget: MAX_EDGE_QUERIES,
-      physicalDetourBudget: MAX_PHYSICAL_DETOURS
+      physicalDetourBudget: MAX_PHYSICAL_DETOURS,
+      sightStoreAnswers: STORE_LIMIT
     }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

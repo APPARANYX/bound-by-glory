@@ -20,6 +20,10 @@ const out = process.env.WALL_OUT || '';
 /* WALL_CPUPROF=<second>: record a V8 sampling CPU profile from that simulated second to the end
    (written next to WALL_OUT as .cpuprofile, plus a self-time table by function). */
 const cpuFrom = process.env.WALL_CPUPROF ? +process.env.WALL_CPUPROF : null;
+/* WALL_HEAP=1: run one window at a time and, after each, force a full GC and record the JS heap in
+   use and the window's SquadAI.hasLineOfSight calls (result.heap). For memory only: the forced GCs
+   and the call counter cost wall time, so never read the wall ratio from such a run. */
+const heap = process.env.WALL_HEAP === '1';
 
 const browser = await chromium.launch({
   headless: true,
@@ -49,7 +53,7 @@ try {
   );
   if (profile) await page.addScriptTag({ path: path.resolve('scripts/battle-hotpath-profiler.cjs') });
   await page.evaluate(
-    async ({ seed, seconds, windowS, profile }) => {
+    async ({ seed, seconds, windowS, profile, heap }) => {
       const root = window,
         sim = root.__battle__,
         engine = sim.scene?.getEngine?.(),
@@ -99,7 +103,14 @@ try {
         stepMs = 0;
       const rows = [],
         t0 = performance.now();
-      const st = (root.__wallGrowth = { rows, t0 });
+      const st = (root.__wallGrowth = { rows, t0, los: 0 });
+      /* Wrapped before the battle starts, so stores keyed on the function see one identity. */
+      const los = heap && root.SquadAI && root.SquadAI.hasLineOfSight;
+      if (los)
+        root.SquadAI.hasLineOfSight = function () {
+          st.los++;
+          return los.apply(this, arguments);
+        };
       const alive = f => +(sim.factions?.[f]?.alive || 0);
       /* Activity per window: living and moving man-steps, and rounds fired, so wall time can be read
        per man and per unit of fighting, not only per battle. */
@@ -189,7 +200,7 @@ try {
         };
       };
     },
-    { seed, seconds, windowS, profile }
+    { seed, seconds, windowS, profile, heap }
   );
   let result,
     cdp = null;
@@ -200,7 +211,24 @@ try {
     await cdp.send('Profiler.setSamplingInterval', { interval: 500 });
     await cdp.send('Profiler.start');
   }
+  const heapRows = [];
+  if (heap) {
+    const mem = await page.context().newCDPSession(page);
+    for (let t = windowS; t <= seconds; t += windowS) {
+      const done = await page.evaluate(t => window.__wallGrowth.runTo(t), t);
+      await mem.send('HeapProfiler.collectGarbage');
+      const { usedSize } = await mem.send('Runtime.getHeapUsage');
+      const calls = await page.evaluate(() => {
+        const n = window.__wallGrowth.los;
+        window.__wallGrowth.los = 0;
+        return n;
+      });
+      heapRows.push({ t: done.simulated, usedMB: +(usedSize / 1048576).toFixed(2), losCalls: calls });
+      if (done.winner) break;
+    }
+  }
   result = await page.evaluate(t => window.__wallGrowth.runTo(t), seconds + 1);
+  if (heap) result.heap = heapRows;
   if (cdp) {
     const { profile: cpu } = await cdp.send('Profiler.stop');
     const base = (out || 'wall-growth.json').replace(/\.json$/, '');
@@ -241,6 +269,8 @@ try {
         `\tmanSteps=${r.manSteps}\tmoving=${r.movingSteps}\tshots=${r.shots}` +
         `\tusPerManStep=${r.manSteps ? ((1000 * r.wallMs) / r.manSteps).toFixed(1) : '-'}`
     );
+  for (const h of result.heap || [])
+    console.log(`  heap t=${h.t}\tusedMB=${h.usedMB}\tlosCalls=${h.losCalls}`);
 } finally {
   await browser.close();
 }
