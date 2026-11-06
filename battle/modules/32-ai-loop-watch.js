@@ -25,7 +25,16 @@
     MAX_PERIOD = 5,
     /* Stance changes driven by suppression or cover-seeking are legitimate reactions, not churn.
        If every change in the window has one of these reasons, posture-churn stays silent. */
-    POSTURE_LEGIT_REASONS = { suppression: 1, cover: 1, 'cover-search': 1 };
+    POSTURE_LEGIT_REASONS = { suppression: 1, cover: 1, 'cover-search': 1 },
+    /* Order churn compares each sample's orders only across the men who held an order in both
+       samples. A man who gains or loses an order (a contact stand-down, a resumed march, a covered
+       bound ending) is an authority handoff for him, not a moved destination; averaging a changing
+       set of men turned those handoffs into fake destination changes. Repeated handoffs with no
+       progress raise their own kind, order-handoff-churn, and every order-churn alert reports its
+       population changes. ?orderChurnSameMen=0 restores the whole-population mean (and no handoff kind). */
+    ORDER_CHURN_SAME_MEN = !/[?&]orderChurnSameMen=0(?:&|#|$)/i.test(
+      (root.location && root.location.search) || ''
+    );
   var LABEL_STORE = 'battleAiRuleLabelsV1';
   var labels = loadLabels();
   var ui = {
@@ -400,6 +409,45 @@
     }
     return n ? { x: x / n, z: z / n } : null;
   }
+  /* Each living man's current order point, keyed by man, for the same-men comparison below. */
+  function memberOrders(members) {
+    var out = {};
+    for (var i = 0; i < members.length; i++) {
+      var s = members[i],
+        p = s._fireteamDestination || s.orderDestination;
+      if (s.dead || !p) continue;
+      out[String(s.id)] = { x: +p.x || 0, z: +p.z || 0 };
+    }
+    return out;
+  }
+  /* Destination changes between consecutive samples, measured on the men who held an order in
+     both: the mean of their own shifts. With an unchanged set of men this equals the shift of the
+     squad's mean order. A step in which the set of men holding an order changed is counted apart
+     as a population change. */
+  function orderMoves(h, threshold) {
+    var moved = 0,
+      population = 0;
+    for (var i = 1; i < h.length; i++) {
+      var a = h[i - 1].orders || {},
+        b = h[i].orders || {},
+        dx = 0,
+        dz = 0,
+        n = 0,
+        same = Object.keys(a).length === Object.keys(b).length;
+      for (var id in b) {
+        if (!a[id]) {
+          same = false;
+          continue;
+        }
+        dx += b[id].x - a[id].x;
+        dz += b[id].z - a[id].z;
+        n++;
+      }
+      if (n && Math.hypot(dx / n, dz / n) > threshold) moved++;
+      if (!same) population++;
+    }
+    return { moved: moved, population: population };
+  }
   function pushHistory(map, k, sample) {
     var h = map[k] || (map[k] = []);
     h.push(sample);
@@ -503,6 +551,7 @@
           ruleSequence: alert.rules || [],
           goalWriters: alert.goalWriters || alert.sources || [],
           destinationChanges: alert.destinationChanges || 0,
+          orderPopulationChanges: alert.orderPopulationChanges == null ? null : alert.orderPopulationChanges,
           stanceChanges: alert.stanceChanges || 0,
           stanceReasons: alert.stanceReasons || [],
           travel: alert.travel || 0,
@@ -575,7 +624,8 @@
     if (orderRecent.length && orderRecent[orderRecent.length - 1].orderRegime === 'retreat') return;
     if (orderRecent.length >= 7) {
       var omove = travelStats(orderRecent, 'pos'),
-        ochanges = changes(orderRecent, 'order', 2.5),
+        omoves = ORDER_CHURN_SAME_MEN ? orderMoves(orderRecent, 2.5) : null,
+        ochanges = omoves ? omoves.moved : changes(orderRecent, 'order', 2.5),
         orules = orderRecent
           .map(function (s) {
             return s.rule;
@@ -599,6 +649,34 @@
           travel: +omove.travel.toFixed(1),
           net: +omove.net.toFixed(1),
           destinationChanges: ochanges,
+          orderPopulationChanges: omoves ? omoves.population : null,
+          inContact: !!orderRecent[orderRecent.length - 1].inContact
+        });
+      } else if (
+        omoves &&
+        omoves.population >= 4 &&
+        omove.travel >= 5 &&
+        omove.net < 4.5 &&
+        omove.duration >= 5
+      ) {
+        /* The set of men holding an order keeps changing (stand down, resume, stand down) while the
+           squad goes nowhere. No order moved, so it is not order churn, but an authority flap is a
+           real loop: it gets its own kind so churn is split by cause, not hidden. */
+        emitAlert(sim, {
+          kind: 'order-handoff-churn',
+          severity: 'warn',
+          faction: sq.faction,
+          squadId: sq.id,
+          message: 'Men keep gaining and losing orders while the squad goes nowhere',
+          phases: ophases,
+          rules: Array.from(new Set(orules)),
+          sequence: orderRecent.slice(-6).map(function (s) {
+            return Object.keys(s.orders || {}).length + ' with orders';
+          }),
+          travel: +omove.travel.toFixed(1),
+          net: +omove.net.toFixed(1),
+          destinationChanges: ochanges,
+          orderPopulationChanges: omoves.population,
           inContact: !!orderRecent[orderRecent.length - 1].inContact
         });
       }
@@ -756,12 +834,14 @@
             return !s.dead && s.root;
           }),
           pos = avgPosition(members),
-          order = avgOrder(members);
+          order = avgOrder(members),
+          orders = ORDER_CHURN_SAME_MEN ? memberOrders(members) : null;
         if (!pos) continue;
         var ss = {
           time: sim.time,
           pos: pos,
           order: order,
+          orders: orders,
           orderSig: pointSig(order, 2.5),
           phase: sq.commandPhase || '',
           orderRegime: squadOrderRegime(sq),
@@ -831,7 +911,9 @@
           changeMeta =
             a.kind === 'posture-churn'
               ? (a.stanceChanges || 0) + ' stance changes'
-              : (a.destinationChanges || 0) + ' destination changes',
+              : a.kind === 'order-handoff-churn'
+                ? (a.orderPopulationChanges || 0) + ' order handoffs'
+                : (a.destinationChanges || 0) + ' destination changes',
           meta =
             'travel ' +
             a.travel +
