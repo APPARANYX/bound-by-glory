@@ -19,17 +19,28 @@
     MAX_DETOUR_RATIO = 1.8,
     MAX_DETOUR = 110,
     GOAL_REACH = 24,
-    failedPlans = new WeakMap();
+    failedPlans = new WeakMap(),
+    /* One plan asks the same LOS question many times: every edge out of a node samples that node, and
+       physical detours share navigation corners. Inside one plan nothing moves, so each distinct sample
+       point is asked once and the straight-leg wall check is not repeated. Same answers, same plan.
+       Controller only; ?fastRouteChecks=0 asks every sample again (the old cost). */
+    SEARCH = typeof location !== 'undefined' ? location.search || '' : '',
+    FAST =
+      /[?&]tacticalController=new(?:&|#|$)/i.test(SEARCH) && !/[?&]fastRouteChecks=0(?:&|#|$)/i.test(SEARCH);
   function distance(a, b) {
     return Math.hypot(a.x - b.x, a.z - b.z);
   }
   function point(p) {
     return { x: +p.x, z: +p.z };
   }
-  function threatVisible(sim, at, reports, stance) {
+  function threatVisible(sim, at, reports, stance, memo) {
     var A = root.SquadAI;
     if (!A || !A.hasLineOfSight || !sim.heightAt) return true;
-    var h = sim.heightAt(at.x, at.z);
+    var row = memo ? memo.points.get(at.x) : null,
+      known = row ? row.get(at.z) : undefined;
+    if (known !== undefined) return known;
+    var h = sim.heightAt(at.x, at.z),
+      seen = false;
     for (var k = 0; k < reports.length; k++) {
       var p = reports[k];
       if (
@@ -38,14 +49,33 @@
             root: { position: { x: at.x, z: at.z, y: h + (stance === 'stand' ? 1.6 : 1.0) } },
             crouching: stance !== 'stand'
           },
-          { root: { position: { x: p.x, z: p.z, y: sim.heightAt(p.x, p.z) + 1.6 } } },
+          memo
+            ? memo.targets[k]
+            : { root: { position: { x: p.x, z: p.z, y: sim.heightAt(p.x, p.z) + 1.6 } } },
           sim.heightAt,
           sim.obstacles
         )
-      )
-        return true;
+      ) {
+        seen = true;
+        break;
+      }
     }
-    return false;
+    if (memo) {
+      if (!row) memo.points.set(at.x, (row = new Map()));
+      row.set(at.z, seen);
+    }
+    return seen;
+  }
+  /* A per-plan memo: fixed reports and stance, one sim instant. */
+  function sightMemo(sim, reports, stance) {
+    if (!FAST || !sim.heightAt) return null;
+    return {
+      stance: stance,
+      points: new Map(),
+      targets: reports.map(function (p) {
+        return { root: { position: { x: p.x, z: p.z, y: sim.heightAt(p.x, p.z) + 1.6 } } };
+      })
+    };
   }
   /* A cover slot is a TACTICAL destination, not a route junction the man must
      cross in a straight line. The physical navigator plans the exit from the
@@ -56,7 +86,8 @@
       straight = distance(from, to),
       path = null;
     if (!N || !N.movementClear) return { ok: false, reason: 'navigation-unavailable' };
-    if (N.movementClear(from, to)) path = [point(to)];
+    var straightClear = N.movementClear(from, to);
+    if (straightClear) path = [point(to)];
     else {
       if (!N.findPath) return { ok: false, reason: 'no-native-ingress-egress' };
       if (budget && budget.left <= 0) return { ok: false, reason: 'nav-detour-budget' };
@@ -78,7 +109,9 @@
         return { ok: false, reason: 'invalid-physical-detour' };
       p = point(p);
       var length = distance(cursor, p);
-      if (!N.movementClear(cursor, p)) return { ok: false, reason: 'blocked-physical-segment' };
+      /* The straight leg was just checked from the same two points. */
+      if (!(FAST && straightClear && i === 0) && !N.movementClear(cursor, p))
+        return { ok: false, reason: 'blocked-physical-segment' };
       total += length;
       if (total > maxTravel) return { ok: false, reason: 'overlong-physical-detour' };
       if (length > 0.01) points.push(p);
@@ -90,7 +123,7 @@
     if (straight > MAX_HOP || total < MIN_HOP) return { ok: false, reason: 'outside-contact-hop' };
     return { ok: true, distance: total, points: points, detour: points.length > 2 };
   }
-  function edge(sim, from, to, reports, underFire, strict, budget, stance) {
+  function edge(sim, from, to, reports, underFire, strict, budget, stance, memo) {
     var out = { eligible: false, reason: 'unknown', distance: distance(from, to), exposure: 1 };
     if (!reports || !reports.length) {
       out.reason = 'missing-reported-contact';
@@ -118,7 +151,7 @@
         var t = i / steps,
           at = { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t };
         samples++;
-        if (threatVisible(sim, at, reports, stance)) exposed++;
+        if (threatVisible(sim, at, reports, stance, memo)) exposed++;
       }
     }
     out.distance = transit.distance;
@@ -132,13 +165,13 @@
     out.reason = transit.detour ? 'native-egress-ingress-detour' : 'traversable-real-cover-leg';
     return out;
   }
-  function evaluate(s, sim, dest, reports, underFire, stance) {
+  function evaluate(s, sim, dest, reports, underFire, stance, memo) {
     if (!s || !s.root || !dest)
       return { eligible: false, reason: 'missing-actor-or-waypoint', distance: Infinity, exposure: 1 };
     /* A live movement request is validated independently, never throttled by
        the planning graph's performance budget. The actual physical mover will
        then revalidate and navigate its own B→B1→C sequence. */
-    return edge(sim, s.root.position, dest, reports, underFire, true, null, stance);
+    return edge(sim, s.root.position, dest, reports, underFire, true, null, stance, memo);
   }
   function crossTrack(p, start, goal) {
     var dx = goal.x - start.x,
@@ -180,8 +213,10 @@
     /* Cover nodes come from real obstacle-backed slots. Never project imaginary
        virtual cover spots, and never reserve a future waypoint in advance. */
     var chosen = [],
-      seen = new Set();
+      seen = new Set(),
+      order = FAST ? new Map() : null;
     candidates.forEach(function (p) {
+      var track;
       if (
         !p ||
         !Number.isFinite(p.x) ||
@@ -190,18 +225,21 @@
         (taken || []).some(function (q) {
           return distance(q, p) < 2;
         }) ||
-        crossTrack(p, here, target) > MAX_DETOUR
+        (track = crossTrack(p, here, target)) > MAX_DETOUR
       )
         return;
       if (p.slotId) seen.add(String(p.slotId));
+      if (order) order.set(p, track + 0.12 * distance(p, here));
       chosen.push(p);
     });
     stats.total = chosen.length;
     chosen.sort(function (a, b) {
       return (
-        crossTrack(a, here, target) +
-          0.12 * distance(a, here) -
-          (crossTrack(b, here, target) + 0.12 * distance(b, here)) ||
+        (order
+          ? order.get(a) - order.get(b)
+          : crossTrack(a, here, target) +
+            0.12 * distance(a, here) -
+            (crossTrack(b, here, target) + 0.12 * distance(b, here))) ||
         String(a.slotId).localeCompare(String(b.slotId))
       );
     });
@@ -219,7 +257,8 @@
           root.BattleEngagement.underFireNow(s, sim)
         );
     d[0] = 0;
-    var detourBudget = { left: MAX_PHYSICAL_DETOURS, queries: 0 };
+    var detourBudget = { left: MAX_PHYSICAL_DETOURS, queries: 0 },
+      memo = sightMemo(sim, reports, undefined);
     /* Positive edge costs permit detours/backtracking. A first edge must pass
        the same strict safety rule Engagement will enforce before adoption.
        Later edges are estimated using their own actual nav/LOS geometry and
@@ -236,7 +275,17 @@
         var leg = distance(nodes[from], nodes[k]);
         if (leg < MIN_HOP || leg > MAX_HOP) continue;
         if (++stats.evaluatedEdges > MAX_EDGE_QUERIES) break;
-        var result = edge(sim, nodes[from], nodes[k], reports, underFire, from === 0, detourBudget);
+        var result = edge(
+          sim,
+          nodes[from],
+          nodes[k],
+          reports,
+          underFire,
+          from === 0,
+          detourBudget,
+          undefined,
+          memo
+        );
         if (result.detour && result.eligible) stats.admittedDetours++;
         if (!result.eligible) {
           stats.rejected[result.reason] = (stats.rejected[result.reason] || 0) + 1;
@@ -304,7 +353,7 @@
       point: point(waypoints[0]),
       waypoints: waypoints,
       score: +rating.toFixed(2),
-      exposure: evaluate(s, sim, waypoints[0], reports, underFire).exposure,
+      exposure: evaluate(s, sim, waypoints[0], reports, underFire, undefined, memo).exposure,
       stats: stats
     };
   }

@@ -1005,6 +1005,17 @@
     else s.orderDestination = copy(s._fireteamDestination);
     return true;
   }
+  /* The publish key of this man's movement record while he is still processing it, else null.
+     pendingKey reads the one slot in place; without it (?pendingKeyRead=0) the slot comes from a
+     full snapshot copy of all his records, which gives the same answer. */
+  function pendingMovementKey(CR, s, battle, scope) {
+    if (CR.pendingKey) return CR.pendingKey(s, battle, 'movement', scope);
+    var view = CR.snapshot && CR.snapshot(s, battle),
+      pending = view && view.records && view.records['movement|' + scope];
+    return pending && pending.phase !== 'adopted' && pending.phase !== 'unreachable' && pending.data
+      ? String(pending.data.publishKey || '')
+      : null;
+  }
   function publishPersonalMovement(sq, battle, s, next, publishKey, urgent, kind, reason, stats, options) {
     var CR = root.BattleCommandReception,
       opt = options || {};
@@ -1048,16 +1059,8 @@
     }
 
     var scope = movementScope(s),
-      slot = 'movement|' + scope,
-      view = CR.snapshot && CR.snapshot(s, battle),
-      pending = view && view.records && view.records[slot],
-      adopted = CR.adoptedView && CR.adoptedView(s, battle, 'movement', scope),
-      samePending =
-        pending &&
-        pending.phase !== 'adopted' &&
-        pending.phase !== 'unreachable' &&
-        pending.data &&
-        String(pending.data.publishKey || '') === String(publishKey || '');
+      samePending = pendingMovementKey(CR, s, battle, scope) === String(publishKey || ''),
+      adopted = CR.adoptedView && CR.adoptedView(s, battle, 'movement', scope);
 
     /* Freeze one replacement while this man is still processing it. Fireteam geometry may keep
        sliding with the formation every Meso tick; that must not continuously replace the pending
