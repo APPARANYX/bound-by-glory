@@ -21,6 +21,15 @@
     STALL_PACE = !/[?&]controllerStallPace=(?:0|off|false)(?:&|#|$)/i.test(
       typeof location !== 'undefined' ? location.search || '' : ''
     ),
+    /* Controller-only skill; each recovered saving has its own off flag. ?controllerLazyBasis=0 builds the
+       decision basis on every update; ?controllerReserveShooters=0 routes the last one or two covering shooters
+       again before the holder rule refuses them. */
+    LAZY_BASIS = !/[?&]controllerLazyBasis=0(?:&|#|$)/i.test(
+      typeof location !== 'undefined' ? location.search || '' : ''
+    ),
+    RESERVE_SHOOTERS = !/[?&]controllerReserveShooters=0(?:&|#|$)/i.test(
+      typeof location !== 'undefined' ? location.search || '' : ''
+    ),
     states = new WeakMap(),
     teams = ['alpha', 'bravo', 'charlie'],
     MAX_PARALLEL_MOVERS = 3;
@@ -501,7 +510,7 @@
       if (lateral && team !== lateral.team) return;
       /* An irreplaceable covering shooter cannot be selected for a bound,
          independent of candidate ranking or the availability of cover. */
-      if (firing.size <= 2 && firing.has(String(s.id))) {
+      if (RESERVE_SHOOTERS && firing.size <= 2 && firing.has(String(s.id))) {
         audit.teams.push({
           team: team,
           moverId: String(s.id),
@@ -738,7 +747,7 @@
       Q = root.BattleSquadStability,
       C = root.BattleCoverPositions,
       rs = reports(ctx),
-      b = st.window ? basis(ctx, rs) : null,
+      b = st.window || !LAZY_BASIS ? basis(ctx, rs) : null,
       a = men(ctx.squad),
       defense = defenseBrief(ctx, rs),
       back = ctx.squad.state === 'retreat' || ctx.squad.commandPhase === 'retreat',
@@ -899,7 +908,7 @@
     }
     /* Only a live decision/retry needs the full soldier/contact basis. Early
        no-window exits consumed none of it; active windows still capture it first. */
-    b = basis(ctx, rs);
+    if (b == null) b = basis(ctx, rs);
     if (st.blocked === b && !(STALL_ON && st.stall && cycle !== st.stall.cycle)) return;
     /* Retreating squads retain immediate replanning even while other stalls are paced. */
     var coarse = STALL_PACE && STALL_ON && st.stall && !back ? stallBasis(ctx, rs) : null;
