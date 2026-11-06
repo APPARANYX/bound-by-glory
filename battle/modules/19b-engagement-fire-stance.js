@@ -246,6 +246,13 @@
     }
     function commitStance(s, battle, stance, seconds, reason) {
       var e = state(s);
+      /* Reload is a live weapon obligation, not an expired posture lease.
+         Keep the stance chosen by Engagement at crouch or lower until the
+         ammunition owner finishes, even when a station/march pose renews. */
+      if (s.reloading && stance === 'stand' && reason !== 'player-possession') {
+        stance = e.stance === 'prone' || e.stance === 'crawl' ? e.stance : 'crouch';
+        reason = 'reload';
+      }
       /* The controller's actual possession-entry API is a provenance barrier,
          even when possession and release occur between simulation ticks. */
       if (reason === 'player-possession') e.possessionEpoch = (+e.possessionEpoch || 0) + 1;
