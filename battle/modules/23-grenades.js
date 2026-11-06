@@ -436,7 +436,11 @@
      still belong to this owner; callers cannot supply an unseen aim point. */
   /* Read-only, first-rejection diagnostics. No extra grenade authorization,
      no knowledge of hidden enemies and no new decision clock. */
-  function assaultAssessment(s, battle) {
+  /* `policy` is the controller's grenade policy (13d, `?controllerGrenade=0` off): a man walking
+     on the march may stop to throw, as the legacy contact choice let him (the windup holds him).
+     A covered-bound or urgent mover still finishes his hop. An eligible answer also says whether
+     his rifle can reach the aim, the legacy reason to prefer the grenade. */
+  function assaultAssessment(s, battle, policy) {
     var E = root.BattleEngagement,
       TC = root.BattleTacticalController,
       sq = s && s.squad;
@@ -445,7 +449,7 @@
     }
     if (!sq || !battle || !TC || !TC.controls(battle, sq)) return no('no-controller');
     if (s.isPlayer || s.dead || s.incapacitated) return no('actor-ineligible');
-    if (s.moving || (s.eng && s.eng.urgentBound)) return no('already-moving');
+    if ((s.moving && !policy) || (s.eng && s.eng.urgentBound)) return no('already-moving');
     if (root.BattleTacticalPositions && root.BattleTacticalPositions.current(s))
       return no('claimed-firing-station');
     if (sq.state === 'retreat' || sq.commandPhase === 'retreat') return no('squad-retreat');
@@ -460,15 +464,20 @@
     if (!friendClear(s, battle, aim)) return no('friendly-fragment-risk');
     var path = preview(s, battle, aim);
     if (!path || !path.legal) return no('ballistic-throw-blocked');
-    return { ok: true, reason: 'eligible', aim: aim };
+    var result = { ok: true, reason: 'eligible', aim: aim };
+    if (policy) {
+      result.rifleBlocked = !root.SquadAI.canSuppress(s, aim, battle, true);
+      result.distance = dist(s.root.position, aim);
+    }
+    return result;
   }
-  function assaultOpportunity(s, battle) {
-    var result = assaultAssessment(s, battle);
+  function assaultOpportunity(s, battle, policy) {
+    var result = assaultAssessment(s, battle, policy);
     return result.ok ? result.aim : null;
   }
-  function assaultThrow(s, battle) {
-    var aim = assaultOpportunity(s, battle);
-    return aim ? commit(s, battle, aim, 'covered-assault') : null;
+  function assaultThrow(s, battle, policy) {
+    var aim = assaultOpportunity(s, battle, policy);
+    return aim ? commit(s, battle, aim, policy ? 'contact-policy' : 'covered-assault') : null;
   }
   function reviewDue(s, battle) {
     if (!ON || !s || !battle) return false;

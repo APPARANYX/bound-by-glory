@@ -11,6 +11,11 @@
     /* ?contactFireResume=0 restores the old reset: any gap in the squad's contact drops its fire discipline. */
     RESUME = !(
       typeof location !== 'undefined' && /[?&]contactFireResume=0(?:&|#|$)/i.test(location.search || '')
+    ),
+    /* Grenade policy (see chooseGrenadier). ?controllerGrenade=0 restores the close-assault finisher alone:
+       only while the squad's contact is live, only a man standing still, the first eligible in roster order. */
+    GRENADE = !(
+      typeof location !== 'undefined' && /[?&]controllerGrenade=0(?:&|#|$)/i.test(location.search || '')
     );
   function state(ctx) {
     var t = ctx.token,
@@ -186,6 +191,9 @@
       st.roles.clear();
       st.points.clear();
       st.grenadier = null;
+      /* A man's own fresh sighting outlives the squad's contact by a little (the grenade owner's
+         CONTACT_FRESH): legacy reviewed it as a grenade decision, so the policy still does. */
+      if (GRENADE) chooseGrenadier(sq, sim, st);
       st.reason = 'contact-clear';
       /* A gap in sightings is not a new engagement: the discipline the squad reached is kept, and a
          re-sighting inside RESUME_MEMORIES of the last sighting resumes OPEN (below) instead of restarting HOLD. */
@@ -357,10 +365,20 @@
         return id;
       })
     );
-    /* One native grenade at a time per squad. This is a controller decision;
-       the grenade owner supplies the read-only personal-intel/arc/safety query
-       and revalidates at execution. A mover finishes his physical hop first. */
+    chooseGrenadier(sq, sim, st);
+    reconcile(ctx, st);
+  }
+  /* One native grenade at a time per squad. This is a controller decision; the grenade owner
+     supplies the read-only personal-intel/arc/safety query and revalidates at execution. A
+     covered-bound mover finishes his physical hop first; a machine gunner stays the base of fire.
+     The policy (on unless ?controllerGrenade=0) carries the legacy reason for a grenade into the
+     choice: among the eligible men, the one whose rifle cannot reach his contact throws first,
+     then the nearest; a man walking on the march may stop to throw; and a fresh personal
+     sighting is still a grenade decision after the squad's contact has cleared. */
+  function chooseGrenadier(sq, sim, st) {
     var G = root.BattleGrenades,
+      A = root.SquadAI,
+      Q = root.BattleSquadStability,
       pendingGrenadier =
         G &&
         members(sq).find(function (s) {
@@ -374,34 +392,47 @@
       selectedId: st.grenadier
     };
     if (
-      G &&
-      G.assaultAssessment &&
-      !st.grenadier &&
-      !retreat(sq) &&
-      !G.projectiles(sim).some(function (g) {
+      !G ||
+      !G.assaultAssessment ||
+      st.grenadier ||
+      retreat(sq) ||
+      G.projectiles(sim).some(function (g) {
         return g.byRef && g.byRef.squad === sq;
       })
-    ) {
-      var grenadier = members(sq).find(function (s) {
-        if (A.isMachineGun(s)) return false;
-        if (Q.controllerBound && Q.controllerBound.role(s, sim) === 'move') {
-          st.grenadeDiagnostic.reasons['assigned-covered-mover'] =
-            (st.grenadeDiagnostic.reasons['assigned-covered-mover'] || 0) + 1;
-          return false;
-        }
-        var decision = G.assaultAssessment(s, sim);
-        st.grenadeDiagnostic.considered++;
-        if (!decision.ok)
-          st.grenadeDiagnostic.reasons[decision.reason] =
-            (st.grenadeDiagnostic.reasons[decision.reason] || 0) + 1;
-        return decision.ok;
-      });
-      if (grenadier) {
-        st.grenadier = String(grenadier.id);
-        st.grenadeDiagnostic.selectedId = st.grenadier;
+    )
+      return;
+    var best = null;
+    members(sq).some(function (s) {
+      if (A.isMachineGun(s)) return false;
+      if (Q.controllerBound && Q.controllerBound.role(s, sim) === 'move') {
+        st.grenadeDiagnostic.reasons['assigned-covered-mover'] =
+          (st.grenadeDiagnostic.reasons['assigned-covered-mover'] || 0) + 1;
+        return false;
       }
+      var decision = G.assaultAssessment(s, sim, GRENADE);
+      st.grenadeDiagnostic.considered++;
+      if (!decision.ok) {
+        st.grenadeDiagnostic.reasons[decision.reason] =
+          (st.grenadeDiagnostic.reasons[decision.reason] || 0) + 1;
+        return false;
+      }
+      if (!GRENADE) {
+        best = { man: s };
+        return true;
+      }
+      if (
+        !best ||
+        +!decision.rifleBlocked - +!best.rifleBlocked < 0 ||
+        (decision.rifleBlocked === best.rifleBlocked && decision.distance < best.distance)
+      )
+        best = { man: s, rifleBlocked: decision.rifleBlocked, distance: decision.distance };
+      return false;
+    });
+    if (best) {
+      st.grenadier = String(best.man.id);
+      st.grenadeDiagnostic.selectedId = st.grenadier;
+      if (GRENADE) st.grenadeDiagnostic.rifleBlocked = best.rifleBlocked;
     }
-    reconcile(ctx, st);
   }
   /* No shared report becomes a personal target or a permission to shoot. A man without a usable
      line yields locomotion to the march provider; the later covered-bound skill will choose cover. */
@@ -426,7 +457,7 @@
       st &&
       st.grenadier === String(s.id) &&
       root.BattleGrenades &&
-      (root.BattleGrenades.pendingOf(s, sim) || root.BattleGrenades.assaultOpportunity(s, sim))
+      (root.BattleGrenades.pendingOf(s, sim) || root.BattleGrenades.assaultOpportunity(s, sim, GRENADE))
     )
       return 'grenade';
     if (s.target) {
@@ -485,6 +516,7 @@
     st.rejected[id] = result.ok ? null : result.reason;
   }
   root.BattleTacticalContactSkills = {
+    grenadePolicy: GRENADE,
     release: function (ctx, man) {
       var st = state(ctx);
       st.men.forEach(function (a, id) {
