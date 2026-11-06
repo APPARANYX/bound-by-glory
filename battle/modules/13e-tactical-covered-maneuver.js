@@ -7,6 +7,20 @@
   var STALL_ON = !/[?&]noHopStall=0(?:&|#|$)/i.test(
       typeof location !== 'undefined' ? location.search || '' : ''
     ),
+    /* A refill search is asked only when the Meso bound could enroll someone: under three movers, three
+       capable holders and one of them with a supporting shot since the lease began (16
+       controllerBound.enroll refuses every man otherwise). ?controllerRefillGate=0 searches every tick. */
+    REFILL_GATE = !/[?&]controllerRefillGate=(?:0|off|false)(?:&|#|$)/i.test(
+      typeof location !== 'undefined' ? location.search || '' : ''
+    ),
+    /* A stalled squad (no hop, 13e stall) searches again once per Squad Leader bound cycle, or at once when
+       its phase, contact, navigation, flank goal, report count, a man's capability or whether he has just
+       fired changes; a man's metre of drift or a report's shift waits for the next cycle. A retreating
+       squad is never paced. ?controllerStallPace=0 searches again
+       on every basis change (any man's rounded position or last shot). */
+    STALL_PACE = !/[?&]controllerStallPace=(?:0|off|false)(?:&|#|$)/i.test(
+      typeof location !== 'undefined' ? location.search || '' : ''
+    ),
     states = new WeakMap(),
     teams = ['alpha', 'bravo', 'charlie'],
     MAX_PARALLEL_MOVERS = 3;
@@ -220,6 +234,26 @@
           Math.round(s.root.position.z),
           viable(s, ctx.sim),
           shot && Number.isFinite(+shot.at) ? +shot.at : null
+        ];
+      })
+    ]);
+  }
+  function stallBasis(ctx, rs) {
+    return JSON.stringify([
+      ctx.squad.state === 'retreat' || ctx.squad.commandPhase === 'retreat',
+      ctx.squad.commandPhase,
+      !!ctx.squad.inContact,
+      root.BattleNavigation && root.BattleNavigation.version,
+      flankBasis(ctx.squad),
+      rs.length,
+      men(ctx.squad).map(function (s) {
+        /* A man who has just fired can unlock a refused support relocation (supportRelocation reads the
+           same 3 s window), so starting or stopping fire is a new basis. */
+        var E = root.BattleEngagement;
+        return [
+          s.id,
+          viable(s, ctx.sim),
+          !!(E && E.supportDischarged && E.supportDischarged(s, ctx.sim, ctx.sim.time - 3))
         ];
       })
     ]);
@@ -582,6 +616,19 @@
       defenseSector: defense ? defense.sector : null
     };
   }
+  function refillPossible(ctx, h) {
+    var E = root.BattleEngagement,
+      capable = (h.holders || []).filter(function (s) {
+        return s && !s.dead && !s.incapacitated && s.hp > 0 && s.weapon && !s.outOfAmmo;
+      });
+    return (
+      (h.movers || []).length < MAX_PARALLEL_MOVERS &&
+      capable.length >= 3 &&
+      capable.some(function (s) {
+        return E.supportDischarged(s, ctx.sim, h.lease.since);
+      })
+    );
+  }
   /* Refill freed personal-movement slots under the same Meso authorization.
      Never stop a man already bound just because another arrived. */
   function replenish(ctx, st, rs) {
@@ -592,6 +639,7 @@
         return !st.arrived.has(id) && !st.interrupted.has(id);
       });
     if (!h || !h.armed || !h.moverIds || st.supportRelocation || active.length >= MAX_PARALLEL_MOVERS) return;
+    if (REFILL_GATE && !refillPossible(ctx, h)) return;
     var excluded = new Set(
       active
         .map(function (p) {
@@ -826,6 +874,9 @@
       return;
     }
     if (st.blocked === b && !(STALL_ON && st.stall && cycle !== st.stall.cycle)) return;
+    /* Retreating squads retain immediate replanning even while other stalls are paced. */
+    var coarse = STALL_PACE && STALL_ON && st.stall && !back ? stallBasis(ctx, rs) : null;
+    if (coarse && st.stall.basis === coarse && cycle === st.stall.cycle) return;
     var selected = choose(ctx, st, rs);
     if (!selected) {
       st.blocked = b;
@@ -842,6 +893,7 @@
           };
         st.stall.retries++;
         st.stall.cycle = cycle;
+        if (STALL_PACE) st.stall.basis = stallBasis(ctx, rs);
         if (st.stall.released) st.reason = 'stall-released:no-hop';
         else if (ctx.sim.time - st.stall.since >= tune.lead.reviewAfter) {
           st.stall.released = true;
