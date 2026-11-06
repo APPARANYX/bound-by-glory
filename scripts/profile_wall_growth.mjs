@@ -101,6 +101,18 @@ try {
         t0 = performance.now();
       const st = (root.__wallGrowth = { rows, t0 });
       const alive = f => +(sim.factions?.[f]?.alive || 0);
+      /* Activity per window: living and moving man-steps, and rounds fired, so wall time can be read
+       per man and per unit of fighting, not only per battle. */
+      const roster = () =>
+        ['us', 'ge'].flatMap(f => (sim.factions?.[f]?.squads || []).flatMap(q => q.members || []));
+      let manSteps = 0,
+        movingSteps = 0,
+        shots = 0;
+      const priorFire = sim.onFire;
+      sim.onFire = function () {
+        shots++;
+        return priorFire ? priorFire.apply(this, arguments) : undefined;
+      };
       st.runTo = until => {
         while (!sim.winner && sim.time < Math.min(until, seconds + 0.5) && steps < 5000) {
           const a = performance.now();
@@ -112,6 +124,11 @@ try {
           }
           const b = performance.now();
           stepMs += b - a;
+          for (const m of roster())
+            if (!m.dead) {
+              manSteps++;
+              if (m.moving) movingSteps++;
+            }
           steps++;
           acc += dt;
           while (acc + 1e-9 >= tick && !sim.winner) {
@@ -128,8 +145,14 @@ try {
               cmdMs: Math.round(cmdMs),
               us: alive('us'),
               ge: alive('ge'),
+              manSteps,
+              movingSteps,
+              shots,
               profile: prof ? prof.snapshot(0) : undefined
             });
+            manSteps = 0;
+            movingSteps = 0;
+            shots = 0;
             wStart = now;
             stepMs = 0;
             cmdMs = 0;
@@ -213,7 +236,11 @@ try {
     `${url.replace(/^.*\?/, '')} seed=${seed} sim=${result.simulated}s wall=${(result.totalMs / 1000).toFixed(1)}s winner=${result.winner} fingerprint=${result.fingerprint} errors=${errors.length}`
   );
   for (const r of result.rows)
-    console.log(`  t=${r.t}\twall=${r.wallMs}\tstep=${r.stepMs}\tcmd=${r.cmdMs}\tus=${r.us}\tge=${r.ge}`);
+    console.log(
+      `  t=${r.t}\twall=${r.wallMs}\tstep=${r.stepMs}\tcmd=${r.cmdMs}\tus=${r.us}\tge=${r.ge}` +
+        `\tmanSteps=${r.manSteps}\tmoving=${r.movingSteps}\tshots=${r.shots}` +
+        `\tusPerManStep=${r.manSteps ? ((1000 * r.wallMs) / r.manSteps).toFixed(1) : '-'}`
+    );
 } finally {
   await browser.close();
 }
