@@ -171,6 +171,31 @@ test('resolver coalesces repeated combat intents', () => {
   M.proposeCombat(s, { x: 2, z: 3 }, b, 'hold', 0.8, { source: 'engagement', reason: 'contact' });
   assert.equal(m.bySource.engagement.requests, 2, 'a stable intent republishes after the refresh window');
 });
+test('a renewed engagement hold survives a squad rebrief between two resolves', () => {
+  const { r } = root();
+  const b = H.makeBattle(r);
+  const q = H.addSquad(r, b, { id: 'us-0', faction: 'us', x: 0, z: 0, objective: { x: 0, z: 100 } });
+  const s = q.members[0];
+  const M = r.BattleMovementResolver;
+  const hold = { x: s.root.position.x, z: s.root.position.z };
+  const advance = { x: hold.x, z: hold.z + 25 };
+  const renew = () => M.proposeCombat(s, hold, b, 'hold', 0.8, { source: 'engagement', reason: 'contact' });
+  M.proposeOrder(s, advance, b, false);
+  renew();
+  M.resolve(s, b);
+  assert.equal(s._movementResolver.goal.kind, 'hold');
+  q._engagementPlan = { serial: 2 };
+  b.time += 0.15;
+  renew();
+  M.resolve(s, b);
+  assert.equal(s._movementResolver.goal.kind, 'hold', 'current request still holds the firing position');
+  assert.deepEqual(s.destination, hold);
+  M.clearCombat(s);
+  M.resolve(s, b);
+  assert.equal(s._movementResolver.goal.kind, 'formation', 'explicit release still permits the advance');
+  assert.deepEqual(s.destination, advance);
+});
+
 test('resolver keeps a hold point sticky under small body drift', () => {
   const { r } = root(),
     b = H.makeBattle(r),
