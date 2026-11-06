@@ -80,8 +80,15 @@ contact skill for one eligible non-moving rifleman per squad. The grenade owner'
 `assaultOpportunity` checks personally known fresh contact, 30 m range, inventory/cooldown,
 fire permission, a clear physical throw arc and native friendly clearance. Engagement calls
 `assaultThrow` to revalidate and commit; the native grenade clock alone releases and detonates.
-A usable rifle line does not veto this explicitly requested finisher. Legacy opportunistic
-grenade policy is unchanged. A live squad grenade prevents another finisher until it bursts.
+A usable rifle line does not veto this explicitly requested finisher. A live squad grenade
+prevents another finisher until it bursts. The controller's grenade policy (on under the
+controller, `?controllerGrenade=0` restores the finisher alone) carries the legacy reason for a
+grenade into that one choice: among the eligible men, the one whose rifle cannot reach his
+contact (`SquadAI.canSuppress`, read-only) throws first, then the nearest to his aim; a man walking
+on the march may stop to throw (the windup holds him; a covered-bound or urgent mover still
+finishes his hop); and a man's own fresh sighting is still a grenade decision after the squad's
+contact clears. The grenade owner's gates, the one-per-squad rule and the gunner's exclusion are
+unchanged. Legacy opportunistic grenade policy is unchanged for squads the controller does not own.
 The Skills Lab assault objective is at the target line, with actual final physical shelters;
 capturing a midpoint must not turn the unfinished assault into a defensive deployment.
 
@@ -225,6 +232,19 @@ uncommitted rifleman takes the first post that `BattleCoverPositions.maskedPost`
 ready and the contact skills fire on first-hand contact. The march and the station skill yield to a man it
 holds. Contact before ready, pressure, a lost threat or masking, a retained skill, a retreat, an owner
 ending a man's action, or the 12 s preparation/observation budgets release every man through his owner.
+
+`13i-tactical-flank-assault.js` (`BattleTacticalFlankAssault`, `?controllerAssault=0` turns it off) is the
+Squad Leader's flank and assault decision. Legacy 15j only bounded a team frontally and labelled the
+fireteams' flank tasks (16 `tasksFor`). In contact on an assault or flank brief (approach, assault or flank
+phase), with the Squad Leader's own bound-threat reports between one covered hop and 160 m away, bravo
+(charlie if bravo cannot go; two movers and two supporters minimum) heads for a point 60 degrees round the
+reported enemy on its own side, at the squad's current range; at a 45 degree crossing angle (or on that
+point) it assaults the reported position. It moves nobody: the covered-bound skill (13e,
+execute-covered-bound) reads `goal()` for its hop goal and drafts only that team, so the rest of the squad
+is the base of fire, and Meso's `controllerBound` accepts the skill's goal as a forward window. Retreat, a
+retained skill, a mission change, lost contact, a depleted team or base of fire, a new 13e no-hop stall, the
+flank budget (its length at 0.6 m/s) or closing to 8 m ends it with a reason in `summary()` (also
+`BattleTacticalMarchProvider.summary()[].flank`), and the frontal hop is the answer again.
 
 `fire.control` asks `controllerFireControl.publish` in Meso to use 15a's existing publisher;
 `published` explicitly does not imply personal adoption. Engagement still uses each man's adopted
