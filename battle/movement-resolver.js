@@ -390,6 +390,9 @@
         t < intent.refreshAt &&
         live &&
         live.kind === kind &&
+        // A rebrief invalidates the old proposal. Publish this tick's renewal
+        // before resolve can fall back to formation for one frame.
+        live.signature === signature(soldier) &&
         (engagement || live.owner === source)
       ) {
         count(battle, 'combatIntentCoalesced');
