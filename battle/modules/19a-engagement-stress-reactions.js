@@ -23,6 +23,11 @@
    says so on the first reaction instead of silently fielding men who cannot break. */
 (function (root) {
   'use strict';
+  /* Under ?tacticalController=new only; ?refugeHold=0 restores the old behavior. */
+  var REFUGE_HOLD =
+    /[?&]tacticalController=new(?:&|#|$)/i.test(
+      typeof location !== 'undefined' ? location.search || '' : ''
+    ) && !/[?&]refugeHold=0(?:&|#|$)/i.test(typeof location !== 'undefined' ? location.search || '' : '');
   if (root._engagementStressReactions) return;
 
   /* Factory: the module calls it itself at load time with engagement.js's ctx (see above). */
@@ -394,7 +399,7 @@
         else {
           noteAct(s, 'flee', 'waiting', dt);
           move(s, battle, { x: p.x, z: p.z }, 'flee'); // a hold that beats his squad of one's order home
-          ctx.commitStanceRespectHold(
+          (REFUGE_HOLD ? ctx.commitStanceRespectHold : commitStance)(
             s,
             battle,
             PRONE_ROLES[s.role] && s.suppressedUntil > now ? 'prone' : 'crouch',

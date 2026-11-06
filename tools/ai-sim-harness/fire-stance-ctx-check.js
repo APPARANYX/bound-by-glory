@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 const { loadModule, quietConsole } = require('./module-loader');
+// The recovered repairs act under the tactical controller only.
+globalThis.location = { search: '?tacticalController=new' };
 /* Engagement fire/stance factory ctx + firing (battle/engagement.js fire split 2/2).
    The fire-permission layer, the stance engine, fire permission and suppression, fire-control
    targeting and observation, the bound and the fire position moved verbatim to

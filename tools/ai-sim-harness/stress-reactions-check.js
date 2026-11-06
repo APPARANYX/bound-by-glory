@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 const { loadModule, quietConsole } = require('./module-loader');
+// The recovered repairs act under the tactical controller only.
+globalThis.location = { search: '?tacticalController=new' };
 /* What stress does to a man (Engagement, `?stressAct=cower,flee,freeze,rage`): four declared states, each off unless
    named, the numbers from module 17 and the choice Engagement's.
 
@@ -378,7 +380,9 @@ test("flee: he leaves his weapons, runs to the squad's last safe point, never fi
 });
 
 test('a fled rifleman keeps his refuge posture across short gaps in suppression', () => {
-  const { ctx, s } = broke('?stressAct=flee', [0.9, 0, 0], 60, { safe: { x: 0, z: -40 } });
+  const { ctx, s } = broke('?stressAct=flee&tacticalController=new', [0.9, 0, 0], 60, {
+    safe: { x: 0, z: -40 }
+  });
   put(s, s.eng.refuge.x, s.eng.refuge.z);
   for (let burst = 0; burst < 4; burst++) {
     s.suppressedUntil = ctx.b.time + 0.25;

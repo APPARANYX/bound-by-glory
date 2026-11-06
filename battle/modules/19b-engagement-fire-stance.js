@@ -24,6 +24,12 @@
    decision instead of silently fielding men who neither kneel nor shoot. */
 (function (root) {
   'use strict';
+  /* Under ?tacticalController=new only; ?reloadStanceHold=0 restores the old behavior. */
+  var RELOAD_STANCE_HOLD =
+    /[?&]tacticalController=new(?:&|#|$)/i.test(
+      typeof location !== 'undefined' ? location.search || '' : ''
+    ) &&
+    !/[?&]reloadStanceHold=0(?:&|#|$)/i.test(typeof location !== 'undefined' ? location.search || '' : '');
   if (root._engagementFireStance) return;
 
   /* Factory: the module calls it itself at load time with engagement.js's ctx (see above). */
@@ -249,7 +255,7 @@
       /* Reload is a live weapon obligation, not an expired posture lease.
          Keep the stance chosen by Engagement at crouch or lower until the
          ammunition owner finishes, even when a station/march pose renews. */
-      if (s.reloading && stance === 'stand' && reason !== 'player-possession') {
+      if (RELOAD_STANCE_HOLD && s.reloading && stance === 'stand' && reason !== 'player-possession') {
         stance = e.stance === 'prone' || e.stance === 'crawl' ? e.stance : 'crouch';
         reason = 'reload';
       }

@@ -49,8 +49,17 @@ test('owned defense is an ongoing mission, not completion every commander tick',
   const f=fixture();f.sim._objectives[0].state.owner='us';f.sq._preparedDefenseRequest={objectiveId:'a',point:{x:100,z:0}};f.tick();
   const mission=f.sq._macroMission;assert.ok(mission);for(let i=0;i<30;i++)f.tick();assert.strictEqual(f.sq._macroMission,mission);assert.equal(mission.intent,'defend');assert.equal(mission.status,'executing');
 });
+test('?retreatObjectiveRelease=0 keeps the old assignment on a withdrawing squad', () => {
+  const f = fixture('?scoutsForward=0&tacticalController=new&retreatObjectiveRelease=0');
+  f.tick();
+  const old = f.sq._macroMission;
+  f.sq.state = 'retreat';
+  f.tick();
+  assert.equal(old.endReason, 'squad-retreat');
+  assert.notEqual(f.sq.targetObjective, null);
+});
 test('a withdrawing squad releases its capture assignment and can resume it after rally', () => {
-  const f = fixture();
+  const f = fixture('?scoutsForward=0&tacticalController=new');
   f.tick();
   const old = f.sq._macroMission;
   f.sq.state = 'retreat';

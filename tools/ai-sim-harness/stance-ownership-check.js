@@ -82,12 +82,14 @@ test('only Engagement writes stance flags', () => {
   assert.ok(!WRITE.test(outside), 'squad-ai.js writes stance only in fallbackBehavior');
 });
 
-function oneMan() {
+function oneMan(extra = '') {
   H.resetIds();
   /* These stance checks exercise the historical squad-contact posture contract directly by
      injecting squad.contact. Keep that contract on the legacy shared-contact arm; personal-belief
      posture behavior is covered by the dedicated beliefs/engagement checks. */
-  const r = H.bootstrap({ search: '?soldierBeliefs=0&commandPosture=0&commandMovement=0&commandRelay=0' }),
+  const r = H.bootstrap({
+      search: '?soldierBeliefs=0&commandPosture=0&commandMovement=0&commandRelay=0' + extra
+    }),
     b = H.makeBattle(r),
     q = H.addSquad(r, b, { id: 'us-0', faction: 'us', x: 0, z: 0, objective: { x: 0, z: 200 } }),
     e = H.addSquad(r, b, { id: 'ge-0', faction: 'ge', x: 0, z: 120, objective: { x: 0, z: 0 } }),
@@ -314,7 +316,7 @@ test('an active bound finishes under hold fire before preparation takes over', (
 });
 
 test('contact march between suppression tasks keeps a prone rifleman down at his arrived position', () => {
-  const { r, b, s } = oneMan();
+  const { r, b, s } = oneMan('&tacticalController=new');
   const E = r.BattleEngagement;
   r.BattleTacticalController = { controls: () => true, dispatch: () => true };
   load(r, 'battle/movement-resolver.js');

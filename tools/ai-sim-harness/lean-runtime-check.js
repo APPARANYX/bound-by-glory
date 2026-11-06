@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 const { loadModule, quietConsole } = require('./module-loader');
+// The recovered repairs act under the tactical controller only.
+globalThis.location = { search: '?tacticalController=new' };
 const { loadSquadCommandStack } = require('./squad-command-stack');
 const assert = require('node:assert/strict'),
   fs = require('fs'),

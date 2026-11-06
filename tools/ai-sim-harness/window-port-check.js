@@ -3,6 +3,9 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { fixture, counted, occupy, targetAt, SIN, COS, DEG } = require('./tactical-fixture');
+// The recovered reload-stance repair acts under the tactical controller only.
+const CONTROLLER_LOCATION = { search: '?tacticalController=new' };
+globalThis.location = CONTROLLER_LOCATION;
 let checks = 0;
 function test(name, fn) {
   fn();
@@ -302,7 +305,7 @@ test('?windowPort=0 is the old station: .775 m inset, a fixed crouch, no port', 
   try {
     f = fixture();
   } finally {
-    delete globalThis.location;
+    globalThis.location = CONTROLLER_LOCATION;
   }
   assert.equal(f.N.portEnabled, false);
   assert.equal(f.st.port, undefined);

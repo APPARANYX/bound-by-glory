@@ -39,7 +39,7 @@ const C_TICK = 0.45,
   HOME_Z = -500,
   LANES = [-300, -100, 100, 300, 500];
 function world(search) {
-  search = search == null ? '?stressAct=flee' : search;
+  search = search == null ? '?stressAct=flee&tacticalController=new' : search;
   H.resetIds();
   const r = H.bootstrap({ modules: false, search }),
     systems = {},
@@ -66,7 +66,7 @@ function world(search) {
   load(r, 'battle/modules/17-soldier-mind.js', search);
   load(r, 'battle/commander-doctrine.js', search);
   load(r, 'battle/commander-routes.js');
-  load(r, 'battle/commander-ai.js');
+  load(r, 'battle/commander-ai.js', search);
   load(r, 'battle/modules/22-commander-reconstitution.js', search);
   load(r, 'battle/modules/22a-commander-strategic-recovery.js');
   load(r, 'battle/movement-resolver.js');
