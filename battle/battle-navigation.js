@@ -124,7 +124,104 @@
     }
     return null;
   }
+  /* Under the controller (`?tacticalController=new`) the yes/no movement query looks only at walls in the
+     grid cells its padded box touches, with the same per-wall test as blocked(): any blocking wall gives
+     the same answer whichever is found first. blocked() itself (first wall, LOS) is unchanged.
+     `?controllerFastChecks=0` scans every wall as before. */
+  var NAV_SEARCH = typeof location !== 'undefined' ? location.search || '' : '',
+    FAST_WALLS =
+      /[?&]tacticalController=new(?:&|#|$)/i.test(NAV_SEARCH) &&
+      !/[?&]controllerFastChecks=0(?:&|#|$)/i.test(NAV_SEARCH),
+    WALL_CELL = 16,
+    wallGrid = null;
+  function wallIndex() {
+    if (wallGrid && wallGrid.source === walls && wallGrid.count === walls.length) return wallGrid;
+    var minX = Infinity,
+      minZ = Infinity,
+      maxX = -Infinity,
+      maxZ = -Infinity,
+      i;
+    for (i = 0; i < walls.length; i++) {
+      minX = Math.min(minX, walls[i].minX);
+      minZ = Math.min(minZ, walls[i].minZ);
+      maxX = Math.max(maxX, walls[i].maxX);
+      maxZ = Math.max(maxZ, walls[i].maxZ);
+    }
+    var g = {
+      source: walls,
+      count: walls.length,
+      empty: !(walls.length && isFinite(minX) && isFinite(minZ) && isFinite(maxX) && isFinite(maxZ)),
+      minX: minX,
+      minZ: minZ,
+      cols: 1,
+      rows: 1,
+      cells: [],
+      stamp: new Int32Array(walls.length),
+      epoch: 0
+    };
+    if (!g.empty) {
+      g.cols = Math.max(1, Math.ceil((maxX - minX) / WALL_CELL) + 1);
+      g.rows = Math.max(1, Math.ceil((maxZ - minZ) / WALL_CELL) + 1);
+      g.cells = new Array(g.cols * g.rows);
+      for (i = 0; i < walls.length; i++) {
+        var w = walls[i],
+          c0 = wallCol(g, w.minX),
+          c1 = wallCol(g, w.maxX),
+          r0 = wallRow(g, w.minZ),
+          r1 = wallRow(g, w.maxZ);
+        for (var c = c0; c <= c1; c++)
+          for (var r = r0; r <= r1; r++) (g.cells[c + r * g.cols] || (g.cells[c + r * g.cols] = [])).push(i);
+      }
+    }
+    return (wallGrid = g);
+  }
+  function wallCol(g, x) {
+    return clamp(Math.floor((x - g.minX) / WALL_CELL), 0, g.cols - 1);
+  }
+  function wallRow(g, z) {
+    return clamp(Math.floor((z - g.minZ) / WALL_CELL), 0, g.rows - 1);
+  }
+  /* blocked(a, b, 'move') !== null, testing each candidate wall exactly as blocked() does. A query box
+     outside the grid touches no wall (every wall box lies inside it); a NaN box falls back to the scan. */
+  function moveBlockedFast(a, b) {
+    var g = wallIndex();
+    if (g.empty) return false;
+    var segLen = Math.hypot(b.x - a.x, b.z - a.z) || EPS,
+      pad = EPS * segLen,
+      minX = Math.min(a.x, b.x) - pad,
+      maxX = Math.max(a.x, b.x) + pad,
+      minZ = Math.min(a.z, b.z) - pad,
+      maxZ = Math.max(a.z, b.z) + pad;
+    if (!(minX <= maxX && minZ <= maxZ)) return !!blocked(a, b, 'move');
+    var c0 = wallCol(g, minX),
+      c1 = wallCol(g, maxX),
+      r0 = wallRow(g, minZ),
+      r1 = wallRow(g, maxZ);
+    if (++g.epoch >= 2147483000) {
+      g.stamp.fill(0);
+      g.epoch = 1;
+    }
+    for (var c = c0; c <= c1; c++)
+      for (var r = r0; r <= r1; r++) {
+        var cell = g.cells[c + r * g.cols];
+        if (!cell) continue;
+        for (var j = 0; j < cell.length; j++) {
+          var id = cell[j];
+          if (g.stamp[id] === g.epoch) continue;
+          g.stamp[id] = g.epoch;
+          var w = walls[id];
+          if (w.maxX < minX || w.minX > maxX || w.maxZ < minZ || w.minZ > maxZ) continue;
+          var hit = intersection(a, b, w.a, w.b);
+          if (!hit) continue;
+          if (hit.t * segLen < START_SKIN) continue;
+          if (openingAt(w, hit.u, 'move')) continue;
+          return true;
+        }
+      }
+    return false;
+  }
   function movementClear(a, b) {
+    if (FAST_WALLS) return !moveBlockedFast(a, b);
     return !blocked(a, b, 'move');
   }
   /* Physical navigation owns how a man gets past something in his way. The Movement Resolver still
