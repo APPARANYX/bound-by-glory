@@ -1079,6 +1079,43 @@ test('a flee or charge proposal is only good while he is in that state', () => {
   assert.notEqual(st.goal.kind, 'flee', 'out of the state, the intent is dropped');
 });
 
+test('a personal escape or trance charge survives a new squad retreat brief', () => {
+  for (const [act, kind, temper] of [
+    ['flee', 'flee', [1, 0, 0]],
+    ['rage', 'rage-charge', [0, 0, 1]]
+  ]) {
+    const { ctx, s } = broke('?stressAct=' + act + '&rageTrance=1', temper, 20);
+    load(ctx.r, 'battle/movement-resolver.js');
+    const R = ctx.r.BattleMovementResolver;
+    const destination = { x: s.root.position.x + 12, z: s.root.position.z };
+    assert.equal(s.eng.state, act);
+    R.proposeCombat(s, destination, ctx.b, kind, 1, { source: 'engagement', reason: act });
+    R.resolve(s, ctx.b);
+    assert.equal(s._movementResolver.goal.kind, kind);
+    s.squad.state = 'retreat';
+    s.squad._engagementPlan = { serial: 2 };
+    ctx.b.time += 0.15;
+    R.resolve(s, ctx.b);
+    assert.equal(s._movementResolver.goal.kind, kind, 'squad refresh cannot interrupt the personal reaction');
+    assert.deepEqual(s._movementResolver.goal.intentPoint, destination);
+    s.eng.state = 'advance';
+    R.resolve(s, ctx.b);
+    assert.equal(s._movementResolver.goal.kind, 'retreat', 'squad extraction resumes after recovery');
+  }
+});
+
+test('an ordinary rage charge still yields to squad retreat', () => {
+  const { ctx, s } = broke('?stressAct=rage&rageTrance=0', [0, 0, 1], 20);
+  load(ctx.r, 'battle/movement-resolver.js');
+  const R = ctx.r.BattleMovementResolver;
+  R.proposeCombat(s, { x: 12, z: 20 }, ctx.b, 'rage-charge', 1, { source: 'engagement' });
+  R.resolve(s, ctx.b);
+  assert.equal(s._movementResolver.goal.kind, 'rage-charge');
+  s.squad.state = 'retreat';
+  R.resolve(s, ctx.b);
+  assert.equal(s._movementResolver.goal.kind, 'retreat');
+});
+
 test('the choice draws nothing from the combat RNG: cower, flee and freeze draw none, a blow draws only its own', () => {
   for (const [q, tempers, d] of [
     ['?stressAct=cower', [0, 0, 0], 100],

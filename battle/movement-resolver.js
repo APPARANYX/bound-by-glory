@@ -138,10 +138,13 @@
     /* Player authority survives squad phase/plan signature churn. That churn is exactly what used to
        hand a possessed man back to Micro while moving through buildings. */
     if (p.kind === 'player' && s && s.isPlayer) return p.until + 1e-6 >= now(b);
+    // These displacements belong to the soldier for the duration of the
+    // reaction. A squad rebrief between Micro ticks cannot cancel them.
+    if (p.kind === 'flee') return s.eng && s.eng.state === 'flee';
+    if (tranceCharge(s, p)) return true;
     if (p.signature !== signature(s)) return false;
     if (p.kind === 'cover-bound') return s.eng && s.eng.state === 'bound';
     if (p.kind === 'assault-rush') return s.eng && s.eng.state === 'assault';
-    if (p.kind === 'flee') return s.eng && s.eng.state === 'flee';
     if (p.kind === 'rage-charge') return s.eng && s.eng.state === 'rage';
     if (p.kind === 'reload-hold') return !!(s.reloading || s.clearingStoppage);
     return p.until + 1e-6 >= now(b);
