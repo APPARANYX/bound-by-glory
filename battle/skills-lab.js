@@ -1153,6 +1153,7 @@
                   t.directionalCandidates +
                   ' · accepted routes ' +
                   t.admittedRoutes +
+                  (t.prunedEdges ? ' · pruned edges ' + t.prunedEdges + ' (could not shorten a route)' : '') +
                   (t.moverFailures.length
                     ? '\n    ' +
                       t.moverFailures

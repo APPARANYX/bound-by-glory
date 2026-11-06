@@ -368,6 +368,9 @@
         candidates: route.stats.total,
         directionalCandidates: route.stats.progressing,
         admittedRoutes: route.stats.safe,
+        /* Edges the planner skipped because they could not shorten a route (?controllerRoutePrune):
+           neither admitted nor rejected above, so those counts read lower with pruning on. */
+        prunedEdges: route.stats.pruned || 0,
         graphNodes: route.stats.graphNodes || 0,
         routeLength: route.stats.planLength || 0,
         terminal: route.stats.terminal || 'none',
@@ -494,6 +497,7 @@
           candidates: 0,
           directionalCandidates: 0,
           admittedRoutes: 0,
+          prunedEdges: 0,
           graphNodes: 0,
           routeLength: 0,
           terminal: 'none',
@@ -515,6 +519,7 @@
           candidates: result.stats.total,
           directionalCandidates: result.stats.progressing,
           admittedRoutes: result.stats.safe,
+          prunedEdges: result.stats.pruned || 0,
           graphNodes: result.stats.graphNodes || 0,
           routeLength: result.stats.planLength || 0,
           terminal: result.stats.terminal || 'none',
@@ -869,7 +874,7 @@
       return;
     }
     if (st.blocked === b && !(STALL_ON && st.stall && cycle !== st.stall.cycle)) return;
-    /* A retreating squad keeps searching on every basis change: a rearward hop must not wait a cycle. */
+    /* Retreating squads retain immediate replanning even while other stalls are paced. */
     var coarse = STALL_PACE && STALL_ON && st.stall && !back ? stallBasis(ctx, rs) : null;
     if (coarse && st.stall.basis === coarse && cycle === st.stall.cycle) return;
     var selected = choose(ctx, st, rs);
