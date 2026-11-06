@@ -294,6 +294,47 @@ test('diagnostics preserve the UI contract for movers with no personal contact',
   assert.equal(t.candidates, 0);
   clean(w);
 });
+test('one or two mandatory covering shooters are not routed before candidate ranking', () => {
+  for (const numberOfShooters of [1, 2, 3]) {
+    const w = world();
+    const A = w.r.SquadAI;
+    const Q = w.r.BattleSquadStability;
+    const Ammo = w.r.BattleAmmunition;
+    const inMoverTeam = s => ['alpha', 'bravo', 'charlie'].includes(Q.teamKeyFor(s));
+    const eligible = w.q.members.filter(s => inMoverTeam(s) && !A.isMachineGun(s));
+    const shooters = new Set(eligible.slice(0, numberOfShooters).map(s => String(s.id)));
+    assert.equal(shooters.size, numberOfShooters);
+
+    const priorEvidence = Ammo.shotEvidence;
+    const priorPick = w.r.BattleTacticalContactRoute.pick;
+    const routed = new Set();
+    Ammo.shotEvidence = function (s, sim) {
+      return shooters.has(String(s.id)) ? { at: sim.time, shots: 1 } : null;
+    };
+    w.r.BattleTacticalContactRoute.pick = function (s) {
+      routed.add(String(s.id));
+      return priorPick.apply(this, arguments);
+    };
+
+    squad(w);
+    const audit = w.M.summary(w.q).diagnostic;
+    assert.ok(audit && audit.teams.length);
+    if (numberOfShooters <= 2) {
+      for (const id of shooters) {
+        assert.equal(routed.has(id), false);
+        const reason = audit.teams.find(row => row.moverId === id)?.result;
+        assert.equal(reason, 'reserved-covering-shooter');
+      }
+    } else {
+      const routedFiring = [...shooters].some(id => routed.has(id));
+      assert.equal(routedFiring, true);
+    }
+    assert.ok(routed.size > 0);
+    Ammo.shotEvidence = priorEvidence;
+    w.r.BattleTacticalContactRoute.pick = priorPick;
+    clean(w);
+  }
+});
 test('advance waits for real discharges, personal movement adoption, physical arrival and alternates teams', () => {
   const w = world();
   squad(w);

@@ -457,6 +457,20 @@
       var shift = supportRelocation(ctx, st, ready, goal, audit);
       if (shift) return shift;
     }
+    /* The selection rule retains all recent shooters when only one or two
+       exist. Read the same synchronous shot evidence before native routing;
+       these soldiers could never pass the existing holder-selection rule. */
+    var Ammo = root.BattleAmmunition,
+      firing = new Set(
+        ready
+          .filter(function (s) {
+            var shot = Ammo && Ammo.shotEvidence && Ammo.shotEvidence(s, ctx.sim);
+            return !!(shot && shot.at >= ctx.sim.time - 3 && shot.at <= ctx.sim.time);
+          })
+          .map(function (s) {
+            return String(s.id);
+          })
+      );
     var choices = [];
     ready.forEach(function (s) {
       var retained = st.routes.get(String(s.id));
@@ -485,6 +499,27 @@
       if (teams.indexOf(team) < 0) return;
       /* A flank drafts only its own team: every other man stays the base of fire. */
       if (lateral && team !== lateral.team) return;
+      /* An irreplaceable covering shooter cannot be selected for a bound,
+         independent of candidate ranking or the availability of cover. */
+      if (firing.size <= 2 && firing.has(String(s.id))) {
+        audit.teams.push({
+          team: team,
+          moverId: String(s.id),
+          eligibleMovers: 1,
+          eligibleSupporters: ready.length - 1,
+          candidates: 0,
+          directionalCandidates: 0,
+          admittedRoutes: 0,
+          graphNodes: 0,
+          routeLength: 0,
+          terminal: 'none',
+          reused: false,
+          moverFailures: [],
+          routeRejections: {},
+          result: 'reserved-covering-shooter'
+        });
+        return;
+      }
       /* The owner validates the mover's own received sector, not merely the
          Squad Leader's reports. Do not plan an order he cannot adopt. */
       var personalReports = C.boundThreats(s, ctx.sim);
@@ -561,17 +596,6 @@
     /* Do not draft the sole active rifleman into the moving party! A genuine
        shot in the preceding few seconds is proof this actor has been firing,
        and the current effective line-of-fire makes him a precious supporter. */
-    var Ammo = root.BattleAmmunition,
-      firing = new Set(
-        ready
-          .filter(function (s) {
-            var shot = Ammo && Ammo.shotEvidence && Ammo.shotEvidence(s, ctx.sim);
-            return !!(shot && shot.at >= ctx.sim.time - 3 && shot.at <= ctx.sim.time);
-          })
-          .map(function (s) {
-            return String(s.id);
-          })
-      );
     if (!choices.length) {
       audit.result = 'no-reachable-contact-cover';
       return null;
