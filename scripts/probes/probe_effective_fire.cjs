@@ -128,6 +128,7 @@ const { requestPreview } = require('./preview_request.cjs');
         ev.engage = ['voices/ge/c3-queued-order-fixture.mp3'];
         const handle = BattleVoiceScheduler.enqueue(leader, 'engage', null);
         if (!handle) throw Error('fresh staged leader order was not accepted');
+        if (readyCallbacks.length !== 1) throw Error('fixture must intercept the active audio backend');
         leader.eng.state = 'freeze';
         readyCallbacks.forEach(fn => fn());
         voice = {
