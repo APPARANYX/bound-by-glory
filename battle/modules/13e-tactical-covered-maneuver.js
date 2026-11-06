@@ -14,8 +14,9 @@
       typeof location !== 'undefined' ? location.search || '' : ''
     ),
     /* A stalled squad (no hop, 13e stall) searches again once per Squad Leader bound cycle, or at once when
-       its phase, contact, navigation, flank goal, report count or a man's capability changes; a man's
-       metre of drift or a report's shift waits for the next cycle. ?controllerStallPace=0 searches again
+       its phase, contact, navigation, flank goal, report count, a man's capability or whether he has just
+       fired changes; a man's metre of drift or a report's shift waits for the next cycle. A retreating
+       squad is never paced. ?controllerStallPace=0 searches again
        on every basis change (any man's rounded position or last shot). */
     STALL_PACE = !/[?&]controllerStallPace=(?:0|off|false)(?:&|#|$)/i.test(
       typeof location !== 'undefined' ? location.search || '' : ''
@@ -246,7 +247,14 @@
       flankBasis(ctx.squad),
       rs.length,
       men(ctx.squad).map(function (s) {
-        return [s.id, viable(s, ctx.sim)];
+        /* A man who has just fired can unlock a refused support relocation (supportRelocation reads the
+           same 3 s window), so starting or stopping fire is a new basis. */
+        var E = root.BattleEngagement;
+        return [
+          s.id,
+          viable(s, ctx.sim),
+          !!(E && E.supportDischarged && E.supportDischarged(s, ctx.sim, ctx.sim.time - 3))
+        ];
       })
     ]);
   }
@@ -861,7 +869,8 @@
       return;
     }
     if (st.blocked === b && !(STALL_ON && st.stall && cycle !== st.stall.cycle)) return;
-    var coarse = STALL_PACE && STALL_ON && st.stall ? stallBasis(ctx, rs) : null;
+    /* A retreating squad keeps searching on every basis change: a rearward hop must not wait a cycle. */
+    var coarse = STALL_PACE && STALL_ON && st.stall && !back ? stallBasis(ctx, rs) : null;
     if (coarse && st.stall.basis === coarse && cycle === st.stall.cycle) return;
     var selected = choose(ctx, st, rs);
     if (!selected) {

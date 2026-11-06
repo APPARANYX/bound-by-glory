@@ -716,6 +716,40 @@ test('a stalled squad searches at once when a new contact is reported, inside th
   assert.ok(plans > stalledAt, 'a second reported contact searched again at once');
   clean(w);
 });
+test('a stalled squad in retreat is never paced: drift searches again at once', () => {
+  const w = world(150);
+  let plans = 0;
+  w.r.BattleTacticalContactRoute.pick = () => {
+    plans++;
+    return {
+      point: null,
+      score: null,
+      exposure: 0,
+      stats: { total: 0, progressing: 0, safe: 0, rejected: {} }
+    };
+  };
+  w.b.time = 14.05;
+  w.q.state = 'retreat';
+  w.q.commandPhase = 'retreat';
+  w.r.SquadAI.isExtractionToHome = () => false;
+  const drifter = w.q.members[3];
+  let i = 0;
+  while (!(w.M.summary(w.q) || {}).stall && i++ < 40) {
+    w.q.state = 'retreat';
+    w.q.commandPhase = 'retreat';
+    tick(w);
+  }
+  assert.ok((w.M.summary(w.q) || {}).stall, 'the rearward refusal is reported as a stall');
+  const stalledAt = plans;
+  for (let k = 0; k < 4; k++) {
+    drifter.root.position.x += k % 2 ? -1.2 : 1.2;
+    w.q.state = 'retreat';
+    w.q.commandPhase = 'retreat';
+    tick(w);
+  }
+  assert.ok(Math.floor(w.b.time / 7) === 2, 'still inside the same cycle');
+  assert.ok(plans > stalledAt, 'a retreating squad searched again on drift');
+});
 test('a covered retreat and the Squad Leader retreat orders never move a man together (#705)', () => {
   const w = world();
   w.q.establishment = 25; // fixed casualty ratio keeps the native morale owner in retreat
