@@ -38,6 +38,15 @@
       COVER_CELL = ctx.COVER_CELL;
     var coverClaims = new WeakMap();
     var query = (root.location && root.location.search) || '',
+      /* ?controllerCoverCache=0: under ?tacticalController=new two per-slot facts that cannot change
+         while the slot exists are computed once instead of on every cover search (the controller's
+         route planner scans ~400 slots per call): the nine neighbour-cell keys an availability check
+         reads, and the slot's prone cover quality on the obstacle set it was built from. Same keys,
+         same order, same values, same checks: play is identical, and legacy is untouched. */
+      CACHED_COVER_KEYS =
+        /[?&]tacticalController=new(?:&|#|$)/i.test(query) &&
+        !/[?&]controllerCoverCache=0(?:&|#|$)/i.test(query),
+      neighbourKeyCache = new WeakMap(),
       COVERED_BOUNDS =
         /[?&]coveredBounds=(1|on|true)\b/.test(query) && /[?&]localPlan=(1|on|true)\b/.test(query);
     var boundTuning = {
@@ -454,6 +463,7 @@
         all = [],
         seen = new Set();
       c.slots = new Map();
+      c.quality = new Map();
       var outsideMargins = F
         ? marginIndex(F, c, slotPad())
         : function () {
@@ -479,7 +489,9 @@
         for (var j = 0; j < raw.length; j++) {
           var slot = raw[j];
           if (!outsideMargins(slot.x, slot.z) || !standable(slot)) continue;
-          if (F.coverPotentialAt(c.source, slot.x, slot.z) > USEFUL_COVER) continue;
+          var quality = F.coverPotentialAt(c.source, slot.x, slot.z);
+          if (quality > USEFUL_COVER) continue;
+          if (CACHED_COVER_KEYS) c.quality.set(slot, quality);
           all.push(slot);
         }
       }
@@ -536,7 +548,56 @@
         });
       });
     }
+    /* The nine keys coverAvailable scans, in its own order (x outer, z inner). Cached per slot object and
+       revalidated against its coordinates, so a moved or ad hoc point never reads stale cells. */
+    function neighbourKeys(slot) {
+      var hit = neighbourKeyCache.get(slot);
+      if (hit && hit.x === slot.x && hit.z === slot.z) return hit.keys;
+      var cx = Math.floor(slot.x / COVER_CELL),
+        cz = Math.floor(slot.z / COVER_CELL),
+        keys = [];
+      for (var x = -1; x <= 1; x++) for (var z = -1; z <= 1; z++) keys.push(cx + x + ',' + (cz + z));
+      neighbourKeyCache.set(slot, { x: slot.x, z: slot.z, keys: keys });
+      return keys;
+    }
+    function coverAvailableCached(c, slot, s, battle) {
+      if (!coverUnclaimed(c, slot, s, battle)) return false;
+      var N = root.BattleNavigation;
+      return !N || N.movementClear(slot, slot);
+    }
+    /* coverAvailable's claim and body scan, with its stale-claim drops, without the stand check. */
+    function coverUnclaimed(c, slot, s, battle) {
+      coverBodies(c, battle);
+      var keys = neighbourKeys(slot);
+      for (var n = 0; n < 9; n++) {
+        var key = keys[n],
+          list = c.claims.get(key);
+        if (list)
+          for (var i = list.length - 1; i >= 0; i--) {
+            var e = list[i];
+            if (!coverLive(e, battle)) {
+              dropCover(c, e);
+              continue;
+            }
+            if (e.soldier !== s && dist(e.slot.x, e.slot.z, slot.x, slot.z) < COVER_SPACING - 0.001)
+              return false;
+          }
+        var bodies = c.bodies.get(key);
+        if (bodies)
+          for (i = 0; i < bodies.length; i++) {
+            var body = bodies[i];
+            if (
+              body.soldier !== s &&
+              !body.soldier.dead &&
+              dist(body.point.x, body.point.z, slot.x, slot.z) < 0.9
+            )
+              return false;
+          }
+      }
+      return true;
+    }
     function coverAvailable(c, slot, s, battle) {
+      if (CACHED_COVER_KEYS) return coverAvailableCached(c, slot, s, battle);
       coverBodies(c, battle);
       var cx = Math.floor(slot.x / COVER_CELL),
         cz = Math.floor(slot.z / COVER_CELL);
@@ -582,6 +643,15 @@
       return e;
     }
     function coverCandidates(s, battle, threat, maxRange) {
+      return candidatesWhere(s, battle, threat, maxRange, null);
+    }
+    /* coverCandidates for a caller that will discard every slot `keep` refuses (13g's route corridor).
+       Under the controller cache a refused slot skips what only the result needs (stand check,
+       quality, the candidate record), but still passes through the same shield test and claim scan,
+       so stale claims are dropped exactly when they would have been. The result is coverCandidates
+       minus the refused slots, in the same order; with the cache off `keep` is ignored. */
+    function candidatesWhere(s, battle, threat, maxRange, keep) {
+      if (!CACHED_COVER_KEYS) keep = null;
       var F = field();
       if (!F || !threat) return [];
       var c = coverRegistry(battle),
@@ -606,8 +676,15 @@
             continue;
           // The sheltering physical volume must actually lie between this slot and the threat.
           if (P && P.shapeHit && !P.shapeHit(slot, t, slot.shape, 0)) continue;
+          if (keep && !keep(slot)) {
+            coverUnclaimed(c, slot, s, battle);
+            continue;
+          }
           if (!coverAvailable(c, slot, s, battle)) continue;
-          var quality = F.coverPotentialAt(battle.obstacles, slot.x, slot.z);
+          /* The registry is rebuilt whenever battle.obstacles changes (identity, length or physical
+             version), so a stored build-time quality is this same call on this same obstacle set. */
+          var quality = CACHED_COVER_KEYS ? c.quality.get(slot) : undefined;
+          if (quality === undefined) quality = F.coverPotentialAt(battle.obstacles, slot.x, slot.z);
           if (quality > USEFUL_COVER) continue;
           out.push({
             x: slot.x,
@@ -782,6 +859,7 @@
       releaseCover: releaseCover,
       reserveCover: reserveCover,
       coverCandidates: coverCandidates,
+      candidatesWhere: candidatesWhere,
       /* Same native obstacle/cover-slot eligibility at tactical graph radius.
          No new cover geometry and no independent claim or destination writer. */
       routeCandidates: function (s, battle, threat, radius) {

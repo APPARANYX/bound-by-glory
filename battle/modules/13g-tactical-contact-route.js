@@ -206,10 +206,16 @@
     var here = point(start),
       target = point(goal);
     var horizon = Math.min(450, Math.max(100, distance(here, target) + 65)),
+      /* Slots outside the detour corridor are discarded below; the corridor-aware search
+         (module 19, ?controllerCoverCache=0 restores the full scan) skips building them. */
       candidates =
         (C.routeCandidates
           ? C.routeCandidates(s, sim, threat, horizon)
-          : C.candidates(s, sim, threat, horizon)) || [];
+          : C.candidatesWhere
+            ? C.candidatesWhere(s, sim, threat, horizon, function (slot) {
+                return crossTrack(slot, here, target) <= MAX_DETOUR;
+              })
+            : C.candidates(s, sim, threat, horizon)) || [];
     /* Cover nodes come from real obstacle-backed slots. Never project imaginary
        virtual cover spots, and never reserve a future waypoint in advance. */
     var chosen = [],
