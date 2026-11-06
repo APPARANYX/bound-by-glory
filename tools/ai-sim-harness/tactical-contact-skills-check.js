@@ -875,4 +875,51 @@ test('a short gap in sightings resumes OPEN; a long gap or an unfinished HOLD st
     'flag restores the old reset'
   );
 });
+test('the suppressor scan asks a still man each fire line once, nearest sector first, and picks the same suppressors; ?controllerSuppressorScan=0 asks every line every step', () => {
+  const run = flags => {
+    const w = world(80, flags);
+    squad(w);
+    w.b.time = 16.1;
+    /* Several fresh SEEN sectors at different ranges, reported by the squad's own eyes. */
+    w.ge.members.forEach((t, i) => {
+      t.root.position.x = (i - 4) * 9;
+      t.root.position.z = 60 + i * 6;
+      w.r.SquadAI.rememberSeen(w.q.members[i % w.q.members.length], t, w.b, true, 'contact-fixture');
+    });
+    see(w);
+    squad(w);
+    assert.equal(w.q.fireControl.state, 'open');
+    w.q.members.forEach(s => (s.target = null));
+    const original = w.E.suppressionStance;
+    let asked = 0;
+    w.E.suppressionStance = (...args) => {
+      asked++;
+      return original(...args);
+    };
+    const picks = [];
+    for (let i = 0; i < 16; i++) {
+      w.b.time += 0.15;
+      /* Halfway through one man shifts a metre: his old answers must not be reused. */
+      if (i === 8) w.q.members[3].root.position.x += 1;
+      w.TC.dispatch(w.b, w.q, 'fireAndMovement');
+      w.q.members.forEach(s => w.TC.dispatch(w.b, w.q, 'engagement', s));
+      picks.push(w.S.summary(w.q).roles.map(r => [r.actorId, r.drill, r.reportedPoint]));
+    }
+    w.E.suppressionStance = original;
+    clean(w);
+    return { asked, picks, sectors: w.r.SquadAI.squadContactsMap(w.q, w.b).length };
+  };
+  const on = run('&commandPosture=0'),
+    off = run('&commandPosture=0&controllerSuppressorScan=0');
+  assert.ok(off.sectors >= 4, 'fixture has several seen sectors (' + off.sectors + ')');
+  assert.ok(
+    off.picks.some(p => p.some(r => r[1] === 'suppress')),
+    'fixture actually assigns suppressors: ' + JSON.stringify(off.picks[off.picks.length - 1])
+  );
+  assert.deepEqual(on.picks, off.picks, 'same suppressors on the same sectors every step');
+  assert.ok(
+    on.asked < off.asked * 0.4,
+    'a still man is asked each fire line once (' + on.asked + ' vs ' + off.asked + ')'
+  );
+});
 console.log(count + ' tactical contact skill checks passed');

@@ -334,6 +334,9 @@
         candidates: route.stats.total,
         directionalCandidates: route.stats.progressing,
         admittedRoutes: route.stats.safe,
+        /* Edges the planner skipped because they could not shorten a route (?controllerRoutePrune):
+           neither admitted nor rejected above, so those counts read lower with pruning on. */
+        prunedEdges: route.stats.pruned || 0,
         graphNodes: route.stats.graphNodes || 0,
         routeLength: route.stats.planLength || 0,
         terminal: route.stats.terminal || 'none',
@@ -460,6 +463,7 @@
           candidates: 0,
           directionalCandidates: 0,
           admittedRoutes: 0,
+          prunedEdges: 0,
           graphNodes: 0,
           routeLength: 0,
           terminal: 'none',
@@ -481,6 +485,7 @@
           candidates: result.stats.total,
           directionalCandidates: result.stats.progressing,
           admittedRoutes: result.stats.safe,
+          prunedEdges: result.stats.pruned || 0,
           graphNodes: result.stats.graphNodes || 0,
           routeLength: result.stats.planLength || 0,
           terminal: result.stats.terminal || 'none',

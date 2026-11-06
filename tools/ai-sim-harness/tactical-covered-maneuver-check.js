@@ -258,6 +258,7 @@ test('diagnostics preserve the UI contract for movers with no personal contact',
   assert.equal(t.result, 'no-personal-reported-contact');
   assert.deepEqual(t.moverFailures, []);
   assert.deepEqual(t.routeRejections, {});
+  assert.equal(t.prunedEdges, 0);
   assert.equal(t.candidates, 0);
   clean(w);
 });

@@ -7,8 +7,12 @@
 const assert = require('node:assert/strict');
 const { loadModule, quietConsole } = require('./module-loader');
 
-const CONTROLLER = { search: '?tacticalController=new' };
-const OFF = { search: '?tacticalController=new&fastRouteChecks=0' };
+/* The battle-long sight store and edge pruning (controller-route-reuse-check.js) are off in both arms
+   here, so the counts below measure the per-plan memo alone. */
+const CONTROLLER = { search: '?tacticalController=new&controllerRouteSight=0&controllerRoutePrune=0' };
+const OFF = {
+  search: '?tacticalController=new&fastRouteChecks=0&controllerRouteSight=0&controllerRoutePrune=0'
+};
 const LEGACY = { search: '' };
 
 function rng(seed) {
