@@ -587,7 +587,7 @@ test('a fresh squadmate SEEN sector authorizes real area suppression from covere
 test('a machine gun on a reported-sector suppress task is emplaced and fires; ?controllerGunner=0 keeps it silent', () => {
   [
     ['', true],
-    ['&controllerGunner=0', false]
+    ['&controllerGunner=0&contactActionStable=0', false]
   ].forEach(([flag, fires]) => {
     const w = world(80, '&commandPosture=0' + flag);
     squad(w);
@@ -623,6 +623,28 @@ test('a machine gun on a reported-sector suppress task is emplaced and fires; ?c
     assert.equal(gun.target, null, 'area fire never forges a direct target');
     clean(w);
   });
+});
+test('a native FIRE action survives personal target changes; ?contactActionStable=0 replaces it', () => {
+  function ids(extra) {
+    const w = world(100, '&commandPosture=0' + (extra || ''));
+    squad(w);
+    w.b.time = 26;
+    see(w);
+    squad(w);
+    micro(w);
+    const man = w.q.members.find(s => s.role === 'rifleman'),
+      first = w.S.summary(w.q).roles.find(r => r.actorId === String(man.id)).actionId;
+    w.b.time += 0.15;
+    see(w, w.ge.members[1]);
+    man.target = w.ge.members[1];
+    squad(w);
+    micro(w);
+    return [first, w.S.summary(w.q).roles.find(r => r.actorId === String(man.id)).actionId];
+  }
+  const on = ids(),
+    off = ids('&contactActionStable=0');
+  assert.equal(on[0], on[1], 'default keeps the FIRE action when only the personal target changes');
+  assert.notEqual(off[0], off[1], 'the off flag restores replacement on a target change');
 });
 test('contact execution fires real rounds after recognition and honors ammo/range gates', () => {
   const w = world();
