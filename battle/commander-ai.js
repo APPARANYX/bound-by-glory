@@ -53,6 +53,28 @@
     { level: 4, name: 'reset', at: STRATEGIC_STALL_RECOVERY.reset }
   ];
 
+  /* A defend battle is decided at the time limit by who holds the majority of the points, for either
+     side; holding every point no longer ends it early (a defender is seeded as owner of the points it
+     garrisons, so on small towns it "held all objectives" at 35 s before the attacker arrived).
+     Elimination still ends any battle. Meeting battles keep the hold-all win. ?defendMajorityWin=0
+     restores the old rules. */
+  var DEFEND_MAJORITY_WIN = !/[?&]defendMajorityWin=0(?:&|#|$)/i.test(
+    (typeof location !== 'undefined' && location.search) || ''
+  );
+  function defendBattle(sim) {
+    var sides = sim && sim._sides;
+    return !!(DEFEND_MAJORITY_WIN && sides && !sides.meeting && sides.defender);
+  }
+  /* The side holding more than half of the points, or null. */
+  function majorityHolder(sim) {
+    var c = sim.objectiveControl,
+      total = c && c.total;
+    if (!total) return null;
+    var us = (c.counts && c.counts.us) || 0,
+      ge = (c.counts && c.counts.ge) || 0;
+    return us * 2 > total ? 'us' : ge * 2 > total ? 'ge' : null;
+  }
+
   var enemyFaction = D.enemyFaction;
   var policy = D.policyFor,
     doctrine = D.doctrineFor,
@@ -724,7 +746,7 @@
        on the objective timer. Otherwise a single captured point aborts the natural
        contact/suppression/maneuver observation after ~35 s. Elimination and the
        separate sim time limit remain native and unchanged. */
-    if (!(root.PhaseCCombatLab && root.PhaseCCombatLab.disableObjectiveVictory)) {
+    if (!(root.PhaseCCombatLab && root.PhaseCCombatLab.disableObjectiveVictory) && !defendBattle(sim)) {
       if (sim.objectiveHold && sim.objectiveHold.us >= OBJECTIVE_HOLD_WIN)
         declare(sim, 'us', 'held all objectives');
       else if (sim.objectiveHold && sim.objectiveHold.ge >= OBJECTIVE_HOLD_WIN)
@@ -745,6 +767,11 @@
         return;
       }
       if (this.time >= this.timeLimit) {
+        var held = defendBattle(this) ? majorityHolder(this) : null;
+        if (held) {
+          declare(this, held, 'time limit majority of points');
+          return;
+        }
         var u = D.objectiveValueScore(this, 'us') * 12 + D.forceScore(this, 'us'),
           g = D.objectiveValueScore(this, 'ge') * 12 + D.forceScore(this, 'ge');
         declare(this, u === g ? 'draw' : u > g ? 'us' : 'ge', 'time limit objective score');

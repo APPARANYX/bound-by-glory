@@ -8,6 +8,8 @@
   var oldStart = root.BattleSim.start,
     API_BASE = root.BATTLE_API_BASE || '/grasstex/';
   var TIME_LIMIT_REASON = 'time limit objective score',
+    /* A defend battle at its time limit goes to the side holding the majority of points (commander-ai.js). */
+    TIME_LIMIT_MAJORITY_REASON = 'time limit majority of points',
     DEFAULT_DURATION_MINUTES = 10,
     MIN_DURATION_MINUTES = 1,
     MAX_DURATION_MINUTES = 180;
@@ -71,7 +73,8 @@
     return minutes;
   }
   function continueAfterTimeLimit(sim) {
-    if (!sim || sim.winReason !== TIME_LIMIT_REASON) return false;
+    if (!sim || (sim.winReason !== TIME_LIMIT_REASON && sim.winReason !== TIME_LIMIT_MAJORITY_REASON))
+      return false;
     var expiredAt = +sim.time || 0,
       configured = +sim._operatorTimeLimitSeconds || null;
     sim.winner = null;
@@ -95,7 +98,11 @@
   function syncTimeoutContinueUi(sim) {
     var button = document.getElementById('bannerContinue');
     if (!button) return;
-    var timedOut = !!(sim && sim.winner && sim.winReason === TIME_LIMIT_REASON);
+    var timedOut = !!(
+      sim &&
+      sim.winner &&
+      (sim.winReason === TIME_LIMIT_REASON || sim.winReason === TIME_LIMIT_MAJORITY_REASON)
+    );
     button.hidden = !timedOut;
     if (timedOut) {
       var text = document.getElementById('bannerText');
