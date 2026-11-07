@@ -116,7 +116,8 @@ test('legacy owns every squad by default; no entry point reaches a provider', ()
     'fireAndMovement',
     'executeMission',
     'engagement',
-    'stationSelection'
+    'stationSelection',
+    'generalTick'
   ]);
   w.TC.points.forEach(point => assert.equal(w.TC.dispatch(s, s.us, point), false));
   assert.equal(w.TC.controls(s, s.us), false);

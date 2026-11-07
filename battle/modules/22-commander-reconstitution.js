@@ -535,7 +535,10 @@
     }
     /* Pool first, then advance groups: a squad merged this tick still reads `retreat` until its Squad Leader
      recomputes its status, so it must not be pooled in the same pass. */
-    function reconstitute(sim, faction) {
+    /* The General's grouping decision, split so the tactical controller's command policy (13j, roadmap
+       section 8 slice M1) and the legacy tick below share it: planGroups chooses, formGroup briefs,
+       recordPool publishes the pool readout, progressGroups is the owner's merge/dissolve step. */
+    function planGroups(sim, faction) {
       var st = reconState(sim, faction),
         groups = st.active.slice(),
         pool = sim.factions[faction].squads.filter(function (sq) {
@@ -555,39 +558,35 @@
         total = pool.reduce(function (n, sq) {
           return n + D.aliveMembers(sq).length;
         }, 0),
+        candidates = [],
         candidate = chooseGroup(pool);
       /* Five or more survivors remain a viable squad and use normal morale recovery. Only 1-4-man
          remnants enter this pool. ready means there is enough manpower AND a geographically coherent
          cluster whose neutral meeting point is within the assembly-distance budget. */
-      st.pool = {
-        survivors: total,
-        squads: pool.map(function (sq) {
-          var p = squadPoint(sq);
-          return { id: sq.id, survivors: D.aliveMembers(sq).length, x: +p.x.toFixed(1), z: +p.z.toFixed(1) };
-        }),
-        ready: !!candidate,
-        blockedByDistance: total >= RECON_MIN_STRENGTH && !candidate,
-        excluded: excludedRemnants(sim, faction)
-      };
       while (candidate) {
         candidate.squads.forEach(function (sq) {
           var at = pool.indexOf(sq);
           if (at >= 0) pool.splice(at, 1);
         });
         total -= candidate.survivors;
-        formGroup(sim, faction, candidate.squads);
+        candidates.push(candidate);
         candidate = chooseGroup(pool);
       }
-      st.pool = {
-        survivors: total,
-        squads: pool.map(function (sq) {
+      return { groups: groups, candidates: candidates, pool: pool, total: total, last: candidate };
+    }
+    function recordPool(sim, faction, plan) {
+      reconState(sim, faction).pool = {
+        survivors: plan.total,
+        squads: plan.pool.map(function (sq) {
           var p = squadPoint(sq);
           return { id: sq.id, survivors: D.aliveMembers(sq).length, x: +p.x.toFixed(1), z: +p.z.toFixed(1) };
         }),
-        ready: !!candidate,
-        blockedByDistance: total >= RECON_MIN_STRENGTH && !candidate,
+        ready: !!plan.last,
+        blockedByDistance: plan.total >= RECON_MIN_STRENGTH && !plan.last,
         excluded: excludedRemnants(sim, faction)
       };
+    }
+    function progressGroups(sim, faction, groups) {
       for (var i = 0; i < groups.length; i++) {
         var g = groups[i],
           squads = g.squads
@@ -618,6 +617,14 @@
         else if (FLED_WAIT_EXCLUDED_ON) meetWithoutWaitingFled(sim, g, squads);
       }
     }
+    function reconstitute(sim, faction) {
+      var plan = planGroups(sim, faction);
+      plan.candidates.forEach(function (candidate) {
+        formGroup(sim, faction, candidate.squads);
+      });
+      recordPool(sim, faction, plan);
+      progressGroups(sim, faction, plan.groups);
+    }
 
     /* A fled man (a squad of one, `fledId`: Engagement `flee`) waits at his refuge for a retreating squad. When one that is
      out of contact stands within FLED_PICKUP_RANGE of him, the General has it take him in (the Squad Leader rewrites
@@ -628,38 +635,53 @@
         S = root.BattleSquadStability;
       if (!E || !S || !E.releaseFled) return;
       for (var i = 0; i < squads.length; i++) {
-        var lone = squads[i],
-          man = lone.fledId != null && !lone.disbanded && lone.members && lone.members[0];
-        if (!man || man.dead || E.fledPhase(man) !== 'wait') continue;
-        var p = man.root.position,
-          best = null,
-          bestD = FLED_PICKUP_RANGE;
-        for (var j = 0; j < squads.length; j++) {
-          var sq = squads[j];
-          if (sq === lone || sq.fledId != null || sq.disbanded || sq.state !== 'retreat' || sq.inContact)
-            continue;
-          if (!D.aliveMembers(sq).length) continue;
-          var a = D.avgPos(sq),
-            d = D.dist(p.x, p.z, a.x, a.z);
-          if (d <= bestD) {
-            best = sq;
-            bestD = d;
-          }
-        }
-        if (best && S.absorb(best, lone, sim) && E.releaseFled(man, sim, 'pickup')) {
-          /* His squad of one is gone like a merged squad: its brief ends and its group no longer counts it. */
-          if (FLED_BRIEF_END_ON) {
-            lone._reconGroup = null;
-            finishMission(sim, lone, 'completed', 'absorbed');
-          }
-          telemetry(sim, 'decision-fled-pickup', {
-            faction: faction,
-            soldier: man.id,
-            squad: best.id,
-            distance: +bestD.toFixed(1)
-          });
+        var pick = bestPickup(sim, faction, squads[i]);
+        if (pick) absorbFled(sim, faction, pick.lone, pick.into, pick.distance);
+      }
+    }
+    /* The nearest retreating squad out of contact within FLED_PICKUP_RANGE of a fled man waiting at his
+       refuge, or null. Reads only; the legacy tick and the command policy (13j) both ask it. */
+    function bestPickup(sim, faction, lone) {
+      var squads = sim.factions[faction].squads,
+        E = root.BattleEngagement,
+        man = lone && lone.fledId != null && !lone.disbanded && lone.members && lone.members[0];
+      if (!man || man.dead || !E || !E.fledPhase || E.fledPhase(man) !== 'wait') return null;
+      var p = man.root.position,
+        best = null,
+        bestD = FLED_PICKUP_RANGE;
+      for (var j = 0; j < squads.length; j++) {
+        var sq = squads[j];
+        if (sq === lone || sq.fledId != null || sq.disbanded || sq.state !== 'retreat' || sq.inContact)
+          continue;
+        if (!D.aliveMembers(sq).length) continue;
+        var a = D.avgPos(sq),
+          d = D.dist(p.x, p.z, a.x, a.z);
+        if (d <= bestD) {
+          best = sq;
+          bestD = d;
         }
       }
+      return best ? { lone: lone, man: man, into: best, distance: bestD } : null;
+    }
+    /* The pickup itself: the Squad Leader rewrites the roster and Engagement ends the man's wait. */
+    function absorbFled(sim, faction, lone, best, distance) {
+      var E = root.BattleEngagement,
+        S = root.BattleSquadStability,
+        man = lone && lone.members && lone.members[0];
+      if (!man || !E || !S || !E.releaseFled) return false;
+      if (!(S.absorb(best, lone, sim) && E.releaseFled(man, sim, 'pickup'))) return false;
+      /* His squad of one is gone like a merged squad: its brief ends and its group no longer counts it. */
+      if (FLED_BRIEF_END_ON) {
+        lone._reconGroup = null;
+        finishMission(sim, lone, 'completed', 'absorbed');
+      }
+      telemetry(sim, 'decision-fled-pickup', {
+        faction: faction,
+        soldier: man.id,
+        squad: best.id,
+        distance: +distance.toFixed(1)
+      });
+      return true;
     }
     return {
       reconState: reconState,
@@ -676,7 +698,12 @@
       mergeGroup: mergeGroup,
       atRally: atRally,
       reconstitute: reconstitute,
-      pickUpFled: pickUpFled
+      planGroups: planGroups,
+      recordPool: recordPool,
+      progressGroups: progressGroups,
+      pickUpFled: pickUpFled,
+      bestPickup: bestPickup,
+      absorbFled: absorbFled
     };
   };
 

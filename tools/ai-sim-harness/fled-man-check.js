@@ -19,7 +19,9 @@ const { loadSquadCommandStack } = require('./squad-command-stack');
 const assert = require('node:assert/strict'),
   fs = require('node:fs'),
   path = require('node:path'),
-  H = require('./harness');
+  H = require('./harness'),
+  { loadGeneralController } = require('./general-controller-stack');
+const WORLDS = [];
 function load(r, p, search) {
   new Function('window', 'globalThis', 'console', 'location', fs.readFileSync(path.join(H.REPO, p), 'utf8'))(
     r,
@@ -75,11 +77,23 @@ function world(search) {
     r
   );
   load(r, 'battle/modules/46-ammunition-stoppages.js', search);
+  /* GENERAL_CONTROLLER=1 (tactical-general-check.js): the same scenarios with the General's reconstitution
+     and fled pickup under the tactical controller (roadmap section 8 slice M1). */
+  const take = process.env.GENERAL_CONTROLLER === '1' ? loadGeneralController(r, load, search) : null;
   const b = H.makeBattle(r);
   b.macroCommandEnabled = true;
   b.scene = { metadata: {} };
-  const w = { r, b, leader: systems['squad-command'], ammo: systems['ammunition-stoppages'], events, sq: [] };
+  const w = {
+    r,
+    b,
+    leader: systems['squad-command'],
+    ammo: systems['ammunition-stoppages'],
+    events,
+    sq: [],
+    take
+  };
   w.ammo.onBattleStart(b);
+  WORLDS.push(w);
   return w;
 }
 /* A US squad of ten at lane `lane`'s home, walked `forward` metres out and cut down to `alive` men (the leader first). */
@@ -130,6 +144,7 @@ function run(w, seconds, onTick) {
     acc += H.AI_TICK;
     if (acc >= C.commandTick - 1e-9) {
       acc = 0;
+      if (w.take) w.take(b);
       C.update(b, null, C.commandTick);
       w.leader.onCommanderTick(b, { town: null });
     }
@@ -915,4 +930,23 @@ test('a soldier who flees twice never reuses a disbanded squad ID', () => {
   );
 });
 
+if (process.env.GENERAL_CONTROLLER === '1')
+  test('controller: every fled pickup went through a command.pickup action', () => {
+    let pickups = 0,
+      events = 0;
+    WORLDS.forEach(w => {
+      const st = w.r.BattleTacticalController.summary(w.b),
+        g = w.r.BattleTacticalGeneral.summary(w.b).us;
+      if (!st.stats) return; // a world that never ran a commander tick
+      assert.equal(st.stats.faults, 0, 'no controller fault: ' + JSON.stringify(st.stats.faultExamples));
+      const seen = w.events.filter(e => e.type === 'decision-fled-pickup').length;
+      events += seen;
+      if (g) {
+        pickups += g.pickups;
+        assert.equal(g.pickups, seen, 'one action per pickup');
+        assert.deepEqual(g.refused, {}, 'no command request was refused');
+      }
+    });
+    assert.ok(pickups > 0 && pickups === events, 'pickups ' + pickups + ' of ' + events);
+  });
 console.log('fled-man-check: ' + n + ' tests passed');

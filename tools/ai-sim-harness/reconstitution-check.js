@@ -10,7 +10,8 @@ const { loadSquadCommandStack } = require('./squad-command-stack');
 const assert = require('node:assert/strict'),
   fs = require('fs'),
   path = require('path'),
-  H = require('./harness');
+  H = require('./harness'),
+  { loadGeneralController } = require('./general-controller-stack');
 function load(r, p, search) {
   new Function('window', 'globalThis', 'console', 'location', fs.readFileSync(path.join(H.REPO, p), 'utf8'))(
     r,
@@ -20,6 +21,7 @@ function load(r, p, search) {
   );
 }
 let n = 0;
+const WORLDS = [];
 function test(name, fn) {
   fn();
   n++;
@@ -62,10 +64,15 @@ function world(opts) {
     (root, file) => load(root, file, /(?:15a-|15c-|16-)/.test(file) ? opts.search : undefined),
     r
   );
+  /* GENERAL_CONTROLLER=1 (tactical-general-check.js): the same scenarios with the General's reconstitution
+     and fled pickup under the tactical controller (roadmap section 8 slice M1). */
+  const take = process.env.GENERAL_CONTROLLER === '1' ? loadGeneralController(r, load, opts.search) : null;
   const b = H.makeBattle(r);
   b.macroCommandEnabled = opts.macro !== false;
   b.scene = { metadata: {} };
-  return { r, b, leader: systems['squad-command'], events, sq: [] };
+  const w = { r, b, leader: systems['squad-command'], events, sq: [], take };
+  WORLDS.push(w);
+  return w;
 }
 /* A squad spawned at its lane's home, walked `forward` metres out (default 150), then cut down to
    `alive` men. `keep` picks which roles survive (default: the leader first, then riflemen). */
@@ -113,6 +120,7 @@ function run(w, seconds, onTick) {
     acc += H.AI_TICK;
     if (acc >= C.commandTick - 1e-9) {
       acc = 0;
+      if (w.take) w.take(b);
       C.update(b, null, C.commandTick);
       w.leader.onCommanderTick(b, { town: null });
     }
@@ -741,4 +749,47 @@ test('too few without the waiting fled man: the group closes with a reason inste
   assert.ok(ended, 'the group is closed');
   assert.notEqual(ended.status, 'merged');
 });
+if (process.env.GENERAL_CONTROLLER === '1') {
+  test('controller: every group was formed and ended through command.reconstitute actions', () => {
+    let formed = 0,
+      merged = 0,
+      owner = 0;
+    WORLDS.forEach(w => {
+      const TC = w.r.BattleTacticalController,
+        g = w.r.BattleTacticalGeneral.summary(w.b).us,
+        st = TC.summary(w.b);
+      if (!st.stats) return; // a world that never ran a commander tick
+      assert.equal(st.stats.faults, 0, 'no controller fault: ' + JSON.stringify(st.stats.faultExamples));
+      assert.equal(st.commanders.us, 'new', 'the US command unit is controlled');
+      owner += recon(w).groupsFormed;
+      merged += recon(w).merges;
+      if (!g) return;
+      formed += g.formed;
+      assert.equal(g.formed, recon(w).groupsFormed, 'the owner formed no group the policy did not ask for');
+      assert.deepEqual(g.refused, {}, 'no command request was refused');
+    });
+    assert.ok(formed > 0 && formed === owner, 'groups formed: ' + formed + ' of ' + owner);
+    assert.ok(merged > 0, 'and some merged');
+  });
+  test('controller: a battle restart dissolves an assembling group through its owner, once', () => {
+    const w = world();
+    [0, 1].forEach(l => squad(w, l, 4));
+    [0, 1].forEach(l => (w.sq[l].state = 'retreat'));
+    const seen = untilGrouped(w, 200),
+      TC = w.r.BattleTacticalController,
+      live = TC.summary(w.b).live.filter(a => a.capability === 'command.reconstitute');
+    assert.equal(live.length, 1, 'one live action for the group');
+    assert.equal(live[0].stage, 'briefed');
+    assert.equal(live[0].squad, '@us');
+    const out = TC.beforeRestart(w.b);
+    assert.equal(out.unconfirmed, 0);
+    const g = recon(w).ended.find(x => x.id === seen.group.id);
+    assert.ok(
+      g && g.status === 'dissolved' && g.endReason === 'controller:battle-restart',
+      JSON.stringify(g)
+    );
+    w.sq.forEach(q => assert.equal(q._reconGroup, null));
+    assert.equal(TC.commandUnit(w.b, 'us'), null, 'the command unit is per battle generation');
+  });
+}
 console.log(n + ' reconstitution checks passed');

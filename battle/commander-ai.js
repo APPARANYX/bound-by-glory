@@ -643,9 +643,15 @@
     var general = generalFor(sim, faction),
       squads = sim.factions[faction].squads,
       woke = false,
-      reasons = {};
-    reconstitute(sim, faction);
-    pickUpFled(sim, faction);
+      reasons = {},
+      TC = root.BattleTacticalController,
+      unit = TC && TC.commandUnit ? TC.commandUnit(sim, faction) : null;
+    /* Under the tactical controller the General's command policy (13j, roadmap section 8 slice M1) owns
+       reconstitution and the fled pickup; the dispatch answers false and these run as before otherwise. */
+    if (!unit || !TC.dispatch(sim, unit, 'generalTick')) {
+      reconstitute(sim, faction);
+      pickUpFled(sim, faction);
+    }
     if (runStrategicRecovery(sim, faction, squads, town)) {
       woke = true;
       reasons['@' + faction] = 'strategic-recovery';
@@ -883,6 +889,10 @@
     generals: generals,
     updateFaction: updateFactionCommander,
     reconstitute: reconstitute,
+    /* The reconstitution owner's functions, for the controller's command policy and adapters (13b, 13j). */
+    reconstitution: function () {
+      return reconImpl();
+    },
     reconstitutionStrength: RECON_STRENGTH,
     reconstitutionMinimumStrength: RECON_MIN_STRENGTH,
     reconstitutionPoolMax: RECON_POOL_MAX,
