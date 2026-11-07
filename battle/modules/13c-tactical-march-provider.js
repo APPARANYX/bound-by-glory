@@ -20,6 +20,10 @@
     STRUCTURE = !/[?&]controllerStructure=0(?:&|#|$)/i.test(SEARCH),
     /* ?controllerClear=0: a quiet contact no longer sends the controlled squad up on the last place the enemy was seen. */
     CLEAR = !/[?&]controllerClear=0(?:&|#|$)/i.test(SEARCH),
+    /* ?controllerSingleWriter=0: the march keeps its own private leg counter again. With it on, the leg is
+       the one Squad Leader execution (15l) holds in sq.routeIndex; the march proposes the next leg through
+       mission.execute and follows only what the owner recorded. */
+    SINGLE = !/[?&]controllerSingleWriter=0(?:&|#|$)/i.test(SEARCH),
     ID = 'march';
   var squads = new WeakMap(),
     warned = false;
@@ -120,7 +124,9 @@
       st.idle = 'no-route';
       return;
     }
-    st.idle = null;
+    /* The owner never records a leg for a brief without a point (publishMission skips it), so with one writer the
+       march stays on the owner's leg; say why instead of marching where nobody recorded. */
+    st.idle = SINGLE && m && !point(m.point) ? 'brief-without-point' : null;
     st.retry = true; // refusals are asked again once per mission tick, not every squad tick
     st.check = true; // so are the men's stages and the slots: Squad Command runs every step, the march does not
     var last = legs.length - 1,
@@ -135,6 +141,9 @@
       st.target = null;
       st.transportHandoff = ex;
     }
+    /* One writer: the leg is the owner's. A squad taken mid-route, a refused publication or the owner's own
+       adoption all start from what the owner holds, never from a counter only this provider keeps. */
+    if (SINGLE) st.leg = ownerLeg(sq, last);
     st.leg = Math.min(st.leg, last);
     /* A leg inside a building waits for the chain, but only for the General's own stall-replan budget (the
        one the legacy route-transition lease uses); the wait says why, and a timeout moves on. */
@@ -165,15 +174,26 @@
       st.leg++;
     }
     if (!st.entryWait) st.waitLeg = null; // a wait that was left starts afresh when the squad is back
+    aim(st, legs, here);
+    publishMission(ctx, st, here);
+    /* The proposal is only a proposal: the men march to the leg the owner recorded after it answered. */
+    if (SINGLE && st.leg !== ownerLeg(sq, last)) {
+      st.leg = ownerLeg(sq, last);
+      aim(st, legs, here);
+    }
+  }
+  function ownerLeg(sq, last) {
+    return Math.max(0, Math.min(last, Math.floor(+sq.routeIndex) || 0));
+  }
+  function aim(st, legs, here) {
     var target = point(legs[st.leg]);
     if (!st.target || dist(st.target, target) > 1e-6) {
       var from = st.leg > 0 ? point(legs[st.leg - 1]) : here;
       st.forward = (from && unit(from, target)) || st.forward || { x: 0, z: 1 };
       st.target = target;
-      st.final = st.leg === last;
+      st.final = st.leg === legs.length - 1;
       st.stopped = new Map();
     }
-    publishMission(ctx, st, here);
   }
 
   function publishMission(ctx, st, here) {
@@ -404,6 +424,7 @@
     on: ON,
     structure: STRUCTURE,
     clear: CLEAR,
+    singleWriter: SINGLE,
     id: ID,
     summary: summary,
     target: function (sq) {

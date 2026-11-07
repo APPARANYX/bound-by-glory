@@ -23,7 +23,9 @@ const LEGS = [
 ];
 function world(search) {
   H.resetIds();
-  const r = H.bootstrap({ search: search || '?stressAct=0&commandRelay=0&tacticalController=new' }),
+  const r = H.bootstrap({
+      search: search || '?stressAct=0&commandRelay=0&scoutsForward=0&tacticalController=new'
+    }),
     systems = {};
   r.BattleTacticalCapabilityContract = CONTRACT;
   r.BattleModules.registerSystem = (id, s) => (systems[id] = s);
@@ -48,7 +50,13 @@ function world(search) {
   q.orderAnchor = { x: 0, z: 0 };
   q.rally = { x: 0, z: 0 };
   q.objective = { x: 0, z: 80 };
-  q._macroMission = { owner: 'force-command', intent: 'capture', status: 'executing', version: 1 };
+  q._macroMission = {
+    owner: 'force-command',
+    intent: 'capture',
+    status: 'executing',
+    version: 1,
+    point: { x: 0, z: 80 }
+  };
   q.route = LEGS.map(p => Object.assign({}, p));
   return { r, b, q, systems, TC: r.BattleTacticalController, MP: r.BattleTacticalMarchProvider };
 }
@@ -89,8 +97,11 @@ test('each man is asked to his Meso formation slot around the squad anchor, thro
   const w = world();
   w.systems['tactical-march-provider'].onBattleStart(w.b);
   const anchor = { x: w.q.orderAnchor.x, z: w.q.orderAnchor.z };
-  tick(w);
+  /* The slots are laid out in the formation the published mission state gives (phase, objective), so
+     read them after the mission tick and before the squad tick that asks the men. */
+  w.TC.dispatch(w.b, w.q, 'executeMission');
   const slots = w.r.BattleSquadStability.formationSlots(w.q, anchor, { x: 0, z: 1 });
+  w.r.SquadAI.updateSquad(w.q, w.b);
   assert.equal(slots.length, alive(w).length, 'every living man has a slot');
   slots.forEach(({ man, point }) => {
     const r = record(w, man);
@@ -288,7 +299,11 @@ test('a defensive phase stays with the fireteam owner: no march order beside a p
   assert.equal(w.TC.summary(w.b).actions, 0, 'the march orders are finished');
   assert.equal(row(w).idle, 'yield:defense');
   w.b.time += 0.5;
-  tick(w);
+  /* Squad ticks only: the phase here is written by the test, and a mission tick would have the owner publish
+     the brief's own phase over it (the brief carries a point, as every brief the General issues does). */
+  w.r.SquadAI.updateSquad(w.q, w.b);
+  w.b.time += 0.5;
+  w.r.SquadAI.updateSquad(w.q, w.b);
   assert.equal(w.TC.summary(w.b).actions, 0, 'and none are asked while the phase is defensive');
   w.q.commandPhase = 'approach';
   w.b.time += 0.15;
