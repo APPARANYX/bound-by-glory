@@ -58,6 +58,10 @@
     COVER_ARRIVED = 1.2;
   var GUNNER_SETUP = 1.4;
   /* ?controllerGunner=0: a controlled machine gun on a suppress task is handed to advance every tick, so it never emplaces (the old behaviour). */
+  /* ?contactActionStable=0 limits the quiet-alert hold below to a suppressing machine gun, as before. */
+  var CONTACT_ACTION_STABLE = !(
+    typeof location !== 'undefined' && /[?&]contactActionStable=0(?:&|#|$)/i.test(location.search || '')
+  );
   var CONTROLLER_GUNNER = !(
     typeof location !== 'undefined' && /[?&]controllerGunner=0(?:&|#|$)/i.test(location.search || '')
   );
@@ -1093,10 +1097,11 @@
     /* A controlled machine gun on a suppress task stays in its alert state: handing it to advance each tick, only for
        the controller to put it back, zeroed its emplacing clock (`setUpSince`) so it never fired. */
     var gunSuppressing =
-      CONTROLLER_GUNNER &&
-      SA().isMachineGun(s) &&
-      controllerCombatTasks.has(s) &&
-      controllerCombatTasks.get(s).drill === 'suppress';
+      (CONTACT_ACTION_STABLE && controllerCombatTasks.has(s)) ||
+      (CONTROLLER_GUNNER &&
+        SA().isMachineGun(s) &&
+        controllerCombatTasks.has(s) &&
+        controllerCombatTasks.get(s).drill === 'suppress');
     if (
       ALERT_LATCH &&
       COMBAT_HANDOFF_ON &&

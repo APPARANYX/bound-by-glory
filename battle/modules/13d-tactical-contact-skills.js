@@ -118,6 +118,17 @@
     st.startedAt = null;
     st.discipline = null;
   }
+  /* Match only inputs actually sent to the native action (?contactActionStable=0 restores matching on the
+     personal target too). FIRE reads the man's current target at execution; a suppression point is an input
+     to SUPPRESS only. */
+  var ACTION_STABLE = !(
+    typeof location !== 'undefined' && /[?&]contactActionStable=0(?:&|#|$)/i.test(location.search || '')
+  );
+  function roleChanged(a, desired, point, target) {
+    if (a.drill !== desired) return true;
+    if (!ACTION_STABLE) return a.target !== target || a.pointKey !== (point ? JSON.stringify(point) : null);
+    return a.pointKey !== (desired === 'suppress' && point ? JSON.stringify(point) : null);
+  }
   /* Release changed roles before Squad Command asks for route movement on the same tick. */
   function reconcile(ctx, st) {
     var men = members(ctx.squad);
@@ -130,9 +141,7 @@
         !s ||
         !stage ||
         stage.stage === 'cancelled' ||
-        a.drill !== drill(s, ctx.sim, st) ||
-        a.target !== (s.target && String(s.target.id)) ||
-        a.pointKey !== (st.points.has(id) ? JSON.stringify(st.points.get(id)) : null)
+        roleChanged(a, drill(s, ctx.sim, st), st.points.get(id), s.target && String(s.target.id))
       ) {
         ctx.finish(a.id, 'contact-role-changed');
         st.men.delete(id);
@@ -564,14 +573,7 @@
       target = s.target && String(s.target.id),
       point = desired === 'suppress' && st.points.get(id),
       pointKey = point ? JSON.stringify(point) : null;
-    if (
-      current &&
-      (!stage ||
-        stage.stage === 'cancelled' ||
-        current.drill !== desired ||
-        current.target !== target ||
-        current.pointKey !== pointKey)
-    ) {
+    if (current && (!stage || stage.stage === 'cancelled' || roleChanged(current, desired, point, target))) {
       ctx.finish(current.id, 'contact-role-changed');
       st.men.delete(id);
       current = null;
