@@ -1,0 +1,23 @@
+{
+  "branch": "work/benchmark-launch/pr761-loop-repair",
+  "launch_parent_sha": "e5a459174a1eca38e6853fb11fa2c158817c78cc",
+  "launch_sha": "9ca400b3f82599cc7050e813c674f9907d828f5c",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/e5a459174a1eca38e6853fb11fa2c158817c78cc",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "standard",
+    "origin_agent": "human",
+    "purpose": "PR #761: paired 600s meeting benchmark (legacy vs new, 3 seeds) to compare each arm to #742 standard run 41648556879 \u2014 reload-posture churn repair, alerts/stalls/gate",
+    "query_off": "strategicInterception=0",
+    "query_on": "strategicInterception=0&tacticalController=new",
+    "ref": "work/meso742-loop-repair",
+    "seed": "controller-natural-20261026",
+    "seeds": "3",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/meso742-loop-repair",
+  "source_sha_at_archive": "e5a459174a1eca38e6853fb11fa2c158817c78cc"
+}
