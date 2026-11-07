@@ -2,7 +2,7 @@
 
 **Status snapshot:** 2026-11-07. **Read sections 7 to 9 first.** Sections 2 to 6 are the 2026-10-25 record of the #630 integration attempt, kept as history; #630 was not merged.
 
-**Where we are:** the guarded tactical controller (Meso layer, `?tacticalController=new`) is on `main` with every pre-takeover item done, and the default switch is Draft #785 (rollback `?tacticalController=legacy`). Next phase: port the Macro and Micro layers onto the same controller so all three M3C layers have one owner per decision (section 8). Follow-ups and known issues parked for later: section 9.
+**Where we are:** the guarded tactical controller (Meso layer, `?tacticalController=new`) is on `main` with every pre-takeover item done, and the controller is the default since #785 (main aed0165, rollback `?tacticalController=legacy`). Next phase: port the Macro and Micro layers onto the same controller so all three M3C layers have one owner per decision (section 8 has the ordered slice plan). Follow-ups and known issues parked for later: section 9.
 
 **Track:** [Issue #602 — AI Skills V1](https://github.com/APPARANYX/grasstex/issues/602) · tracker #786 (was PR #299, record in `docs/reference/AI_TACTICS_CAMPAIGN_V1_PR299_RECORD.md`) · switch #785.
 **Decision rule (unchanged):** do **not** merge, deploy, or enable new gameplay by default solely because an implementation or unit test exists. Separate *implemented*, *natural-battle validated*, *accepted*, and *merged*.
@@ -180,17 +180,54 @@ Phase E (legacy retirement) stays blocked on this list. #299 is a separate produ
 
 ## 8. Next phase 2026-11-07 — port Macro and Micro onto the controller
 
-The controller today owns the **Meso** layer: squad decisions through 13 capabilities (`mission.accept`, `mission.execute`, `movement.move`, `movement.hold`, `combat.march`, `combat.contact`, `combat.bound`, `fire.control`, `maneuver.cover`, `posture.lower`, `station.claim`, `transport.consider`, `transport.cancel`) with providers 13c to 13i. Macro (the General) and Micro (each soldier) still run their legacy decision code, which the controller calls into. Architecture porting is complete when all three layers decide through the controller, one owner per decision, and legacy decision code can be retired.
+The controller today owns the **Meso** layer: squad decisions through 13 capabilities (`mission.accept`, `mission.execute`, `movement.move`, `movement.hold`, `combat.march`, `combat.contact`, `combat.bound`, `fire.control`, `maneuver.cover`, `posture.lower`, `station.claim`, `transport.consider`, `transport.cancel`) with providers 13c to 13i. Macro (the General) and Micro (each soldier) still run their legacy decision code, which the controller calls into. Architecture porting is complete when all three layers decide through the controller, one owner per decision, and legacy decision code can be retired. The default switch is done (#785, main aed0165); `?tacticalController=legacy` stays as the rollback for the transition period.
 
-Same rules as the Meso phase: reuse the existing skill logic, no new timers or movement writers, every change behind `?tacticalController=new` with its own off flag, controller-off identical to `main`, the three-part gate per PR, new architecture rather than legacy parity.
+### 8.1 Rules for every slice
 
-**Order:**
-1. **Switch the default (#785)** and hold the legacy rollback for the transition period.
-2. **Macro, starting with reconstitution** (M3C advice 2026-10-31). General decisions in `commander-ai.js`, `commander-doctrine.js` and `22a` become controller capabilities that publish briefs through the existing Command Reception path: reconstitution and rally, then objective choice and main effort, reserves and reinforcement commitment, then strategic recovery and transport planning. Macro keeps reading only relayed reports (nothing omniscient).
-3. **Micro, the soldier.** Engagement (`engagement.js`, `19a`, `19b`) still decides stance, personal cover, fire permission and stress reactions on its own state machine. Port these as soldier skills under the controller: stance and cover choice, personal fire and reload, then the stress reactions (cower, flee, freeze, rage). The Movement Resolver stays the sole destination writer. The open soldier-level reads in section 9 (flee rate, contact/march flip, fled reload) belong here.
-4. **Phase E, legacy retirement.** Only after both layers pass their gates and Ivan agrees the transition period is over: delete legacy decision paths and their off flags in measured steps, each with a rollback ledger entry.
+- **New architecture, not a reformat.** A slice moves a *decision* into a controller policy and leaves the *effector* with its owner. Behaviour may change; tuning comes later. Never chase exact legacy parity.
+- **Reuse.** The policy calls the existing scorer or chooser (for example `chooseGroup`, `selectMission`, `fightingStance`) as a pure function; a slice adds a new capability only when no existing one fits, and its PR says so.
+- **One owner per decision.** When the slice is on, the legacy decision path for that decision does not run for controlled squads or soldiers. No new timers (a policy runs on an existing entry point: the 0.45 s commander tick or the soldier drill tick), no new movement or order writers (the Movement Resolver stays the sole destination writer; briefs go out through `issueMission` and Command Reception).
+- **Nothing omniscient.** Macro reads own-side squad status and objective status only, never enemy actor truth. Micro reads the soldier's own beliefs and what his squad told him.
+- **Flags.** Each slice has its own off flag (below) that restores the pre-slice controller behaviour. `?tacticalController=legacy` and `?controllerDefault=0` must stay identical to `main` (deterministic rollback check in every PR).
+- **Interface first.** A slice that adds a scope, entry point or capability updates `battle/tactical-capability-contract.js` and this section before the code.
 
-Each layer starts with a short scoping note (which decisions, which owner, which existing code is reused) before the first PR.
+### 8.2 Gate (same for every slice)
+
+1. Syntax, Sim, Prettier, the slice's own regression (fails on old code) and the legacy/off-flag identity checks.
+2. Through Muse (issue #786, label `needs-kit-testing`): the standard paired benchmark (`battle-benchmark-standard.yml`, 60 to 100 fresh seeds, 600 s, pinned control SHA) over meeting, US defense and GE defense, candidate no-param against control no-param, `?strategicInterception=0`; plus the causal-inaction pack and the probe pack. The standard benchmark decides; real broken behaviour in the other two blocks.
+3. Wall ratio no worse than the accepted baseline (x1.695 / x1.506 / x1.435) beyond noise.
+4. Macro slices that act late in a battle (reconstitution, recovery, reserves) also run 900 s.
+
+### 8.3 Ordered slices
+
+**Macro (the General).** Today `updateFactionCommander` (`commander-ai.js`) runs reconstitution, fled pickup, strategic recovery, per-squad mission wakes and transport allocation in a fixed order every commander tick. The controller has only per-squad records.
+
+| # | Slice | Legacy owner it replaces | Capability (new unless noted) | Off flag |
+| --- | --- | --- | --- | --- |
+| M0 | **Command scope.** One controller record per side's General, a `generalTick` entry point dispatched from `updateFactionCommander`, `scope: 'command'` in the contract (`actorId` null, squad id `@us`/`@ge`). A provider that owns no decision yet; everything still runs as before. Can ship with M1. | none (plumbing) | none | `?controllerCommand=0` |
+| M1 | **Reconstitution and fled pickup.** Policy picks groups with the existing `chooseGroup` and decides form, dissolve and merge; adapters call the existing `formGroup`, `dissolveGroup`, `mergeGroup`, `pickUpFled`. Lifecycle stages `grouped`, `briefed`, `merged` (or `dissolved`) make a stalled group visible in `summary().live`. | `22-commander-reconstitution.js` `reconstitute`, `pickUpFled` | `command.reconstitute`, `command.pickup` | `?controllerReconstitution=0` |
+| M2 | **Strategic recovery.** The stall detector and the release, main-effort and reset stages become one action per recovery with stages, so a stage that produced no adopted brief is a visible stall instead of a silent re-run. | `22a-commander-strategic-recovery.js` `runStrategicRecovery`, `runReviewPass` | `command.recover` | `?controllerRecovery=0` |
+| M3 | **Briefs: objective choice and main effort.** Per-squad wakes and `selectMission` scoring (`commander-doctrine.js` reused as-is) decided by the command policy; publishing stays `issueMission`, acceptance stays `mission.accept`. | `commander-ai.js` `wakeReason`, `reconsiderMission`; `22a` `selectMission`, `chooseMainEffort` | `command.brief` | `?controllerBriefs=0` |
+| M4 | **Reserves and transport allocation.** When to commit a held squad (`reserveDue`) and the General's per-tick `considerMission` call move into the command policy; the squad-scope `transport.consider` capability is reused. | `commander-ai.js` `reserveDue`, transport call in `updateFactionCommander` | `command.commit` (+ reuse `transport.consider`) | `?controllerReserves=0` |
+
+Out of scope for Macro: scenario rules that are not General decisions (`21b` front lines, `21c`/`21d` reinforcement trials, `00-defense-plan.js` setup).
+
+**Micro (the soldier).** Engagement's `runDrill` (`engagement.js`) runs physiology, reactions, retreat and stations for every man and hands only the cover, assault and withdrawal drills to the controller (`engagement` entry point, `controllerCombatTick`). Stance, personal cover, fire and stress reactions are still decided inside Engagement.
+
+| # | Slice | Legacy owner it replaces | Capability | Off flag |
+| --- | --- | --- | --- | --- |
+| U0 | **Soldier policy hook.** The existing `engagement` entry point gains a per-soldier policy slot for soldier skills; physiology (`17-soldier-mind.js` stress, wounds) stays a fact source, not a decision. | none (plumbing) | none | ships with U1 |
+| U1 | **Stance and personal cover.** Which stance and which cover spot; Engagement keeps `applyStance`, `reserveCover`, `releaseCover` as effectors. | `19b` `fightingStance`, `seeingStance`, `suppressionStance`, `commitStance`; `19` `findCover` | extend `posture.lower` to `posture.set` (raise as well as lower), new `cover.take` | `?controllerStance=0` |
+| U2 | **Personal fire and reload.** Target, shot and reload timing inside the squad's `fire.control` permission; `46-ammunition-stoppages` and `47-sidearm-switch` stay effectors. Takes the fled-man reload read (#784). | `19b` `fireAllowed`, `tryFire`, `suppress`; reload choice in `engagement.js` | `fire.personal` | `?controllerSoldierFire=0` |
+| U3 | **Stress reactions.** Cower, freeze, flee and rage as soldier skills choosing from the same stress facts; Engagement keeps `runTo`, `goHome`, `fledTick` as effectors. Takes the flee +40% read (section 9) and a windowed suppression-stress cap if it is confirmed. | `19a` `chooseBreak`, `cower`, `freeze`, `beginFled`, `rage` | `soldier.react` | `?controllerReactions=0` |
+| U4 | **Remaining drill states** (orient, alert, advance hand-back) and the contact/march flip read. | `engagement.js` `orient`, `alert`, `advance` for controlled squads | reuse `combat.contact` / `combat.march` | `?controllerDrill=0` |
+
+**Phase E, legacy retirement.** Only after both layers pass and Ivan agrees the transition period is over: delete legacy decision paths and their off flags one layer at a time (Meso, Macro, Micro), each with a rollback ledger entry.
+
+### 8.4 Open calls for Ivan (do not block M0/M1)
+
+- What a rallied or stranded retreated squad should do (section 9 map-edge squads). M1 keeps today's rule (a member that rallies dissolves its group) until he decides.
+- Whether a rebuilt squad takes still-broken men.
 
 ## 9. Follow-ups and known issues (parked 2026-11-07)
 
