@@ -53,6 +53,23 @@
     { level: 4, name: 'reset', at: STRATEGIC_STALL_RECOVERY.reset }
   ];
 
+  var enemyFaction = D.enemyFaction;
+  var policy = D.policyFor,
+    doctrine = D.doctrineFor,
+    genome = D.genomeFor;
+
+  function telemetry(sim, type, data) {
+    if (root.BattleTelemetry) root.BattleTelemetry.record(type, data, sim);
+  }
+  function declare(sim, winner, reason) {
+    if (sim.winner) return;
+    sim.winner = winner;
+    sim.winReason = reason;
+    telemetry(sim, 'objective-victory', { winner: winner, reason: reason });
+    root.GTLog('[COMMAND] objective victory ' + winner + ' reason=' + reason);
+    if (sim.onWinner) sim.onWinner(winner, sim);
+  }
+  /* Kept beside declare(): scripts/run_command_lifecycle_audit.cjs evaluates declare() through here with installVictory. */
   /* A defend battle is decided at the time limit by who holds the majority of the points, for either
      side; holding every point no longer ends it early (a defender is seeded as owner of the points it
      garrisons, so on small towns it "held all objectives" at 35 s before the attacker arrived).
@@ -75,22 +92,6 @@
     return us * 2 > total ? 'us' : ge * 2 > total ? 'ge' : null;
   }
 
-  var enemyFaction = D.enemyFaction;
-  var policy = D.policyFor,
-    doctrine = D.doctrineFor,
-    genome = D.genomeFor;
-
-  function telemetry(sim, type, data) {
-    if (root.BattleTelemetry) root.BattleTelemetry.record(type, data, sim);
-  }
-  function declare(sim, winner, reason) {
-    if (sim.winner) return;
-    sim.winner = winner;
-    sim.winReason = reason;
-    telemetry(sim, 'objective-victory', { winner: winner, reason: reason });
-    root.GTLog('[COMMAND] objective victory ' + winner + ' reason=' + reason);
-    if (sim.onWinner) sim.onWinner(winner, sim);
-  }
   function macroEnabled(sim) {
     return !sim || sim.macroCommandEnabled !== false;
   }
