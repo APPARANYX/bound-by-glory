@@ -39,7 +39,7 @@ const C_TICK = 0.45,
   HOME_Z = -500,
   LANES = [-300, -100, 100, 300, 500];
 function world(search) {
-  search = search == null ? '?stressAct=flee' : search;
+  search = search == null ? '?stressAct=flee&tacticalController=new' : search;
   H.resetIds();
   const r = H.bootstrap({ modules: false, search }),
     systems = {},
@@ -66,7 +66,7 @@ function world(search) {
   load(r, 'battle/modules/17-soldier-mind.js', search);
   load(r, 'battle/commander-doctrine.js', search);
   load(r, 'battle/commander-routes.js');
-  load(r, 'battle/commander-ai.js');
+  load(r, 'battle/commander-ai.js', search);
   load(r, 'battle/modules/22-commander-reconstitution.js', search);
   load(r, 'battle/modules/22a-commander-strategic-recovery.js');
   load(r, 'battle/movement-resolver.js');
@@ -238,6 +238,8 @@ test('an ordinary one-man remnant retreats and cannot continue as a one-man assa
   assert.equal(man.eng.state, 'withdraw', 'the last man executes retreat, not the stale assault phase');
   assert.equal(q._macroMission.status, 'failed', 'the assault brief is ended');
   assert.equal(q._macroMission.endReason, 'squad-retreat');
+  assert.equal(q._macroMission.objectiveId, 'obj-center', 'the failed brief keeps its history');
+  assert.equal(q.targetObjective, null, 'the withdrawing remnant releases its active capture assignment');
   assert.ok(q._assembly && q._assembly.phase === 'to-base', 'he is in the survivor/reconstitution pipeline');
   assert.equal(q.fledId, undefined, 'an ordinary remnant is not a fled detachment');
   assert.notEqual(man.countsForElimination, false, 'an ordinary surviving soldier still counts for his side');

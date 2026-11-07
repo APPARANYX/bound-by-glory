@@ -19,6 +19,12 @@
    tools/ai-sim-harness. */
 (function (root) {
   'use strict';
+  /* Under ?tacticalController=new only; ?arrivedProneDown=0 restores the old behavior. */
+  var ARRIVED_PRONE_DOWN =
+    /[?&]tacticalController=new(?:&|#|$)/i.test(
+      typeof location !== 'undefined' ? location.search || '' : ''
+    ) &&
+    !/[?&]arrivedProneDown=0(?:&|#|$)/i.test(typeof location !== 'undefined' ? location.search || '' : '');
   /* C3 correction; explicit legacy control for paired causal benchmarks. */
   var EFFECTIVE_FIRE = !(
     typeof location !== 'undefined' &&
@@ -977,6 +983,7 @@
       telemetry: telemetry,
       combatThreat: combatThreat,
       commitStance: commitStance,
+      commitStanceRespectHold: commitStanceRespectHold,
       facingError: facingError,
       holdPosition: holdPosition,
       markUrgent: markUrgent,
@@ -1246,6 +1253,9 @@
     if (CONTACT_STANCE && lowNow)
       e.advanceLowUntil = Math.max(+e.advanceLowUntil || 0, battle.time + LOW_GAP_HOLD);
     var low = lowNow || (CONTACT_STANCE && battle.time < (+e.advanceLowUntil || 0));
+    // An arrived rifleman already lies low. Prepare a crouched march once
+    // movement actually has a leg to walk; a prone-hold is such a leg.
+    if (ARRIVED_PRONE_DOWN && low && e.stance === 'prone' && s._movementStopReason === 'arrived') return true;
     if (!holdStance(s, battle))
       transitStance(
         s,

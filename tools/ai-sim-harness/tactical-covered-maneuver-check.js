@@ -175,6 +175,38 @@ function until(w, predicate, seconds = 20) {
     'condition did not occur: ' + JSON.stringify(w.M.summary(w.q)) + ' ' + JSON.stringify(w.TC.summary(w.b))
   );
 }
+test('no-window early exits do not build unused maneuver basis; eligible updates still build it', () => {
+  const w = world();
+  const A = w.r.BattleAmmunition;
+  const original = A.shotEvidence;
+  let evidenceReads = 0;
+  A.shotEvidence = function (s, sim) {
+    evidenceReads++;
+    return original(s, sim);
+  };
+  const ctx = {
+    sim: w.b,
+    squad: w.q,
+    token: { battleId: 'fixture', generation: 1, controllerEpoch: 1, missionVersion: 1, rosterRevision: 1 },
+    stage: () => null,
+    request: () => ({ ok: false, reason: 'fixture-refusal' }),
+    finish: () => true
+  };
+  w.q.inContact = false;
+  for (let i = 0; i < 20; i++) w.M.update(ctx);
+  assert.equal(evidenceReads, 0, 'no contact requires no per-soldier shot-evidence basis');
+  assert.equal(w.M.summary(w.q).pendingCover, false);
+  assert.equal(w.M.summary(w.q).reason, 'no-authorized-contact');
+  w.q.inContact = true;
+  const Q = w.r.BattleSquadStability;
+  const succession = Q.controllerSuccession;
+  Q.controllerSuccession = () => false;
+  w.M.update(ctx);
+  assert.ok(evidenceReads > 0, 'first eligible decision still rebuilds the authoritative basis');
+  Q.controllerSuccession = succession;
+  A.shotEvidence = original;
+  clean(w);
+});
 test('leader and machine gun require two real forward firing riflemen before a single covered relocation', () => {
   const w = world();
   const Q = w.r.BattleSquadStability;
@@ -261,6 +293,47 @@ test('diagnostics preserve the UI contract for movers with no personal contact',
   assert.equal(t.prunedEdges, 0);
   assert.equal(t.candidates, 0);
   clean(w);
+});
+test('one or two mandatory covering shooters are not routed before candidate ranking', () => {
+  for (const numberOfShooters of [1, 2, 3]) {
+    const w = world();
+    const A = w.r.SquadAI;
+    const Q = w.r.BattleSquadStability;
+    const Ammo = w.r.BattleAmmunition;
+    const inMoverTeam = s => ['alpha', 'bravo', 'charlie'].includes(Q.teamKeyFor(s));
+    const eligible = w.q.members.filter(s => inMoverTeam(s) && !A.isMachineGun(s));
+    const shooters = new Set(eligible.slice(0, numberOfShooters).map(s => String(s.id)));
+    assert.equal(shooters.size, numberOfShooters);
+
+    const priorEvidence = Ammo.shotEvidence;
+    const priorPick = w.r.BattleTacticalContactRoute.pick;
+    const routed = new Set();
+    Ammo.shotEvidence = function (s, sim) {
+      return shooters.has(String(s.id)) ? { at: sim.time, shots: 1 } : null;
+    };
+    w.r.BattleTacticalContactRoute.pick = function (s) {
+      routed.add(String(s.id));
+      return priorPick.apply(this, arguments);
+    };
+
+    squad(w);
+    const audit = w.M.summary(w.q).diagnostic;
+    assert.ok(audit && audit.teams.length);
+    if (numberOfShooters <= 2) {
+      for (const id of shooters) {
+        assert.equal(routed.has(id), false);
+        const reason = audit.teams.find(row => row.moverId === id)?.result;
+        assert.equal(reason, 'reserved-covering-shooter');
+      }
+    } else {
+      const routedFiring = [...shooters].some(id => routed.has(id));
+      assert.equal(routedFiring, true);
+    }
+    assert.ok(routed.size > 0);
+    Ammo.shotEvidence = priorEvidence;
+    w.r.BattleTacticalContactRoute.pick = priorPick;
+    clean(w);
+  }
 });
 test('advance waits for real discharges, personal movement adoption, physical arrival and alternates teams', () => {
   const w = world();

@@ -14,6 +14,14 @@
    phase, route leg, squad objective point or soldier destination. */
 (function (root) {
   'use strict';
+  /* Under ?tacticalController=new only; ?retreatObjectiveRelease=0 restores the old behavior. */
+  var RETREAT_OBJECTIVE_RELEASE =
+    /[?&]tacticalController=new(?:&|#|$)/i.test(
+      typeof location !== 'undefined' ? location.search || '' : ''
+    ) &&
+    !/[?&]retreatObjectiveRelease=0(?:&|#|$)/i.test(
+      typeof location !== 'undefined' ? location.search || '' : ''
+    );
   /* The build id belongs to the page, not to a runtime: stamping one here overwrote it. */
   root.GTLog('[COMMAND] objective commander module loaded');
   if (!root.BattleSim || !root.SquadAI || !root.BattleCommanderDoctrine || !root.BattleCommanderRoutes) {
@@ -305,6 +313,16 @@
     } else {
       m.endedAt = +sim.time || 0;
       m.endReason = reason;
+      // Keep the destination in the failed brief for history and mission-resume.
+      // The live assignment must stop advertising a capture to the rest of the force.
+      if (
+        RETREAT_OBJECTIVE_RELEASE &&
+        next === 'failed' &&
+        reason === 'squad-retreat' &&
+        m.objectiveId &&
+        sq.targetObjective === m.objectiveId
+      )
+        sq.targetObjective = null;
       sq._lastMacroMission = m;
       telemetry(sim, 'decision-mission-end', {
         faction: sq.faction,

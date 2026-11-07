@@ -3,6 +3,9 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { fixture, counted, occupy, targetAt, SIN, COS, DEG } = require('./tactical-fixture');
+// The recovered reload-stance repair acts under the tactical controller only.
+const CONTROLLER_LOCATION = { search: '?tacticalController=new' };
+globalThis.location = CONTROLLER_LOCATION;
 let checks = 0;
 function test(name, fn) {
   fn();
@@ -80,7 +83,16 @@ test('successful occupation: committed ingress through the door, anchor, stance,
       if (t.aperture) seen.add(t.aperture.state);
     }
     assert.ok(seen.has('firing'), 'the aperture reported firing (' + [...seen] + ')');
-    assert.equal(f.s.crouching, false, 'standing at a .92 sill');
+    if (f.s.reloading) {
+      assert.equal(f.s.crouching, true, 'kneels while reloading at the station');
+      for (let i = 0; i < 100 && f.s.reloading; i++) {
+        f.systems['ammunition-stoppages'].onSimulationStep(f.sim, { dt: 0.15 });
+        f.tick();
+      }
+      assert.equal(f.s.reloading, false, 'station reload completes');
+      for (let i = 0; i < 40 && f.s.crouching; i++) f.tick();
+    }
+    assert.equal(f.s.crouching, false, 'standing at a .92 sill after reload');
     assert.ok(!f.s.prone);
     const face = f.s._faceHint;
     assert.ok(f.N.inSector(f.st, face), 'facing hint is out through the aperture');
@@ -293,7 +305,7 @@ test('?windowPort=0 is the old station: .775 m inset, a fixed crouch, no port', 
   try {
     f = fixture();
   } finally {
-    delete globalThis.location;
+    globalThis.location = CONTROLLER_LOCATION;
   }
   assert.equal(f.N.portEnabled, false);
   assert.equal(f.st.port, undefined);

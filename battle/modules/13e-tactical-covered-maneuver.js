@@ -21,6 +21,15 @@
     STALL_PACE = !/[?&]controllerStallPace=(?:0|off|false)(?:&|#|$)/i.test(
       typeof location !== 'undefined' ? location.search || '' : ''
     ),
+    /* Controller-only skill; each recovered saving has its own off flag. ?controllerLazyBasis=0 builds the
+       decision basis on every update; ?controllerReserveShooters=0 routes the last one or two covering shooters
+       again before the holder rule refuses them. */
+    LAZY_BASIS = !/[?&]controllerLazyBasis=0(?:&|#|$)/i.test(
+      typeof location !== 'undefined' ? location.search || '' : ''
+    ),
+    RESERVE_SHOOTERS = !/[?&]controllerReserveShooters=0(?:&|#|$)/i.test(
+      typeof location !== 'undefined' ? location.search || '' : ''
+    ),
     states = new WeakMap(),
     teams = ['alpha', 'bravo', 'charlie'],
     MAX_PARALLEL_MOVERS = 3;
@@ -457,6 +466,20 @@
       var shift = supportRelocation(ctx, st, ready, goal, audit);
       if (shift) return shift;
     }
+    /* The selection rule retains all recent shooters when only one or two
+       exist. Read the same synchronous shot evidence before native routing;
+       these soldiers could never pass the existing holder-selection rule. */
+    var Ammo = root.BattleAmmunition,
+      firing = new Set(
+        ready
+          .filter(function (s) {
+            var shot = Ammo && Ammo.shotEvidence && Ammo.shotEvidence(s, ctx.sim);
+            return !!(shot && shot.at >= ctx.sim.time - 3 && shot.at <= ctx.sim.time);
+          })
+          .map(function (s) {
+            return String(s.id);
+          })
+      );
     var choices = [];
     ready.forEach(function (s) {
       var retained = st.routes.get(String(s.id));
@@ -485,6 +508,27 @@
       if (teams.indexOf(team) < 0) return;
       /* A flank drafts only its own team: every other man stays the base of fire. */
       if (lateral && team !== lateral.team) return;
+      /* An irreplaceable covering shooter cannot be selected for a bound,
+         independent of candidate ranking or the availability of cover. */
+      if (RESERVE_SHOOTERS && firing.size <= 2 && firing.has(String(s.id))) {
+        audit.teams.push({
+          team: team,
+          moverId: String(s.id),
+          eligibleMovers: 1,
+          eligibleSupporters: ready.length - 1,
+          candidates: 0,
+          directionalCandidates: 0,
+          admittedRoutes: 0,
+          graphNodes: 0,
+          routeLength: 0,
+          terminal: 'none',
+          reused: false,
+          moverFailures: [],
+          routeRejections: {},
+          result: 'reserved-covering-shooter'
+        });
+        return;
+      }
       /* The owner validates the mover's own received sector, not merely the
          Squad Leader's reports. Do not plan an order he cannot adopt. */
       var personalReports = C.boundThreats(s, ctx.sim);
@@ -561,17 +605,6 @@
     /* Do not draft the sole active rifleman into the moving party! A genuine
        shot in the preceding few seconds is proof this actor has been firing,
        and the current effective line-of-fire makes him a precious supporter. */
-    var Ammo = root.BattleAmmunition,
-      firing = new Set(
-        ready
-          .filter(function (s) {
-            var shot = Ammo && Ammo.shotEvidence && Ammo.shotEvidence(s, ctx.sim);
-            return !!(shot && shot.at >= ctx.sim.time - 3 && shot.at <= ctx.sim.time);
-          })
-          .map(function (s) {
-            return String(s.id);
-          })
-      );
     if (!choices.length) {
       audit.result = 'no-reachable-contact-cover';
       return null;
@@ -714,7 +747,7 @@
       Q = root.BattleSquadStability,
       C = root.BattleCoverPositions,
       rs = reports(ctx),
-      b = basis(ctx, rs),
+      b = st.window || !LAZY_BASIS ? basis(ctx, rs) : null,
       a = men(ctx.squad),
       defense = defenseBrief(ctx, rs),
       back = ctx.squad.state === 'retreat' || ctx.squad.commandPhase === 'retreat',
@@ -873,6 +906,9 @@
       st.reason = 'stall-released:no-hop';
       return;
     }
+    /* Only a live decision/retry needs the full soldier/contact basis. Early
+       no-window exits consumed none of it; active windows still capture it first. */
+    if (b == null) b = basis(ctx, rs);
     if (st.blocked === b && !(STALL_ON && st.stall && cycle !== st.stall.cycle)) return;
     /* Retreating squads retain immediate replanning even while other stalls are paced. */
     var coarse = STALL_PACE && STALL_ON && st.stall && !back ? stallBasis(ctx, rs) : null;

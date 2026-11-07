@@ -102,6 +102,13 @@
       st = stateOf(sq),
       legs = sq.route || [],
       m = sq._macroMission || null;
+    var Q = root.BattleSquadStability,
+      M = Q && Q.controllerMission,
+      held = M && M.heldBy && M.heldBy(sq);
+    if (held) {
+      st.idle = 'yield:' + held;
+      return;
+    }
     if (st.mission !== m) {
       st.mission = m;
       st.leg = 0;

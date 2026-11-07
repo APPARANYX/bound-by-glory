@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 const { loadModule, quietConsole } = require('./module-loader');
+// The recovered repairs act under the tactical controller only.
+globalThis.location = { search: '?tacticalController=new' };
 /* Engagement fire/stance factory ctx + firing (battle/engagement.js fire split 2/2).
    The fire-permission layer, the stance engine, fire permission and suppression, fire-control
    targeting and observation, the bound and the fire position moved verbatim to
@@ -126,6 +128,32 @@ test('the module installs the verbatim set back into engagement.js through the c
   assert.equal(api.crestPrepPoint.length, 3, 'crestPrepPoint(s, target, battle)');
   assert.equal(api.boundForward.length, 1, 'boundForward(s)');
   assert.equal(api.station.length, 2, 'station(s, battle)');
+});
+test('an active reload cannot alternate standing and kneeling as firing poses renew', () => {
+  const r = H.bootstrap({ modules: false });
+  const b = H.makeBattle(r);
+  const q = H.addSquad(r, b, { id: 'us-0', faction: 'us', x: 0, z: 0, objective: { x: 0, z: 100 } });
+  const s = q.members[0],
+    E = r.BattleEngagement;
+  s.reloading = true;
+  s.reloadUntil = b.time + 8;
+  E.requestStance(s, b, 'crouch', 0.5);
+  const firstTrail = E.stateOf(s).stanceTrail.length;
+  for (let i = 0; i < 6; i++) {
+    b.time += 1;
+    E.commitStance(s, b, 'stand', 0.5, i % 2 ? 'station' : 'advance:quiet');
+    E.requestStance(s, b, 'crouch', 0.5);
+  }
+  assert.equal(E.stateOf(s).stanceTrail.length, firstTrail, 'reload posture remains stable');
+  E.commitStance(s, b, 'prone', 0.5, 'state:pinned');
+  E.commitStance(s, b, 'stand', 0.5, 'station');
+  assert.equal(E.stateOf(s).stance, 'prone', 'reload does not raise a prone man');
+  E.commitStance(s, b, 'stand', 0.5, 'player-possession');
+  assert.equal(E.stateOf(s).stance, 'stand', 'explicit player possession keeps its stance');
+  E.requestStance(s, b, 'crouch', 0.5);
+  s.reloading = false;
+  E.commitStance(s, b, 'stand', 0.5, 'advance:quiet');
+  assert.equal(E.stateOf(s).stance, 'stand', 'reload completion releases upright posture');
 });
 test('the parent seam keeps the pre-split names and arities and the tuning export reads the parent constants', () => {
   const r = H.bootstrap({ modules: false }),

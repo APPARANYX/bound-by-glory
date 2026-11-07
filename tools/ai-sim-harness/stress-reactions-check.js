@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 const { loadModule, quietConsole } = require('./module-loader');
+// The recovered repairs act under the tactical controller only.
+globalThis.location = { search: '?tacticalController=new' };
 /* What stress does to a man (Engagement, `?stressAct=cower,flee,freeze,rage`): four declared states, each off unless
    named, the numbers from module 17 and the choice Engagement's.
 
@@ -375,6 +377,24 @@ test("flee: he leaves his weapons, runs to the squad's last safe point, never fi
   assert.equal(s.eng.fledPhase, 'wait', 'waiting for a squad');
   assert.ok(dist(s.destination, s.eng.refuge) < 0.5, 'holding at the refuge');
   assert.equal(s.crouching || s.prone, true, 'down at the refuge');
+});
+
+test('a fled rifleman keeps his refuge posture across short gaps in suppression', () => {
+  const { ctx, s } = broke('?stressAct=flee&tacticalController=new', [0.9, 0, 0], 60, {
+    safe: { x: 0, z: -40 }
+  });
+  put(s, s.eng.refuge.x, s.eng.refuge.z);
+  for (let burst = 0; burst < 4; burst++) {
+    s.suppressedUntil = ctx.b.time + 0.25;
+    tick(ctx, s, 0.15);
+    assert.equal(s.eng.stance, 'prone');
+    tick(ctx, s, 0.3);
+    assert.equal(s.eng.stance, 'prone', 'brief quiet gap at the same refuge');
+  }
+  tick(ctx, s, 1.2);
+  assert.equal(s.eng.fledPhase, 'wait');
+  assert.equal(s.eng.stance, 'crouch', 'recovers after sustained quiet');
+  assert.ok(dist(s.destination, s.eng.refuge) < 0.5);
 });
 
 test('flee: the goal stands until he is there, and a man who cannot get there waits where he is', () => {
@@ -1061,6 +1081,43 @@ test('a flee or charge proposal is only good while he is in that state', () => {
   s.eng.state = 'advance';
   R.resolve(s, ctx.b);
   assert.notEqual(st.goal.kind, 'flee', 'out of the state, the intent is dropped');
+});
+
+test('a personal escape or trance charge survives a new squad retreat brief', () => {
+  for (const [act, kind, temper] of [
+    ['flee', 'flee', [1, 0, 0]],
+    ['rage', 'rage-charge', [0, 0, 1]]
+  ]) {
+    const { ctx, s } = broke('?stressAct=' + act + '&rageTrance=1', temper, 20);
+    load(ctx.r, 'battle/movement-resolver.js');
+    const R = ctx.r.BattleMovementResolver;
+    const destination = { x: s.root.position.x + 12, z: s.root.position.z };
+    assert.equal(s.eng.state, act);
+    R.proposeCombat(s, destination, ctx.b, kind, 1, { source: 'engagement', reason: act });
+    R.resolve(s, ctx.b);
+    assert.equal(s._movementResolver.goal.kind, kind);
+    s.squad.state = 'retreat';
+    s.squad._engagementPlan = { serial: 2 };
+    ctx.b.time += 0.15;
+    R.resolve(s, ctx.b);
+    assert.equal(s._movementResolver.goal.kind, kind, 'squad refresh cannot interrupt the personal reaction');
+    assert.deepEqual(s._movementResolver.goal.intentPoint, destination);
+    s.eng.state = 'advance';
+    R.resolve(s, ctx.b);
+    assert.equal(s._movementResolver.goal.kind, 'retreat', 'squad extraction resumes after recovery');
+  }
+});
+
+test('an ordinary rage charge still yields to squad retreat', () => {
+  const { ctx, s } = broke('?stressAct=rage&rageTrance=0', [0, 0, 1], 20);
+  load(ctx.r, 'battle/movement-resolver.js');
+  const R = ctx.r.BattleMovementResolver;
+  R.proposeCombat(s, { x: 12, z: 20 }, ctx.b, 'rage-charge', 1, { source: 'engagement' });
+  R.resolve(s, ctx.b);
+  assert.equal(s._movementResolver.goal.kind, 'rage-charge');
+  s.squad.state = 'retreat';
+  R.resolve(s, ctx.b);
+  assert.equal(s._movementResolver.goal.kind, 'retreat');
 });
 
 test('the choice draws nothing from the combat RNG: cower, flee and freeze draw none, a blow draws only its own', () => {

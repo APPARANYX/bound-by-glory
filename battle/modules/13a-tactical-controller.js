@@ -30,6 +30,17 @@
       typeof location !== 'undefined' ? location.search || '' : ''
     );
 
+  /* A passenger is owned by the transport journey from boarding to the last dismount. ?controllerTransportPassenger=0
+     restores the old rule that only an embarked squad is transport-locked. */
+  var PASSENGER_LOCK = !/[?&]controllerTransportPassenger=0(?:&|#|$)/i.test(
+    typeof location !== 'undefined' ? location.search || '' : ''
+  );
+  function transportLocked(sq, man) {
+    var T = root.BattleSquadTransport;
+    if (PASSENGER_LOCK && T && T.isPassenger) return !!T.isPassenger(man);
+    return !!(sq._transport && sq._transport.phase === 'embarked');
+  }
+
   function contract() {
     return root.BattleTacticalCapabilityContract || null;
   }
@@ -134,7 +145,7 @@
           id: String(a[i].id),
           dead: !!a[i].dead,
           player: !!a[i].isPlayer,
-          transportLocked: !!(sq._transport && sq._transport.phase === 'embarked')
+          transportLocked: transportLocked(sq, a[i])
         });
     return ctx;
   }

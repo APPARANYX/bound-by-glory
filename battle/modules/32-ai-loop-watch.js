@@ -6,6 +6,12 @@
    position-seeking traps the AI lab is meant to eliminate. */
 (function (root) {
   'use strict';
+  /* Under ?tacticalController=new only; ?loopAbsentOrder=0 restores the old behavior. */
+  var ABSENT_ORDER_FIX =
+    /[?&]tacticalController=new(?:&|#|$)/i.test(
+      typeof location !== 'undefined' ? location.search || '' : ''
+    ) &&
+    !/[?&]loopAbsentOrder=0(?:&|#|$)/i.test(typeof location !== 'undefined' ? location.search || '' : '');
   if (!root.BattleModules || root.BattleAILoopWatch) return;
 
   var SAMPLE_SECONDS = 0.9,
@@ -465,7 +471,11 @@
   }
   function changes(h, field, threshold) {
     var n = 0;
-    for (var i = 1; i < h.length; i++) if (dist(h[i - 1][field], h[i][field]) > threshold) n++;
+    for (var i = 1; i < h.length; i++) {
+      var previous = h[i - 1][field],
+        current = h[i][field];
+      if ((!ABSENT_ORDER_FIX || previous || current) && dist(previous, current) > threshold) n++;
+    }
     return n;
   }
   function repeatingPeriod(h, field, maxP) {

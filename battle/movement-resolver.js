@@ -14,6 +14,16 @@
 */
 (function (root) {
   'use strict';
+  /* Under ?tacticalController=new only; ?fledGoalKeep=0 restores the old behavior. */
+  var COMBAT_REBRIEF_RENEW =
+    /[?&]tacticalController=new(?:&|#|$)/i.test(
+      typeof location !== 'undefined' ? location.search || '' : ''
+    ) &&
+    !/[?&]combatRebriefRenew=0(?:&|#|$)/i.test(typeof location !== 'undefined' ? location.search || '' : '');
+  var FLED_GOAL_KEEP =
+    /[?&]tacticalController=new(?:&|#|$)/i.test(
+      typeof location !== 'undefined' ? location.search || '' : ''
+    ) && !/[?&]fledGoalKeep=0(?:&|#|$)/i.test(typeof location !== 'undefined' ? location.search || '' : '');
 
   /* Under ?tacticalController=new a released squad-order proposal retires the order itself; without the
      controller, and with ?releasedOrder=0, the man keeps the release-time position as before. */
@@ -138,6 +148,12 @@
     /* Player authority survives squad phase/plan signature churn. That churn is exactly what used to
        hand a possessed man back to Micro while moving through buildings. */
     if (p.kind === 'player' && s && s.isPlayer) return p.until + 1e-6 >= now(b);
+    // These displacements belong to the soldier for the duration of the
+    // reaction. A squad rebrief between Micro ticks cannot cancel them.
+    if (FLED_GOAL_KEEP) {
+      if (p.kind === 'flee') return s.eng && s.eng.state === 'flee';
+      if (tranceCharge(s, p)) return true;
+    }
     if (p.signature !== signature(s)) return false;
     if (p.kind === 'cover-bound') return s.eng && s.eng.state === 'bound';
     if (p.kind === 'assault-rush') return s.eng && s.eng.state === 'assault';
@@ -387,6 +403,9 @@
         t < intent.refreshAt &&
         live &&
         live.kind === kind &&
+        // A rebrief invalidates the old proposal. Publish this tick's renewal
+        // before resolve can fall back to formation for one frame.
+        (!COMBAT_REBRIEF_RENEW || live.signature === signature(soldier)) &&
         (engagement || live.owner === source)
       ) {
         count(battle, 'combatIntentCoalesced');
@@ -711,7 +730,10 @@
     };
     resetSoldier(soldier);
     soldier.destination = { x: pos.x, z: pos.z };
-    soldier.orderDestination = { x: pos.x, z: pos.z };
+    /* A carrier release is not a new infantry order. Under the controller,
+       retire intent just as endOrder does; the physical destination still
+       holds here until Meso publishes the resumed personally adopted move. */
+    soldier.orderDestination = RELEASE_RETIRES ? null : { x: pos.x, z: pos.z };
     soldier._destinationCommitUntil = 0;
     if (root.BattleNavigation && root.BattleNavigation.invalidateNavPath)
       root.BattleNavigation.invalidateNavPath(soldier);

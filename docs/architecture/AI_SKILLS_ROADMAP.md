@@ -158,3 +158,17 @@ Update this document when a PR changes a **phase verdict**, closes a **gate**, o
 **Primary sources:** [#602 specification](https://github.com/APPARANYX/grasstex/issues/602) · [#630 integration](https://github.com/APPARANYX/grasstex/pull/630) · [#635 gate probe](https://github.com/APPARANYX/grasstex/pull/635) · [#645–#649 probes/alternatives](https://github.com/APPARANYX/grasstex/pull/645) · [#650 retreat pilot](https://github.com/APPARANYX/grasstex/pull/650) · [#651 directional design](https://github.com/APPARANYX/grasstex/pull/651) · [#652 fire-control PRECISION](https://github.com/APPARANYX/grasstex/pull/652) · [#653 HOLD clock](https://github.com/APPARANYX/grasstex/pull/653).
 
 **Current executive verdict:** A–C **implemented in the draft integration**; D **experimentally implemented but natural-battle acceptance blocked**; E **not started**. Priority = evidence-backed D1 gate fixes → one directional bound skill D2 → repeatable natural validation D3 → reviewed integration D4 → measured retirement E.
+
+## 7. Update 2026-11-06 — guarded tactical controller takeover (supersedes the stale D/E wording above)
+
+The #630 consolidation was not merged. The Meso controller reached `main` as a different, smaller path: the guarded tactical controller (`?tacticalController=new`, legacy by default) with Meso skills merged through #771, then speed work #767-#770 and #773. It stays opt-in. The default switch is a separate PR after the acceptance list below. Merge plan and open-PR dispositions: the 2026-11-06 consolidated merge plan (thread "Finish Meso controller merge plan").
+
+**Required before default takeover** (a missing item blocks the switch):
+
+1. Fresh 600 s paired baseline on the exact main commit: meeting, US defense, GE defense; wall clock at most 1.25x legacy (desktop primary), or a new baseline set by Ivan after checks.
+2. Recovered #706 behaviours: passenger-level transport ownership (#776), carrier release retires the foot order, recon and mission-route hold across handoffs, regroup unreachable-order release.
+3. One owner for route and mission writes (`?controllerSingleWriter=0`), ambush casualty strand fix, reconstitution and truck checks, desktop playtest.
+4. **Stress and casualty awareness in contact (gap found 2026-11-06).** Two legacy Squad Leader decisions never run for squads the controller owns: the course-of-action decision on contact (a shaken or depleted squad holds instead of bounding) and the stress review (a squad shaken too long asks the General for a new brief). The controller therefore ignores stress and casualties during a fight. A third default-on legacy decision is also skipped: engagement-plan upkeep (`updatePlan`, module 16), which asks the General for a review when contact clears or a lease expires; 13e only requests reviews for its own stall reasons. Confirm that in a battle first. Local plan (15n) and lease conflicts are opt-in in legacy, so they are not gaps. Plan: one Draft that feeds the existing scorer into the controller's contact skills and the existing General request path, behind its own off flag and `?tacticalController=new`. No new scorer, timer or order writer. Not started; needs the standard paired set before it counts.
+5. Explicit legacy rollback kept for an agreed transition period.
+
+Phase E (legacy retirement) stays blocked on this list. #299 is a separate product track; its phase status against the controller is in the comment on that PR.
