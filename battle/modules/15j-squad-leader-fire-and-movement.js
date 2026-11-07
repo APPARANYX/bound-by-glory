@@ -51,6 +51,10 @@
       FIRETEAM_SPLIT_ON = ctx.FIRETEAM_SPLIT_ON,
       FIRE_CONTROL_ON = ctx.FIRE_CONTROL_ON,
       COA_ON = ctx.COA_ON;
+    /* Opt-out for the controlled-squad reviews above, which exist only under ?tacticalController=new. */
+    var CONTROLLER_REVIEWS = !/[?&]controllerSquadReviews=(?:0|off|false)(?:&|#|$)/i.test(
+      typeof location !== 'undefined' ? location.search || '' : ''
+    );
     function teamStress(men) {
       var M = root.BattleSoldierMind;
       return M && M.teamStress ? M.teamStress(men) : 0;
@@ -110,6 +114,16 @@
         !controllerSuccession(battle, sq)
       )
         updateClearContact(sq, battle, r);
+      /* Stress review and the course of action are Squad Leader judgement, not tactical skills: a controlled
+         squad keeps them, so shaken men still ask the General to look at the brief and a squad that scores
+         'defend' is known to hold (13e declines new covered bounds then). ?controllerSquadReviews=0 restores
+         the old skip. */
+      if (CONTROLLER_REVIEWS && TC && TC.controls(battle, sq)) {
+        if (sq.inContact) {
+          stressReview(sq, battle);
+          if (COA_ON) updateCOA(sq);
+        } else if (SL_STRESS.review) sq._slStressSince = null;
+      }
       if (TC && TC.dispatch(battle, sq, 'fireAndMovement', r)) return;
       var localTask = localPlan && localPlan.on ? localPlan.update(battle, sq, r) : null;
       if (tacticalPostures && tacticalPostures.on) tacticalPostures.update(battle, sq, r);

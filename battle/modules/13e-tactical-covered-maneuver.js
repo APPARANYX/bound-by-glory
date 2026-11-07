@@ -3,6 +3,10 @@
    Reception adopts, and the resolver alone moves. No fire permission or world-state writer. */
 (function (root) {
   'use strict';
+  /* ?controllerCoaGate=0: new covered bounds ignore the squad's course of action, as before. */
+  var COA_GATE = !/[?&]controllerCoaGate=(?:0|off|false)(?:&|#|$)/i.test(
+    typeof location !== 'undefined' ? location.search || '' : ''
+  );
   /* ?noHopStall=0 restores the old rule: a refusal stands until the squad's basis changes, unreported, forever. */
   var STALL_ON = !/[?&]noHopStall=0(?:&|#|$)/i.test(
       typeof location !== 'undefined' ? location.search || '' : ''
@@ -875,6 +879,14 @@
     /* No new covered bound while nobody commands the squad (succession, 15d): the reason says so. */
     if (Q.controllerSuccession && Q.controllerSuccession(ctx.sim, ctx.squad)) {
       st.reason = 'succession';
+      st.blocked = null;
+      st.stall = null;
+      return;
+    }
+    /* A squad whose course of action holds (15e, 'defend': casualties, stress or a lost leader) starts no new
+       bound. A window already moving is finished by the branch above. ?controllerCoaGate=0 ignores it. */
+    if (COA_GATE && eligible && !back && Q.coaHolds && Q.coaHolds(ctx.squad)) {
+      st.reason = 'coa-holds';
       st.blocked = null;
       st.stall = null;
       return;

@@ -2898,6 +2898,10 @@
     coas: function () {
       return Object.keys(COAS);
     },
+    /* True when the squad's course of action holds (defend): no new bounds. COAs only restrict. */
+    coaHolds: function (sq) {
+      return !!(COA_ON && sq && sq.coa && COAS[sq.coa] && !COAS[sq.coa].bounds);
+    },
     /* Read-only views of the two decisions, for the checks and the probes (nothing in the runtime calls them). */
     moraleBreakAt: moraleBreakAt,
     moraleRallies: moraleRallies,
