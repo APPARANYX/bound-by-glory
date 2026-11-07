@@ -28,6 +28,14 @@
     /[?&]tacticalController=new(?:&|#|$)/i.test(
       typeof location !== 'undefined' ? location.search || '' : ''
     ) && !/[?&]refugeHold=0(?:&|#|$)/i.test(typeof location !== 'undefined' ? location.search || '' : '');
+  /* Under ?tacticalController=new only; ?fledReloadClear=0 restores the old behavior (a man who breaks
+     mid-reload keeps s.reloading with no weapon: nothing ever finishes it, and #776's reload stance
+     hold keeps him crouched while he runs). */
+  var FLED_RELOAD_CLEAR =
+    /[?&]tacticalController=new(?:&|#|$)/i.test(
+      typeof location !== 'undefined' ? location.search || '' : ''
+    ) &&
+    !/[?&]fledReloadClear=0(?:&|#|$)/i.test(typeof location !== 'undefined' ? location.search || '' : '');
   if (root._engagementStressReactions) return;
 
   /* Factory: the module calls it itself at load time with engagement.js's ctx (see above). */
@@ -274,6 +282,10 @@
       e.refugeHere = false;
       e.refugeTries = 0;
       if (W && W.abandon) W.abandon(s);
+      /* The reload or stoppage he was in goes with the weapon (the ammunition owner's own reset; his
+         rearm at base initializes a fresh load). */
+      var A = root.BattleAmmunition;
+      if (FLED_RELOAD_CLEAR && !s.weapon && A && A.weaponChanged) A.weaponChanged(s);
       /* Out of the fight, out of the count: the General's force accounting (elimination and the
        time-limit force score, BattleCommanderDoctrine.forceUnits) no longer sees him until a
        retreating squad takes him back in (releaseFled restores him). */

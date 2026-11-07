@@ -302,6 +302,42 @@ test("he leaves his weapons, tells the soldier condition and runs to the squad's
   invariants(w, 10);
 });
 
+/* A man who breaks mid-reload: the reload goes with the rifle. Before the fix s.reloading stayed true with no
+   weapon (the ammunition tick skips weaponless men), and #776's reload stance hold crouched him while he ran. */
+function brokenMidReload(search) {
+  const w = world(search),
+    q = squad(w, 0, 10, 150),
+    s = rifleman(q);
+  run(w, 1);
+  trouble(w, q, { x: s.root.position.x, z: HOME_Z + 150 + 120 });
+  const spot = here(s);
+  s.weapon.ammo = 0;
+  s.reloading = true;
+  s.reloadStart = w.b.time;
+  s.reloadUntil = w.b.time + 60;
+  snap(w, s);
+  run(w, 0.5, () => {
+    snap(w, s);
+    trouble(w, q, { x: spot.x, z: spot.z + 120 });
+  });
+  run(w, 2);
+  return s;
+}
+test('a man who breaks mid-reload leaves the reload with his rifle (?fledReloadClear=0 keeps it)', () => {
+  let s = brokenMidReload();
+  assert.equal(s.eng.state, 'flee');
+  assert.equal(s.weapon, null);
+  assert.equal(s.reloading, false, 'no reload without a weapon');
+  assert.equal(s.reloadUntil, 0);
+  assert.equal(s.clearingStoppage, false);
+  s = brokenMidReload('?stressAct=flee&tacticalController=new&fledReloadClear=0');
+  assert.equal(s.eng.state, 'flee');
+  assert.equal(s.weapon, null);
+  assert.equal(s.reloading, true, 'old behavior: the stale reload stays');
+  s = brokenMidReload('?stressAct=flee');
+  assert.equal(s.reloading, true, 'controller off: unchanged from main');
+});
+
 test("his squad's safe point is the last place it stood out of contact with nobody known near", () => {
   const w = world(),
     q = squad(w, 0, 10, 100);
