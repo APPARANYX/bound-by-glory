@@ -15,6 +15,9 @@
     ON =
       /[?&]tacticalController=new(?:&|#|$)/i.test(SEARCH) &&
       !/[?&]controllerAmbush=(?:0|off|false)(?:&|#|$)/i.test(SEARCH),
+    /* ?controllerAmbushRelease=0 restores the old reset: a new token key dropped the line's state while
+       the controller (rosterKeep) kept the living men's move/hold actions, so nobody ever released them. */
+    RELEASE_ON_RESET = !/[?&]controllerAmbushRelease=(?:0|off|false)(?:&|#|$)/i.test(SEARCH),
     states = new WeakMap(),
     tuning = {
       minimumHold: 4,
@@ -39,6 +42,14 @@
     var st = states.get(ctx.squad),
       k = key(ctx);
     if (!st || st.key !== k) {
+      /* A casualty changes the roster revision. The controller keeps the survivors' actions, so the line
+         they belong to ends here, through their owners, before its state is replaced: same reason,
+         release count and cooldown as a casualty seen by progress(). */
+      var carried = null;
+      if (RELEASE_ON_RESET && st && st.phase !== 'idle') {
+        end(ctx, st, 'casualty');
+        carried = st;
+      }
       st = {
         key: k,
         phase: 'idle',
@@ -52,6 +63,13 @@
         contacts: 0,
         releases: {}
       };
+      if (carried) {
+        st.until = carried.until;
+        st.reason = carried.reason;
+        st.started = carried.started;
+        st.contacts = carried.contacts;
+        st.releases = carried.releases;
+      }
       states.set(ctx.squad, st);
     }
     return st;

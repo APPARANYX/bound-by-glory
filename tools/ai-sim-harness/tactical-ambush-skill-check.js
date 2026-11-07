@@ -199,6 +199,42 @@ test('the men reach their posts and hold, then the line is ready after the minim
   assert.equal(w.TC.summary(w.b).stats.faults, 0);
 });
 
+function holdLine(flags) {
+  const w = world({ flags });
+  step(w, 1);
+  arrive(w);
+  step(w, 2);
+  assert.ok(live(w, 'movement.hold').length >= 3, JSON.stringify(w.K.summary(w.q)));
+  /* A rifleman, not the Squad Leader: the squad keeps its command and nothing but the roster changes. */
+  const leader = w.r.SquadAI.leaderOf(w.q),
+    posts = w.K.summary(w.q).posts.map(p => p.id),
+    victim = posts.find(id => !leader || String(leader.id) !== id);
+  w.q.members.find(s => String(s.id) === victim).dead = true;
+  step(w, 3);
+  return { w, survivors: posts.filter(id => id !== victim) };
+}
+test('a casualty on a held line releases the survivors through their owners and the march takes them back', () => {
+  const { w, survivors } = holdLine('');
+  assert.equal(phase(w), 'idle');
+  assert.equal(w.K.summary(w.q).releases.casualty, 1, JSON.stringify(w.K.summary(w.q)));
+  const holds = live(w, 'movement.hold').filter(a => survivors.includes(String(a.actorId)));
+  assert.equal(holds.length, 0, 'no survivor is left standing on an ambush hold nobody owns');
+  step(w, 30);
+  assert.equal(live(w, 'movement.hold').filter(a => survivors.includes(String(a.actorId))).length, 0);
+  assert.ok(
+    live(w, 'movement.move').some(a => survivors.includes(String(a.actorId))),
+    'the march asks for the survivors again'
+  );
+  assert.equal(w.TC.summary(w.b).stats.faults, 0);
+});
+test('?controllerAmbushRelease=0 restores the old reset that left the survivors on their holds', () => {
+  const { w, survivors } = holdLine('&controllerAmbushRelease=0');
+  step(w, 30);
+  const holds = live(w, 'movement.hold').filter(a => survivors.includes(String(a.actorId)));
+  assert.equal(holds.length, survivors.length, 'old behaviour: every survivor still holds his post');
+  assert.equal(w.q.members.filter(s => w.K.wants(s)).length, 0, 'and no skill owns him');
+});
+
 test('a post a man never reaches is released after the preparation budget', () => {
   const w = world();
   tick(w);

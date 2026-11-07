@@ -231,7 +231,10 @@ uncommitted rifleman takes the first post that `BattleCoverPositions.maskedPost`
 (three men minimum): `movement.move`, then `movement.hold` on arrival, `minimumHold` 4 s, then the line is
 ready and the contact skills fire on first-hand contact. The march and the station skill yield to a man it
 holds. Contact before ready, pressure, a lost threat or masking, a retained skill, a retreat, an owner
-ending a man's action, or the 12 s preparation/observation budgets release every man through his owner.
+ending a man's action, or the 12 s preparation/observation budgets release every man through his owner. A casualty
+anywhere in the squad changes the controller's roster revision; the controller keeps the survivors' actions
+(`rosterKeep`), so the skill ends the line as a `casualty` and releases them before its state is reset
+(`?controllerAmbushRelease=0` restores the old reset that left the survivors on posts nobody released).
 
 `13i-tactical-flank-assault.js` (`BattleTacticalFlankAssault`, `?controllerAssault=0` turns it off) is the
 Squad Leader's flank and assault decision. Legacy 15j only bounded a team frontally and labelled the
