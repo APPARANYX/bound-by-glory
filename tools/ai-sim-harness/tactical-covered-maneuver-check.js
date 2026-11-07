@@ -353,6 +353,25 @@ test('advance waits for real discharges, personal movement adoption, physical ar
   assert.ok(new Set(arrived).size >= 2, 'different soldiers check in independently');
   clean(w);
 });
+test('a squad whose course of action holds starts no covered bound; ?controllerCoaGate=0 ignores it', () => {
+  function reach(flags) {
+    const w = world(100, '&commandPosture=0' + flags);
+    w.r.BattleSquadStability.coaHolds = () => true;
+    squad(w);
+    micro(w);
+    for (let i = 0; i < 80; i++) tick(w);
+    return w;
+  }
+  const held = reach('');
+  assert.notEqual(held.M.summary(held.q).phase, 'moving');
+  assert.equal(held.M.summary(held.q).reason, 'coa-holds');
+  assert.equal(live(held, 'combat.bound').length, 0);
+  const open = reach('&controllerCoaGate=0');
+  assert.ok(
+    open.M.summary(open.q).checkins >= 1 || open.M.summary(open.q).phase === 'moving',
+    'the off flag restores bounding'
+  );
+});
 test('refusal of one personal bound preserves an already accepted peer order', () => {
   const w = world(),
     E = w.r.BattleEngagement.controllerCombat,
