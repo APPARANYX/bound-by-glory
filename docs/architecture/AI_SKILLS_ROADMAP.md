@@ -4,7 +4,7 @@
 
 **Where we are:** the guarded tactical controller (Meso layer, `?tacticalController=new`) is on `main` with every pre-takeover item done, and the default switch is Draft #785 (rollback `?tacticalController=legacy`). Next phase: port the Macro and Micro layers onto the same controller so all three M3C layers have one owner per decision (section 8). Follow-ups and known issues parked for later: section 9.
 
-**Track:** [Issue #602 — AI Skills V1](https://github.com/APPARANYX/grasstex/issues/602) · tracker #299 · switch #785.
+**Track:** [Issue #602 — AI Skills V1](https://github.com/APPARANYX/grasstex/issues/602) · tracker #786 (was PR #299, record in `docs/reference/AI_TACTICS_CAMPAIGN_V1_PR299_RECORD.md`) · switch #785.
 **Decision rule (unchanged):** do **not** merge, deploy, or enable new gameplay by default solely because an implementation or unit test exists. Separate *implemented*, *natural-battle validated*, *accepted*, and *merged*.
 
 > This document is a point-in-time status and forward roadmap. Check linked PRs and benchmark artifacts when updating it. The architectural A/B/C phase names in sections 2 to 6 are different from the older #299 tactical "Phase C" label.
@@ -222,4 +222,4 @@ Not blockers for the default switch. Each needs a confirmed failure before a fix
 
 **Player and UI (not AI):** pressing P gives `Unhandled promise rejection: {}` once per press; Esc does not release possession and P cycles to another soldier.
 
-**Other open decisions:** #608 `?ballisticFailClosed=0` question; #685 Howler audio buses parked; #299 phases C to J need a reuse audit against controller skills before any port.
+**Other open decisions:** #608 `?ballisticFailClosed=0` question; #685 Howler audio buses parked; the tactics campaign phases C to J (tracker #786, formerly PR #299) need a reuse audit against controller skills before any port.

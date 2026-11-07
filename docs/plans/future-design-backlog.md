@@ -20,7 +20,7 @@ Updated 2026-11-07. The AI architecture order lives in `docs/architecture/AI_SKI
 6. Logistics/economy and reconnaissance layers.
 7. Revisit Genome and learned tactical reasoning only after the deterministic tactical baseline is stable.
 
-#299 stays the tracker; its remaining phases are audited for reuse against controller skills, not merged wholesale.
+The tactics campaign tracker is issue #786 (formerly PR #299, record in `docs/reference/AI_TACTICS_CAMPAIGN_V1_PR299_RECORD.md`); its remaining phases are audited for reuse against controller skills, not merged wholesale.
 
 ## Tactical map and battlefield presentation
 
