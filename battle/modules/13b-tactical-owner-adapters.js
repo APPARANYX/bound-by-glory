@@ -368,6 +368,95 @@
     }
   };
 
+  /* Macro (roadmap section 8 slice M1). The General's reconstitution owner (22) forms the group, briefs
+     the rally and later merges or dissolves it; the adapter only bridges and projects. */
+  function recon() {
+    var C = root.BattleCommanderAI;
+    return C && C.reconstitution ? C.reconstitution() : null;
+  }
+  function squadNamed(sim, faction, id) {
+    var R = recon();
+    return R && R.squadById ? R.squadById(sim, faction, id) : null;
+  }
+  CAPS['command.reconstitute'] = {
+    request: function (req, sim) {
+      var R = recon(),
+        squads = req.params.squadIds.map(function (id) {
+          return squadNamed(sim, req.faction, id);
+        });
+      if (
+        !R ||
+        squads.some(function (sq) {
+          return !sq || sq.disbanded || sq._reconGroup || sq.state !== 'retreat';
+        })
+      )
+        return false;
+      return keep(req, sim, { group: R.formGroup(sim, req.faction, squads) });
+    },
+    stage: function (h) {
+      var g = h.group;
+      if (g.status === 'merged') mark(h, 'merged', 'reconstituted', g.endedAt);
+      else if (g.status === 'dissolved') mark(h, 'cancelled', 'owner:' + g.endReason, g.endedAt);
+      else mark(h, 'briefed', 'assembling', g.formedAt);
+    },
+    /* A group still assembling is dissolved through its owner, which ends every member's rally brief. */
+    cancel: function (h, reason) {
+      var R = recon();
+      if (h.group.status === 'assembling' && R) R.dissolveGroup(h.sim, h.group, null, 'controller:' + reason);
+      return true;
+    },
+    release: function (h) {
+      return h.group.status !== 'assembling';
+    }
+  };
+  /* Slice M2. The recovery owner (22a) runs each ladder stage and keeps the episode's state on the
+     General; the action is accepted only for the episode that state is on and reports the last stage. */
+  function stallState(sim, faction) {
+    var C = root.BattleCommanderAI,
+      g = C && C.generalFor ? C.generalFor(sim, faction) : null;
+    return (g && g.stallRecovery) || null;
+  }
+  CAPS['command.recover'] = {
+    request: function (req, sim) {
+      var st = stallState(sim, req.faction);
+      if (!st || st.episode !== req.params.episode) return false;
+      return keep(req, sim, { faction: req.faction, episode: req.params.episode });
+    },
+    stage: function (h) {
+      var st = stallState(h.sim, h.faction),
+        last = st && st.history && st.history[st.history.length - 1];
+      if (!st || st.episode !== h.episode) mark(h, 'recovered', 'objective-progress');
+      else if (last && last.episode === h.episode) mark(h, 'staged', last.stage, last.time);
+    },
+    /* Nothing to undo: every brief a stage issued is the General's ordinary mission, with its own lifecycle. */
+    cancel: function () {
+      return true;
+    },
+    release: function () {
+      return true;
+    }
+  };
+  CAPS['command.pickup'] = {
+    request: function (req, sim) {
+      var R = recon(),
+        lone = squadNamed(sim, req.faction, req.params.fledSquadId),
+        into = squadNamed(sim, req.faction, req.params.intoSquadId),
+        pick = R && lone && R.bestPickup(sim, req.faction, lone);
+      if (!pick || pick.into !== into || !R.absorbFled(sim, req.faction, lone, into, pick.distance))
+        return false;
+      return keep(req, sim, {});
+    },
+    stage: function (h) {
+      mark(h, 'absorbed', 'absorbed', h.requestedAt);
+    },
+    cancel: function () {
+      return true;
+    },
+    release: function () {
+      return true;
+    }
+  };
+
   CAPS['combat.march'] = CAPS['combat.contact'];
   CAPS['combat.bound'] = CAPS['combat.contact'];
   function request(req, sim) {

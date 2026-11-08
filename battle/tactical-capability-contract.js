@@ -194,6 +194,37 @@
       ['BattleSquadTransport', 'BattleSquadTransport'],
       []
     ),
+    /* Macro (the General), roadmap section 8 slice M1. A command-scope request is issued on the side's
+       command unit (squadId `@us`/`@ge`, no actor) and names the squads it acts on in its params. */
+    'command.reconstitute': definition(
+      'command',
+      'Macro',
+      'formGroup (remnant group, rally brief, merge by the General)',
+      [],
+      ['briefed', 'merged'],
+      ['BattleCommanderAI', 'BattleCommanderAI'],
+      ['squadIds']
+    ),
+    /* Slice M2: one stall episode of the General's strategic recovery ladder (episode = the side's last
+       objective-progress time, as 22a keys it). */
+    'command.recover': definition(
+      'command',
+      'Macro',
+      'runStage / runReviewPass (strategic recovery ladder, re-tasking through the brief path)',
+      [],
+      ['staged', 'recovered'],
+      ['BattleCommanderAI', 'BattleCommanderAI'],
+      ['episode']
+    ),
+    'command.pickup': definition(
+      'command',
+      'Macro',
+      'absorbFled (a retreating squad takes in a fled man waiting at his refuge)',
+      [],
+      ['absorbed'],
+      ['BattleSquadStability'],
+      ['fledSquadId', 'intoSquadId']
+    ),
     'transport.cancel': definition(
       'squad',
       'BattleSquadTransport',
@@ -225,6 +256,8 @@
       p = request.params;
     if (def.scope === 'actor' ? !text(request.actorId) : request.actorId !== null)
       return fail('invalid-actor');
+    /* The command unit is `@` + faction; a squad-scope or actor-scope request never names it. */
+    if ((def.scope === 'command') !== (request.squadId === '@' + request.faction)) return fail('wrong-squad');
     if (
       !record(p, def.parameters) ||
       !def.parameters.every(function (k) {
@@ -257,6 +290,17 @@
       (Object.hasOwn(p, 'point') && !point(p.point)) ||
       (Object.hasOwn(p, 'threat') && !point(p.threat)) ||
       (Object.hasOwn(p, 'stationId') && !text(p.stationId)) ||
+      (Object.hasOwn(p, 'squadIds') &&
+        (!Array.isArray(p.squadIds) ||
+          p.squadIds.length < 1 ||
+          p.squadIds.length > 12 ||
+          p.squadIds.some(function (id) {
+            return !text(id);
+          }) ||
+          new Set(p.squadIds).size !== p.squadIds.length)) ||
+      (Object.hasOwn(p, 'episode') && !text(p.episode)) ||
+      (Object.hasOwn(p, 'fledSquadId') &&
+        (!text(p.fledSquadId) || !text(p.intoSquadId) || p.fledSquadId === p.intoSquadId)) ||
       (Object.hasOwn(p, 'stance') && ['crouch', 'prone', 'crawl'].indexOf(p.stance) < 0) ||
       (Object.hasOwn(p, 'version') && p.version !== request.missionVersion) ||
       (request.capability === 'mission.execute' &&
@@ -293,7 +337,11 @@
     def.parameters.forEach(function (k) {
       if (!Object.hasOwn(p, k)) return;
       out.params[k] =
-        k === 'moverIds' ? p[k].slice() : p[k] && typeof p[k] === 'object' ? { x: p[k].x, z: p[k].z } : p[k];
+        k === 'moverIds' || k === 'squadIds'
+          ? p[k].slice()
+          : p[k] && typeof p[k] === 'object'
+            ? { x: p[k].x, z: p[k].z }
+            : p[k];
     });
     var result = frozen({ ok: true, reason: 'valid-shape', request: out });
     if (shaped) shaped.set(out, result);

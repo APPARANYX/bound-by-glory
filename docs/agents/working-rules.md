@@ -72,6 +72,13 @@ handoff** in the relevant GitHub PR or issue:
   formed from PR, source SHA, scenario and purpose, so a second agent does not
   duplicate the same browser execution.
 
+**Every new commit needs its own handoff, posted with the push.** When an agent pushes a
+new head to a PR or branch that Muse is testing or will test, it posts the handoff for that
+exact SHA in the same step as the push, never after: what the commit changes, which runs
+and flags it needs, the acceptance criteria, and whether a gate already running on an
+older pinned SHA stays valid or must be redone. A pushed head without a stated test plan
+leaves Muse guessing (Ivan, 2026-11-08). Keep the `needs-kit-testing` label on.
+
 Muse acknowledges the handoff in that shared record, verifies the actual source and
 runtime, and runs the requested checks using its available browser/VM or the existing
 approved CI workflow. Muse owns manually requested launches and reruns of

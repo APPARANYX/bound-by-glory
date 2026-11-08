@@ -18,7 +18,8 @@
       'fireAndMovement',
       'executeMission',
       'engagement',
-      'stationSelection'
+      'stationSelection',
+      'generalTick'
     ],
     LIFECYCLE = ['cancel', 'release', 'stage'],
     MODES = ['legacy', 'shadow', 'new'],
@@ -51,6 +52,7 @@
         id: 'battle-' + nextBattle++,
         generation: 0,
         squads: new WeakMap(),
+        commandUnits: {},
         stats: {
           switches: 0,
           dispatches: {},
@@ -92,6 +94,24 @@
       b.squads.set(sq, rec);
     }
     return rec || null;
+  }
+  /* The General's command unit (roadmap section 8 slice M0): one per side per battle generation, keyed like a
+     squad (`@us`/`@ge`) so the same record, token, issue, finish and cancel paths serve it. It has no men:
+     command-scope requests name the squads they act on in their params. `create` is the taking provider's
+     call; every other caller only reads, so a legacy battle never gains controller state. */
+  function commandUnit(sim, faction, create) {
+    if (!sim || (faction !== 'us' && faction !== 'ge')) return null;
+    var b = create ? battleState(sim) : battles.get(sim);
+    if (!b) return null;
+    if (!b.commandUnits[faction] && create)
+      b.commandUnits[faction] = { faction: faction, id: '@' + faction, members: [], commandUnit: true };
+    return b.commandUnits[faction] || null;
+  }
+  /* Every unit the controller may hold a record for: the side's squads, then its command unit. */
+  function unitsOf(sim, b, f) {
+    var a = (sim && sim.factions && sim.factions[f] && sim.factions[f].squads) || [],
+      u = b && b.commandUnits[f];
+    return u ? a.concat([u]) : a;
   }
   function note(sim, reason) {
     var s = battleState(sim).stats;
@@ -348,7 +368,7 @@
     if (rec.mode === 'new') {
       var done = cancelAll(sim, sq, rec, 'controller-switched');
       if (!done.ok) return note(sim, done.reason);
-    } else if (mode === 'new') {
+    } else if (mode === 'new' && !sq.commandUnit) {
       if (stillRefused(sq, rec)) return note(sim, 'cleanup-pending');
       var left = releaseLegacy(sim, sq, 'controller-switched');
       if (left.length) {
@@ -521,7 +541,7 @@
     if (!b) return { cancelled: 0, unconfirmed: 0 };
     var out = { cancelled: 0, unconfirmed: 0 };
     ['us', 'ge'].forEach(function (f) {
-      var a = (sim.factions && sim.factions[f] && sim.factions[f].squads) || [];
+      var a = unitsOf(sim, b, f);
       for (var i = 0; i < a.length; i++) {
         var rec = b.squads.get(a[i]);
         if (!rec || rec.mode !== 'new') continue;
@@ -538,6 +558,7 @@
     }
     b.generation++;
     b.squads = new WeakMap();
+    b.commandUnits = {};
     return out;
   }
   function stageOf(action) {
@@ -596,6 +617,16 @@
         }
       }
     });
+    if (b)
+      ['us', 'ge'].forEach(function (f) {
+        var u = b.commandUnits[f],
+          rec = u && b.squads.get(u);
+        if (!rec) return;
+        (out.commanders = out.commanders || {})[f] = rec.mode;
+        out.actions += rec.actions.length;
+        out.pending += rec.pending.length;
+        liveActions(u, rec, out);
+      });
     if (b) {
       out.battleId = b.id;
       out.generation = b.generation;
@@ -611,6 +642,7 @@
     registerProvider: registerProvider,
     unregisterProvider: unregisterProvider,
     requestMode: requestMode,
+    commandUnit: commandUnit,
     mode: mode,
     controls: controls,
     dispatch: dispatch,

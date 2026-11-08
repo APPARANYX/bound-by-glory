@@ -643,10 +643,21 @@
     var general = generalFor(sim, faction),
       squads = sim.factions[faction].squads,
       woke = false,
-      reasons = {};
-    reconstitute(sim, faction);
-    pickUpFled(sim, faction);
-    if (runStrategicRecovery(sim, faction, squads, town)) {
+      reasons = {},
+      TC = root.BattleTacticalController,
+      unit = TC && TC.commandUnit ? TC.commandUnit(sim, faction) : null,
+      facts = { squads: squads, town: town, owned: {}, recoveryWoke: false },
+      owned = !!unit && TC.dispatch(sim, unit, 'generalTick', facts);
+    /* Under the tactical controller the General's command policy (13j, roadmap section 8) owns each
+       decision it marks in facts.owned (reconstitution and the fled pickup: M1; strategic recovery: M2);
+       every decision it does not own runs here as before. */
+    if (!owned || !facts.owned.reconstitution) {
+      reconstitute(sim, faction);
+      pickUpFled(sim, faction);
+    }
+    if (
+      owned && facts.owned.recovery ? facts.recoveryWoke : runStrategicRecovery(sim, faction, squads, town)
+    ) {
       woke = true;
       reasons['@' + faction] = 'strategic-recovery';
     }
@@ -883,6 +894,14 @@
     generals: generals,
     updateFaction: updateFactionCommander,
     reconstitute: reconstitute,
+    /* The reconstitution owner's functions, for the controller's command policy and adapters (13b, 13j). */
+    reconstitution: function () {
+      return reconImpl();
+    },
+    /* The strategic-recovery owner's functions, for the command policy and its adapter (13b, 13j). */
+    recovery: function () {
+      return recoveryImpl();
+    },
     reconstitutionStrength: RECON_STRENGTH,
     reconstitutionMinimumStrength: RECON_MIN_STRENGTH,
     reconstitutionPoolMax: RECON_POOL_MAX,

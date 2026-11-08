@@ -373,6 +373,10 @@
     ['us', 'ge'].forEach(function (f) {
       var a = (sim.factions[f] && sim.factions[f].squads) || [];
       for (var i = 0; i < a.length; i++) if (!TC.controls(sim, a[i])) TC.requestMode(sim, a[i], 'new', ID);
+      /* The General's command unit (13j, roadmap section 8 slice M1); ?controllerReconstitution=0 leaves it legacy. */
+      var G = root.BattleTacticalGeneral,
+        unit = G && G.on && TC.commandUnit ? TC.commandUnit(sim, f, true) : null;
+      if (unit && !TC.controls(sim, unit)) TC.requestMode(sim, unit, 'new', ID);
     });
   }
   /* Per squad: the leg it is on, and each man's action with the stage its owner reports, or why the
@@ -473,6 +477,9 @@
       },
       stationSelection: function (ctx) {
         if (root.BattleTacticalStationSkill) root.BattleTacticalStationSkill.update(ctx);
+      },
+      generalTick: function (ctx) {
+        if (root.BattleTacticalGeneral) root.BattleTacticalGeneral.update(ctx);
       }
     },
     adapters: OA.adapters,

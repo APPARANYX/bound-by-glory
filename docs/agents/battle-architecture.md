@@ -250,6 +250,22 @@ retained skill, a mission change, lost contact, a depleted team or base of fire,
 flank budget (its length at 0.6 m/s) or closing to 8 m ends it with a reason in `summary()` (also
 `BattleTacticalMarchProvider.summary()[].flank`), and the frontal hop is the answer again.
 
+`13j-tactical-general.js` (`BattleTacticalGeneral`, `?controllerReconstitution=0` turns it off) is the
+first Macro slice (roadmap `docs/architecture/AI_SKILLS_ROADMAP.md` section 8, M0 and M1). The controller
+keeps one command unit per side (`TC.commandUnit(sim, faction)`, id `@us`/`@ge`, no men) taken by 13c's
+`takeAll`; commander-ai's `updateFactionCommander` dispatches `generalTick` on it and skips its legacy
+`reconstitute`/`pickUpFled` when the policy owns it. The policy reuses 22's chooser (`planGroups`), asks
+`command.reconstitute` for each group (adapter: 22 `formGroup`; stage `briefed`, then `merged` or cancelled
+with the owner's dissolve reason), runs 22's own merge/dissolve step (`progressGroups`) and asks
+`command.pickup` for each fled pickup (`bestPickup`/`absorbFled`). A cancel (restart, switch) dissolves an
+assembling group through its owner. Slice M2 (`?controllerRecovery=0`): the policy also runs the
+strategic recovery ladder. 22a exposes `planRecovery`, `adoptionHold`, `runStage`, `reviewDue` and
+`runReviewPass`; the policy opens one `command.recover` action per stall episode (`episode` = the side's
+last objective-progress time) before the first stage or review it runs, and finishes it `recovered`
+when the episode changes. Each slice marks what it owns in the dispatch facts (`facts.owned`), and
+commander-ai runs every Macro decision not marked there as before. Readout:
+`BattleTacticalGeneral.summary(sim)` and `TC.summary(sim).commanders`.
+
 `fire.control` asks `controllerFireControl.publish` in Meso to use 15a's existing publisher;
 `published` explicitly does not imply personal adoption. Engagement still uses each man's adopted
 order and retains immediate return fire. `combat.contact` holds locomotion/posture/weapon resources
