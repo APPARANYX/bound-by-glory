@@ -1,0 +1,18 @@
+{
+  "branch": "work/benchmark-launch/768-causal",
+  "launch_parent_sha": "ef1367a62c5c85397220f3ce121b8e4e49bbf11a",
+  "launch_sha": "99c2d996fb36adee27e9c797abe722ab239f04e3",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "benchmark": "causal",
+    "query": "tacticalController=new&strategicInterception=0",
+    "ref": "claude/project-thread-a3p046",
+    "seconds": "600",
+    "seeds": "20",
+    "side": "all"
+  },
+  "schema_version": 1,
+  "source_ref": "claude/project-thread-a3p046",
+  "source_sha_at_archive": null
+}
