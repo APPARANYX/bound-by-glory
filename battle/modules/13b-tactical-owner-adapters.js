@@ -436,6 +436,37 @@
       return true;
     }
   };
+  /* Slice M3. The General's re-selection (22a reconsiderMission) publishes the brief; the action follows
+     that brief until the Squad Leader accepts it or it is replaced. A wake that deduped into the brief
+     already held is accepted at once with reason `unchanged` (the owner's ineffective-wake record). */
+  CAPS['command.brief'] = {
+    request: function (req, sim) {
+      var C = root.BattleCommanderAI,
+        R = C && C.recovery ? C.recovery() : null,
+        G = root.BattleTacticalGeneral,
+        sq = squadNamed(sim, req.faction, req.params.targetSquadId);
+      if (!R || !sq || sq.disbanded) return false;
+      var before = sq._macroMission;
+      R.reconsiderMission(sim, sq, G && G.townFor ? G.townFor(sim) : null, req.params.reason, null);
+      var m = sq._macroMission;
+      if (!m) return false;
+      return keep(req, sim, { squad: sq, mission: m, fresh: m !== before });
+    },
+    stage: function (h) {
+      var m = h.squad._macroMission;
+      if (m !== h.mission) mark(h, 'cancelled', 'superseded', m && m.issuedAt);
+      else if (m.status === 'executing')
+        mark(h, 'accepted', h.fresh ? 'accepted' : 'unchanged', m.acceptedAt);
+      else if (m.status === 'issued') mark(h, 'issued', 'awaiting-acceptance', m.issuedAt);
+      else mark(h, 'cancelled', 'owner:' + m.status, m.endedAt);
+    },
+    cancel: function () {
+      return true;
+    },
+    release: function () {
+      return true;
+    }
+  };
   CAPS['command.pickup'] = {
     request: function (req, sim) {
       var R = recon(),

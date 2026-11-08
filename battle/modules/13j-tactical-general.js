@@ -18,14 +18,23 @@
    (22a runStage, runReviewPass), holding a stage while a brief the previous stage issued is still in
    its adoption window (22a adoptionHold). The action reports the last stage run and ends `recovered`
    when the side makes objective progress (a new episode). ?controllerRecovery=0 hands recovery back to
-   the legacy call. With both flags off the command units stay untaken. */
+   the legacy call.
+
+   Slice M3, briefs: on each commander tick the policy asks the General's wake rules (22a wakeReason)
+   which squads need a new brief and opens one `command.brief` action per wake; its adapter re-selects
+   through the owner (22a reconsiderMission, objective scoring in commander-doctrine) and the brief goes
+   out through the ordinary issueMission path. The action stays `issued` until the Squad Leader accepts
+   the brief, so a brief nobody adopted is visible instead of silently reissued. ?controllerBriefs=0
+   hands the wakes back to the legacy loop. With every flag off the command units stay untaken. */
 (function (root) {
   'use strict';
   var SEARCH = typeof location !== 'undefined' ? location.search || '' : '',
     RECON_ON = !/[?&]controllerReconstitution=(?:0|off|false)(?:&|#|$)/i.test(SEARCH),
     RECOVERY_ON = !/[?&]controllerRecovery=(?:0|off|false)(?:&|#|$)/i.test(SEARCH),
-    ON = RECON_ON || RECOVERY_ON,
-    units = new WeakMap();
+    BRIEFS_ON = !/[?&]controllerBriefs=(?:0|off|false)(?:&|#|$)/i.test(SEARCH),
+    ON = RECON_ON || RECOVERY_ON || BRIEFS_ON,
+    units = new WeakMap(),
+    towns = new WeakMap();
 
   function stateOf(unit) {
     var st = units.get(unit);
@@ -43,7 +52,12 @@
           episodes: 0,
           recovered: 0,
           stages: 0,
-          held: 0
+          held: 0,
+          briefs: new Map(),
+          briefed: 0,
+          accepted: 0,
+          unchanged: 0,
+          superseded: 0
         })
       );
     return st;
@@ -60,6 +74,41 @@
     if (RECOVERY_ON && ctx.facts) {
       owned.recovery = true;
       ctx.facts.recoveryWoke = recovery(ctx, ctx.facts);
+    }
+    if (BRIEFS_ON && ctx.facts) {
+      owned.briefs = true;
+      briefs(ctx, ctx.facts);
+    }
+  }
+  /* M3. One command.brief per General wake; the wake reasons go back to the commander tick's readout. */
+  function briefs(ctx, facts) {
+    var C = root.BattleCommanderAI,
+      R = C && C.recovery ? C.recovery() : null;
+    if (!R) return;
+    var sim = ctx.sim,
+      st = stateOf(ctx.squad),
+      squads = facts.squads || [];
+    towns.set(sim, facts.town || null);
+    st.briefs.forEach(function (_, id) {
+      var s = ctx.stage(id);
+      if (s && s.stage === 'issued') return;
+      if (s && s.stage === 'accepted') st[s.reason === 'unchanged' ? 'unchanged' : 'accepted']++;
+      else st.superseded++;
+      ctx.finish(id, s ? s.stage + ':' + s.reason : 'gone');
+      st.briefs.delete(id);
+    });
+    for (var i = 0; i < squads.length; i++) {
+      var sq = squads[i],
+        reason = R.wakeReason(sim, sq);
+      if (!reason) continue;
+      facts.wakeReasons[sq.id] = reason;
+      var r = ctx.request('command.brief', null, { targetSquadId: String(sq.id), reason: reason });
+      if (!r.ok) {
+        refuse(st, r.reason);
+        continue;
+      }
+      st.briefed++;
+      st.briefs.set(r.actionId, String(sq.id));
     }
   }
   /* M2. Returns whether a stage or review pass ran (the General's strategic-recovery wake). */
@@ -167,6 +216,13 @@
         merged: st.merged,
         ended: st.ended,
         pickups: st.pickups,
+        briefs: {
+          live: st.briefs.size,
+          briefed: st.briefed,
+          accepted: st.accepted,
+          unchanged: st.unchanged,
+          superseded: st.superseded
+        },
         recovery: {
           live: st.recover ? st.recover.episode : null,
           episodes: st.episodes,
@@ -184,7 +240,12 @@
     on: ON,
     reconstitution: RECON_ON,
     recovery: RECOVERY_ON,
+    briefs: BRIEFS_ON,
     update: update,
+    /* The town the commander tick is running with, for the brief adapter (13b); scenario data, not a decision. */
+    townFor: function (sim) {
+      return towns.get(sim) || null;
+    },
     summary: summary
   };
 })(typeof window !== 'undefined' ? window : globalThis);

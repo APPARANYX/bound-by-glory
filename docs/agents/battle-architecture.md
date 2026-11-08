@@ -262,7 +262,11 @@ assembling group through its owner. Slice M2 (`?controllerRecovery=0`): the poli
 strategic recovery ladder. 22a exposes `planRecovery`, `adoptionHold`, `runStage`, `reviewDue` and
 `runReviewPass`; the policy opens one `command.recover` action per stall episode (`episode` = the side's
 last objective-progress time) before the first stage or review it runs, and finishes it `recovered`
-when the episode changes. Each slice marks what it owns in the dispatch facts (`facts.owned`), and
+when the episode changes. Slice M3 (`?controllerBriefs=0`): the
+policy runs the General's per-squad wake rules (22a `wakeReason`) and opens one `command.brief` per wake;
+its adapter re-selects through 22a `reconsiderMission` and the brief goes out through `issueMission`. The
+action stays `issued` until the Squad Leader accepts it (`accepted`, or `unchanged` when the wake deduped)
+or the brief is replaced. Each slice marks what it owns in the dispatch facts (`facts.owned`), and
 commander-ai runs every Macro decision not marked there as before. Readout:
 `BattleTacticalGeneral.summary(sim)` and `TC.summary(sim).commanders`.
 

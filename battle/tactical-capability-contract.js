@@ -216,6 +216,17 @@
       ['BattleCommanderAI', 'BattleCommanderAI'],
       ['episode']
     ),
+    /* Slice M3: one re-brief of one squad on a General wake (reason = the wake reason); the brief itself is
+       the squad's ordinary mission, published through the existing brief path and accepted by its leader. */
+    'command.brief': definition(
+      'command',
+      'Macro',
+      'reconsiderMission (objective choice and main effort, published through issueMission)',
+      [],
+      ['issued', 'accepted'],
+      ['BattleCommanderAI', 'BattleCommanderAI'],
+      ['targetSquadId', 'reason']
+    ),
     'command.pickup': definition(
       'command',
       'Macro',
@@ -299,6 +310,7 @@
           }) ||
           new Set(p.squadIds).size !== p.squadIds.length)) ||
       (Object.hasOwn(p, 'episode') && !text(p.episode)) ||
+      (Object.hasOwn(p, 'targetSquadId') && (!text(p.targetSquadId) || !text(p.reason))) ||
       (Object.hasOwn(p, 'fledSquadId') &&
         (!text(p.fledSquadId) || !text(p.intoSquadId) || p.fledSquadId === p.intoSquadId)) ||
       (Object.hasOwn(p, 'stance') && ['crouch', 'prone', 'crawl'].indexOf(p.stance) < 0) ||

@@ -16,6 +16,12 @@ Read this file first. Load **only the reference documents relevant to the task**
 - Keep completed work separate from outstanding work; check the current implementation rather than treating historical notes as a task list.
 - Do not create new roadmap/summary Markdown files for routine work. Update the relevant existing reference only when its documented contract or behavior changes.
 
+- **Check retired work before rewriting a fix.** The 2026-11-08 cleanup kept these closed, unmerged PRs and archive tags as reuse candidates; when you hit the same problem, read them first and port only what still applies to current `main` (behind its own off flag, gated like any change):
+  - *Speed (controller wall time):* closed PRs #707-#750, the route, cover, nav and sight caches (static wall broad-phase #708, sight-candidate cache #749, nav reuse #725-#743). Some were redone in #767-#770 and #773; #733 was rejected (stale truck clearance).
+  - *Soldier behaviour (Micro slices, roadmap section 8):* #764 a fleeing man's own destination across a squad rebrief, #766 a prone man after his contact march arrived, #763 refuge posture and released capture assignments on retreat, #774 combat holds across rebriefs, #696 a living man's station claim when the roster changes, #761 reload stand/crouch flicker (largely covered by #776 and #784).
+  - *Cover tests:* tags `archive/branch/work/hedge420-*` hold a hedge-ambush scenario (`scripts/scenarios/hedge-ambush*.js`) and `tools/ai-sim-harness/hedgerow-firing-lane-check.js`, plus rear-side-peek and covering-fire trials.
+  - Other archive tags (`archive/branch/*`) are October probes, audits and preview builds, superseded by the controller.
+
 ## Task-based reading map
 
 | When working on | Read |
