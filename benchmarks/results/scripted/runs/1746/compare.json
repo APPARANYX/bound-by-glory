@@ -1,0 +1,452 @@
+{
+  "pairs": 60,
+  "unpaired": {
+    "a": 0,
+    "b": 0
+  },
+  "identicalBattles": 0,
+  "winners": {
+    "a": {
+      "us": 0,
+      "ge": 0
+    },
+    "b": {
+      "us": 0,
+      "ge": 0
+    },
+    "flips": 0,
+    "mcnemarUsWon": {
+      "aOnly": 0,
+      "bOnly": 0,
+      "discordant": 0,
+      "p": 1
+    }
+  },
+  "timeLimit": {
+    "a": 60,
+    "b": 60,
+    "mcnemar": {
+      "aOnly": 0,
+      "bOnly": 0,
+      "discordant": 0,
+      "p": 1
+    }
+  },
+  "noCapture": {
+    "a": 4,
+    "b": 7,
+    "mcnemar": {
+      "aOnly": 0,
+      "bOnly": 3,
+      "discordant": 3,
+      "p": 0.25
+    }
+  },
+  "captures": {
+    "a": 2.15,
+    "b": 2.25
+  },
+  "movementStalls": {
+    "a": 1,
+    "b": 0
+  },
+  "runtimeErrors": {
+    "a": 0,
+    "b": 0
+  },
+  "wallSeconds": {
+    "medianA": 26.191499999999998,
+    "medianB": 38.245999999999995,
+    "ratio": 1.46,
+    "gate": 1.25
+  },
+  "counters": {
+    "casualties": {
+      "a": 3085,
+      "b": 2844,
+      "meanDiff": -4.0167,
+      "battlesChanged": 57,
+      "more": 21,
+      "fewer": 36,
+      "signP": 0.0627
+    },
+    "usKills": {
+      "a": 1540,
+      "b": 1345,
+      "meanDiff": -3.25,
+      "battlesChanged": 58,
+      "more": 20,
+      "fewer": 38,
+      "signP": 0.0247
+    },
+    "geKills": {
+      "a": 1545,
+      "b": 1499,
+      "meanDiff": -0.7667,
+      "battlesChanged": 56,
+      "more": 23,
+      "fewer": 33,
+      "signP": 0.2288
+    },
+    "fire.total": {
+      "a": 46572,
+      "b": 82613,
+      "meanDiff": 600.6833,
+      "battlesChanged": 60,
+      "more": 58,
+      "fewer": 2,
+      "signP": 0
+    },
+    "fire.hits": {
+      "a": 6975,
+      "b": 6657,
+      "meanDiff": -5.3,
+      "battlesChanged": 60,
+      "more": 24,
+      "fewer": 36,
+      "signP": 0.155
+    },
+    "retreatSamples": {
+      "a": 141903,
+      "b": 165088,
+      "meanDiff": 386.4167,
+      "battlesChanged": 60,
+      "more": 39,
+      "fewer": 21,
+      "signP": 0.0273
+    },
+    "movementResolver.changes": {
+      "a": 215482,
+      "b": 296977,
+      "meanDiff": 1358.25,
+      "battlesChanged": 60,
+      "more": 59,
+      "fewer": 1,
+      "signP": 0
+    },
+    "grenades.throws": {
+      "a": 73,
+      "b": 58,
+      "meanDiff": -0.25,
+      "battlesChanged": 23,
+      "more": 11,
+      "fewer": 12,
+      "signP": 1
+    },
+    "grenades.bursts": {
+      "a": 73,
+      "b": 58,
+      "meanDiff": -0.25,
+      "battlesChanged": 23,
+      "more": 11,
+      "fewer": 12,
+      "signP": 1
+    },
+    "grenades.wounded": {
+      "a": 41,
+      "b": 53,
+      "meanDiff": 0.2,
+      "battlesChanged": 15,
+      "more": 10,
+      "fewer": 5,
+      "signP": 0.3018
+    },
+    "grenades.casualties": {
+      "a": 13,
+      "b": 23,
+      "meanDiff": 0.1667,
+      "battlesChanged": 8,
+      "more": 6,
+      "fewer": 2,
+      "signP": 0.2891
+    },
+    "grenades.suppressed": {
+      "a": 132,
+      "b": 126,
+      "meanDiff": -0.1,
+      "battlesChanged": 17,
+      "more": 7,
+      "fewer": 10,
+      "signP": 0.6291
+    },
+    "grenades.friendlyWounded": {
+      "a": 8,
+      "b": 8,
+      "meanDiff": 0,
+      "battlesChanged": 4,
+      "more": 2,
+      "fewer": 2,
+      "signP": 1
+    },
+    "grenades.friendlyCasualties": {
+      "a": 3,
+      "b": 4,
+      "meanDiff": 0.0167,
+      "battlesChanged": 3,
+      "more": 2,
+      "fewer": 1,
+      "signP": 1
+    },
+    "grenades.aborted": {
+      "a": 9,
+      "b": 11,
+      "meanDiff": 0.0333,
+      "battlesChanged": 11,
+      "more": 6,
+      "fewer": 5,
+      "signP": 1
+    },
+    "movementStalls.length": {
+      "a": 1,
+      "b": 0,
+      "meanDiff": -0.0167,
+      "battlesChanged": 1,
+      "more": 0,
+      "fewer": 1,
+      "signP": 1
+    },
+    "routeStalls.length": {
+      "a": 0,
+      "b": 0,
+      "meanDiff": 0,
+      "battlesChanged": 0,
+      "more": 0,
+      "fewer": 0,
+      "signP": 1
+    },
+    "targetlessStalls.length": {
+      "a": 0,
+      "b": 0,
+      "meanDiff": 0,
+      "battlesChanged": 0,
+      "more": 0,
+      "fewer": 0,
+      "signP": 1
+    },
+    "vacantObjectiveStalls.length": {
+      "a": 122,
+      "b": 25,
+      "meanDiff": -1.6167,
+      "battlesChanged": 46,
+      "more": 3,
+      "fewer": 43,
+      "signP": 0
+    },
+    "loopAlerts.length": {
+      "a": 1056,
+      "b": 1889,
+      "meanDiff": 13.8833,
+      "battlesChanged": 60,
+      "more": 50,
+      "fewer": 10,
+      "signP": 0
+    },
+    "writerConflicts": {
+      "a": 0,
+      "b": 0,
+      "meanDiff": 0,
+      "battlesChanged": 0,
+      "more": 0,
+      "fewer": 0,
+      "signP": 1
+    },
+    "regroups.entries": {
+      "a": 258,
+      "b": 283,
+      "meanDiff": 0.4167,
+      "battlesChanged": 53,
+      "more": 31,
+      "fewer": 22,
+      "signP": 0.2717
+    },
+    "stallOutcomes.wakes": {
+      "a": 13,
+      "b": 3,
+      "meanDiff": -0.1667,
+      "battlesChanged": 13,
+      "more": 3,
+      "fewer": 10,
+      "signP": 0.0923
+    },
+    "stallOutcomes.repeats": {
+      "a": 3,
+      "b": 1,
+      "meanDiff": -0.0333,
+      "battlesChanged": 4,
+      "more": 1,
+      "fewer": 3,
+      "signP": 0.625
+    },
+    "timeline.stalledOnsets": {
+      "a": 1,
+      "b": 0,
+      "meanDiff": -0.0167,
+      "battlesChanged": 1,
+      "more": 0,
+      "fewer": 1,
+      "signP": 1
+    },
+    "timeline.stalledSamples": {
+      "a": 42,
+      "b": 0,
+      "meanDiff": -0.7,
+      "battlesChanged": 1,
+      "more": 0,
+      "fewer": 1,
+      "signP": 1
+    },
+    "timeline.stalledOnsetsRepeated": {
+      "a": 1,
+      "b": 0,
+      "meanDiff": -0.0167,
+      "battlesChanged": 1,
+      "more": 0,
+      "fewer": 1,
+      "signP": 1
+    },
+    "timeline.stalledSamplesRepeated": {
+      "a": 42,
+      "b": 0,
+      "meanDiff": -0.7,
+      "battlesChanged": 1,
+      "more": 0,
+      "fewer": 1,
+      "signP": 1
+    },
+    "recon.orders": {
+      "a": 1879,
+      "b": 3151,
+      "meanDiff": 21.2,
+      "battlesChanged": 60,
+      "more": 59,
+      "fewer": 1,
+      "signP": 0
+    },
+    "recon.contacts": {
+      "a": 268,
+      "b": 656,
+      "meanDiff": 6.4667,
+      "battlesChanged": 56,
+      "more": 50,
+      "fewer": 6,
+      "signP": 0
+    },
+    "recon.noContact": {
+      "a": 978,
+      "b": 968,
+      "meanDiff": -0.1667,
+      "battlesChanged": 50,
+      "more": 25,
+      "fewer": 25,
+      "signP": 1
+    },
+    "recon.timeouts": {
+      "a": 44,
+      "b": 41,
+      "meanDiff": -0.05,
+      "battlesChanged": 34,
+      "more": 16,
+      "fewer": 18,
+      "signP": 0.8642
+    },
+    "recon.cancelled": {
+      "a": 526,
+      "b": 1432,
+      "meanDiff": 15.1,
+      "battlesChanged": 60,
+      "more": 60,
+      "fewer": 0,
+      "signP": 0
+    },
+    "recon.reportsDelivered": {
+      "a": 1203,
+      "b": 2719,
+      "meanDiff": 25.2667,
+      "battlesChanged": 58,
+      "more": 49,
+      "fewer": 9,
+      "signP": 0
+    },
+    "recon.retriggerBlocked": {
+      "a": 979,
+      "b": 1130,
+      "meanDiff": 2.5167,
+      "battlesChanged": 53,
+      "more": 43,
+      "fewer": 10,
+      "signP": 0
+    },
+    "squadPerformance.meanOverall": {
+      "a": 4892.299999999999,
+      "b": 4825.499999999999,
+      "meanDiff": -1.1133,
+      "battlesChanged": 60,
+      "more": 12,
+      "fewer": 48,
+      "signP": 0
+    },
+    "squadPerformance.p10Overall": {
+      "a": 4464.1,
+      "b": 4446.8,
+      "meanDiff": -0.2883,
+      "battlesChanged": 23,
+      "more": 6,
+      "fewer": 17,
+      "signP": 0.0347
+    },
+    "squadPerformance.lowScoreSquads": {
+      "a": 0,
+      "b": 0,
+      "meanDiff": 0,
+      "battlesChanged": 0,
+      "more": 0,
+      "fewer": 0,
+      "signP": 1
+    },
+    "squadPerformance.meanMission": {
+      "a": 3924.6,
+      "b": 3702.9999999999995,
+      "meanDiff": -3.6933,
+      "battlesChanged": 59,
+      "more": 8,
+      "fewer": 51,
+      "signP": 0
+    },
+    "squadPerformance.meanMovement": {
+      "a": 5988.999999999998,
+      "b": 5988.599999999999,
+      "meanDiff": -0.0067,
+      "battlesChanged": 34,
+      "more": 15,
+      "fewer": 19,
+      "signP": 0.6076
+    },
+    "squadPerformance.meanControl": {
+      "a": 5723.800000000001,
+      "b": 5605.199999999999,
+      "meanDiff": -1.9767,
+      "battlesChanged": 60,
+      "more": 14,
+      "fewer": 46,
+      "signP": 0
+    },
+    "squadPerformance.meanCohesion": {
+      "a": 5442.900000000001,
+      "b": 5566.299999999999,
+      "meanDiff": 2.0567,
+      "battlesChanged": 60,
+      "more": 49,
+      "fewer": 11,
+      "signP": 0
+    }
+  },
+  "firstDivergence": {
+    "battles": 60,
+    "min": 0.15,
+    "p10": 0.15,
+    "median": 0.15,
+    "p90": 0.15,
+    "max": 0.15
+  },
+  "pass": false
+}
