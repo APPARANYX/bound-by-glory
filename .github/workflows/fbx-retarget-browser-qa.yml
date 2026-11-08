@@ -108,6 +108,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fbx-render-pose-evidence
+          retention-days: 7
           if-no-files-found: warn
           path: closeups/render-pose-ci/
 
@@ -116,5 +117,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fbx-retarget-php-evidence
+          retention-days: 7
           if-no-files-found: warn
           path: ${{ runner.temp }}/fbx-retarget-php.log

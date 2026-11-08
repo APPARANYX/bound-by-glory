@@ -74,7 +74,7 @@ jobs:
           name: native-sprint-clip-evidence
           path: reports/sprint-clip-audit/
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 7
       - name: PHP server diagnostics
         if: failure()
         run: tail -120 /tmp/sprint-clip-php.log || true

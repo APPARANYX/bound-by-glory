@@ -101,4 +101,4 @@ jobs:
           name: targeted-fire-${{ matrix.battle_type }}-${{ github.run_number }}
           path: reports/targeted-fire/
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7

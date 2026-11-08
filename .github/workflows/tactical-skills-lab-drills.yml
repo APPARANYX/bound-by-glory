@@ -67,4 +67,4 @@ jobs:
             reports/skills-lab/
             reports/skills-lab-drills/
           if-no-files-found: warn
-          retention-days: 21
+          retention-days: 7

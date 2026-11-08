@@ -101,7 +101,7 @@ jobs:
           name: matrix-diag-smoke-${{ github.run_number }}
           path: reports/
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7
       - name: Include audit in PR job summary
         if: always()
         run: |

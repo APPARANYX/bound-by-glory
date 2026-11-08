@@ -113,6 +113,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mobile-mini-audio-full-limits
+          retention-days: 7
           path: reports/mobile-mini-audio/
           if-no-files-found: warn
       - name: Report backend outcomes

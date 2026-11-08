@@ -55,4 +55,4 @@ jobs:
           name: first-contact-680-evidence
           path: reports/first-contact-680/
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7

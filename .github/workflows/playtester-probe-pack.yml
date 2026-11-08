@@ -144,7 +144,7 @@ jobs:
           name: probe-pack-${{ matrix.battle_type }}-${{ matrix.shard.shard }}
           path: reports/
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7
 
   merge:
     needs: run

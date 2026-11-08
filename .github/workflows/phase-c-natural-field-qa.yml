@@ -58,7 +58,7 @@ jobs:
         with:
           name: phase-c-natural-${{ matrix.battle_type }}
           path: reports/phase-c-field/*.json
-          retention-days: 30
+          retention-days: 7
       - name: Server diagnostics
         if: failure()
         run: tail -100 /tmp/phase-c-field-php.log || true

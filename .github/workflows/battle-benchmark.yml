@@ -126,7 +126,7 @@ jobs:
           name: battle-benchmark-${{ matrix.battle_type }}-shard-${{ matrix.shard }}-${{ github.run_number }}
           path: reports/
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 7
 
       - name: Show server log on failure
         if: failure()

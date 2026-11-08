@@ -62,6 +62,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: native-strategic-interception-evidence
+          retention-days: 7
           if-no-files-found: warn
           path: |
             closeups/strategic-interception-ci/
