@@ -205,6 +205,17 @@
       ['BattleCommanderAI', 'BattleCommanderAI'],
       ['squadIds']
     ),
+    /* Slice M2: one stall episode of the General's strategic recovery ladder (episode = the side's last
+       objective-progress time, as 22a keys it). */
+    'command.recover': definition(
+      'command',
+      'Macro',
+      'runStage / runReviewPass (strategic recovery ladder, re-tasking through the brief path)',
+      [],
+      ['staged', 'recovered'],
+      ['BattleCommanderAI', 'BattleCommanderAI'],
+      ['episode']
+    ),
     'command.pickup': definition(
       'command',
       'Macro',
@@ -287,6 +298,7 @@
             return !text(id);
           }) ||
           new Set(p.squadIds).size !== p.squadIds.length)) ||
+      (Object.hasOwn(p, 'episode') && !text(p.episode)) ||
       (Object.hasOwn(p, 'fledSquadId') &&
         (!text(p.fledSquadId) || !text(p.intoSquadId) || p.fledSquadId === p.intoSquadId)) ||
       (Object.hasOwn(p, 'stance') && ['crouch', 'prone', 'crawl'].indexOf(p.stance) < 0) ||

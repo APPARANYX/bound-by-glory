@@ -1,4 +1,4 @@
-/* The General's command policy under the tactical controller (roadmap section 8, slices M0 and M1).
+/* The General's command policy under the tactical controller (roadmap section 8, slices M0, M1, M2).
 
    The controller (13a) holds one command unit per side (`@us`/`@ge`). When this policy owns it, the
    General's reconstitution and fled pickup are decided here, on the existing commander tick
@@ -10,24 +10,101 @@
    the adapters (13b): no new timer, order writer or movement writer.
 
    What the General reads is unchanged: his own squads' state, assembly phase and contact, never enemy
-   actor truth. ?controllerReconstitution=0 leaves the command units untaken, so the legacy calls run
-   under the controller exactly as before this slice. */
+   actor truth. ?controllerReconstitution=0 hands reconstitution and the pickup back to the legacy calls.
+
+   Slice M2, strategic recovery: when the side's objective stall crosses a ladder stage, this policy
+   opens one `command.recover` action for the stall episode and runs each crossed stage (reconcile,
+   release, main effort, reset) and the later review passes through the owner's own stage functions
+   (22a runStage, runReviewPass), holding a stage while a brief the previous stage issued is still in
+   its adoption window (22a adoptionHold). The action reports the last stage run and ends `recovered`
+   when the side makes objective progress (a new episode). ?controllerRecovery=0 hands recovery back to
+   the legacy call. With both flags off the command units stay untaken. */
 (function (root) {
   'use strict';
   var SEARCH = typeof location !== 'undefined' ? location.search || '' : '',
-    ON = !/[?&]controllerReconstitution=(?:0|off|false)(?:&|#|$)/i.test(SEARCH),
+    RECON_ON = !/[?&]controllerReconstitution=(?:0|off|false)(?:&|#|$)/i.test(SEARCH),
+    RECOVERY_ON = !/[?&]controllerRecovery=(?:0|off|false)(?:&|#|$)/i.test(SEARCH),
+    ON = RECON_ON || RECOVERY_ON,
     units = new WeakMap();
 
   function stateOf(unit) {
     var st = units.get(unit);
     if (!st)
-      units.set(unit, (st = { groups: new Map(), formed: 0, merged: 0, ended: 0, pickups: 0, refused: {} }));
+      units.set(
+        unit,
+        (st = {
+          groups: new Map(),
+          formed: 0,
+          merged: 0,
+          ended: 0,
+          pickups: 0,
+          refused: {},
+          recover: null,
+          episodes: 0,
+          recovered: 0,
+          stages: 0,
+          held: 0
+        })
+      );
     return st;
   }
   function refuse(st, why) {
     st.refused[why] = (st.refused[why] || 0) + 1;
   }
   function update(ctx) {
+    var owned = ctx.facts && ctx.facts.owned;
+    if (RECON_ON) {
+      if (owned) owned.reconstitution = true;
+      reconstitution(ctx);
+    }
+    if (RECOVERY_ON && ctx.facts) {
+      owned.recovery = true;
+      ctx.facts.recoveryWoke = recovery(ctx, ctx.facts);
+    }
+  }
+  /* M2. Returns whether a stage or review pass ran (the General's strategic-recovery wake). */
+  function recovery(ctx, facts) {
+    var C = root.BattleCommanderAI,
+      R = C && C.recovery ? C.recovery() : null;
+    if (!R) return false;
+    var sim = ctx.sim,
+      f = ctx.squad.faction,
+      st = stateOf(ctx.squad),
+      squads = facts.squads || [],
+      plan = R.planRecovery(sim, f, squads),
+      episode = String(plan.recovery.episode),
+      ran = 0;
+    if (st.recover && st.recover.episode !== episode) {
+      st.recovered++;
+      ctx.finish(st.recover.id, 'recovered');
+      st.recover = null;
+    }
+    /* One action per stall episode, opened when the first stage or review is due. */
+    function open() {
+      if (st.recover) return true;
+      var r = ctx.request('command.recover', null, { episode: episode });
+      if (!r.ok) {
+        refuse(st, r.reason);
+        return false;
+      }
+      st.episodes++;
+      st.recover = { id: r.actionId, episode: episode };
+      return true;
+    }
+    for (var i = 0; i < plan.crossed.length; i++) {
+      if (R.adoptionHold(sim, f, plan, plan.crossed[i])) {
+        st.held++;
+        break;
+      }
+      if (!open()) break;
+      R.runStage(sim, f, squads, facts.town, plan, plan.crossed[i]);
+      st.stages++;
+      ran++;
+    }
+    var reviewed = R.reviewDue(plan) && open() && R.runReviewPass(sim, f, squads, facts.town, plan.info);
+    return ran > 0 || !!reviewed;
+  }
+  function reconstitution(ctx) {
     var C = root.BattleCommanderAI,
       R = C && C.reconstitution ? C.reconstitution() : null;
     if (!R) return;
@@ -90,11 +167,24 @@
         merged: st.merged,
         ended: st.ended,
         pickups: st.pickups,
+        recovery: {
+          live: st.recover ? st.recover.episode : null,
+          episodes: st.episodes,
+          recovered: st.recovered,
+          stages: st.stages,
+          held: st.held
+        },
         refused: Object.assign({}, st.refused)
       };
     });
     return out;
   }
 
-  root.BattleTacticalGeneral = { on: ON, update: update, summary: summary };
+  root.BattleTacticalGeneral = {
+    on: ON,
+    reconstitution: RECON_ON,
+    recovery: RECOVERY_ON,
+    update: update,
+    summary: summary
+  };
 })(typeof window !== 'undefined' ? window : globalThis);

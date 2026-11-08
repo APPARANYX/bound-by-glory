@@ -894,58 +894,70 @@
       );
       return true;
     }
-    function runStrategicRecovery(sim, faction, squads, town) {
+    /* The recovery ladder, split so the tactical controller's command policy (13j, roadmap section 8
+       slice M2) and the legacy tick below share it: planRecovery reads the stall and the stages it has
+       crossed, adoptionHold says whether a stage must wait for an in-flight brief, runStage runs one
+       stage through its owner functions, reviewDue says whether a review pass is due. */
+    function planRecovery(sim, faction, squads) {
       var info = strategicStallInfo(sim, faction),
         recovery = trackMissionProgress(sim, faction, squads),
         crossed = [],
-        stalled = stalledEfforts(sim, squads),
-        detail = null,
-        ran = 0,
-        general = generalFor(sim, faction),
-        i;
-      for (i = 0; i < STRATEGIC_STALL_STAGES.length; i++)
+        stalled = stalledEfforts(sim, squads);
+      for (var i = 0; i < STRATEGIC_STALL_STAGES.length; i++)
         if (STRATEGIC_STALL_STAGES[i].level > recovery.completed && info.age >= STRATEGIC_STALL_STAGES[i].at)
           crossed.push(STRATEGIC_STALL_STAGES[i]);
-      for (i = 0; i < crossed.length; i++) {
-        var stage = crossed[i];
-        /* Before a stage escalates over the previous stage's work: a brief that stage published
-         inside the adoption window and Command Reception has not accepted yet is an in-flight
-         adoption, not a failed plan - re-tasking now just supersedes the brief before it could
-         propagate. Hold the stage pending (the loop breaks with `completed` unchanged, so it
-         re-crosses on the next tick) until the brief is accepted or the window elapses; after
-         that the ladder proceeds and the wake ledger records the propagation miss. */
-        if (stage.level >= 2) {
-          var pending = adoptionPending(sim, recovery);
-          if (pending) {
-            general.lastAdoptionHold = {
-              stage: stage.name,
-              squad: pending.squad,
-              briefAge: pending.age,
-              at: +(+sim.time || 0).toFixed(2)
-            };
-            break;
-          }
-        }
-        if (stage.name === 'reconcile')
-          detail = { affected: runReconcileStage(sim, faction, squads, town, stalled) };
-        else if (stage.name === 'release')
-          detail = { affected: runReleaseStage(sim, faction, squads, town, stalled, info) };
-        else if (stage.name === 'main-effort')
-          detail = runMainEffortStage(sim, faction, squads, town, stalled);
-        else {
-          detail = { affected: runResetStage(sim, faction, squads, town, stalled) };
-          recovery.lastReviewAt = +sim.time || 0;
-        }
-        recordRecoveryStage(sim, faction, stage, info, detail);
+      return { info: info, recovery: recovery, crossed: crossed, stalled: stalled };
+    }
+    /* Before a stage escalates over the previous stage's work: a brief that stage published
+     inside the adoption window and Command Reception has not accepted yet is an in-flight
+     adoption, not a failed plan - re-tasking now just supersedes the brief before it could
+     propagate. Hold the stage pending (the caller stops with `completed` unchanged, so it
+     re-crosses on the next tick) until the brief is accepted or the window elapses; after
+     that the ladder proceeds and the wake ledger records the propagation miss. */
+    function adoptionHold(sim, faction, plan, stage) {
+      if (stage.level < 2) return false;
+      var pending = adoptionPending(sim, plan.recovery);
+      if (!pending) return false;
+      generalFor(sim, faction).lastAdoptionHold = {
+        stage: stage.name,
+        squad: pending.squad,
+        briefAge: pending.age,
+        at: +(+sim.time || 0).toFixed(2)
+      };
+      return true;
+    }
+    function runStage(sim, faction, squads, town, plan, stage) {
+      var detail;
+      if (stage.name === 'reconcile')
+        detail = { affected: runReconcileStage(sim, faction, squads, town, plan.stalled) };
+      else if (stage.name === 'release')
+        detail = { affected: runReleaseStage(sim, faction, squads, town, plan.stalled, plan.info) };
+      else if (stage.name === 'main-effort')
+        detail = runMainEffortStage(sim, faction, squads, town, plan.stalled);
+      else {
+        detail = { affected: runResetStage(sim, faction, squads, town, plan.stalled) };
+        plan.recovery.lastReviewAt = +sim.time || 0;
+      }
+      return recordRecoveryStage(sim, faction, stage, plan.info, detail);
+    }
+    /* Review passes (see runReviewPass): only when no ladder stage ran or was held this tick, so
+       a pass never stacks on top of a stage in the same commander tick. */
+    function reviewDue(plan) {
+      return (
+        !plan.crossed.length &&
+        plan.recovery.completed >= STRATEGIC_STALL_STAGES[STRATEGIC_STALL_STAGES.length - 1].level &&
+        plan.info.age >= STRATEGIC_STALL_RECOVERY.reset + STRATEGIC_STALL_REPLAN * (plan.recovery.passes + 1)
+      );
+    }
+    function runStrategicRecovery(sim, faction, squads, town) {
+      var plan = planRecovery(sim, faction, squads),
+        ran = 0;
+      for (var i = 0; i < plan.crossed.length; i++) {
+        if (adoptionHold(sim, faction, plan, plan.crossed[i])) break;
+        runStage(sim, faction, squads, town, plan, plan.crossed[i]);
         ran++;
       }
-      /* Review passes (see runReviewPass): only when no ladder stage ran or was held this tick, so
-       a pass never stacks on top of a stage in the same commander tick. */
-      var reviewed =
-        !crossed.length &&
-        recovery.completed >= STRATEGIC_STALL_STAGES[STRATEGIC_STALL_STAGES.length - 1].level &&
-        info.age >= STRATEGIC_STALL_RECOVERY.reset + STRATEGIC_STALL_REPLAN * (recovery.passes + 1) &&
-        runReviewPass(sim, faction, squads, town, info);
+      var reviewed = reviewDue(plan) && runReviewPass(sim, faction, squads, town, plan.info);
       /* A stage held for an in-flight adoption did nothing this tick: it reports no wake. */
       return ran > 0 || reviewed;
     }
@@ -967,6 +979,11 @@
     }
     return {
       runStrategicRecovery: runStrategicRecovery,
+      planRecovery: planRecovery,
+      adoptionHold: adoptionHold,
+      runStage: runStage,
+      reviewDue: reviewDue,
+      runReviewPass: runReviewPass,
       reconsiderMission: reconsiderMission,
       wakeReason: wakeReason
     };

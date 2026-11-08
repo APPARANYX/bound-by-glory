@@ -20,7 +20,9 @@ const { loadModule, quietConsole } = require('./module-loader');
 const assert = require('node:assert/strict'),
   fs = require('node:fs'),
   path = require('node:path'),
-  H = require('./harness');
+  H = require('./harness'),
+  { loadGeneralController } = require('./general-controller-stack');
+const WORLDS = [];
 function load(r, p) {
   return loadModule(r, p, { console: quietConsole });
 }
@@ -67,11 +69,16 @@ function world(events, defs) {
   load(r, 'battle/modules/16-squad-plan-stability.js');
   load(r, 'battle/objective-system.js');
   load(r, 'battle/modules/40-ai-coordination-health.js');
+  /* GENERAL_CONTROLLER=1 (tactical-general-check.js): the same scenarios with the General's strategic
+     recovery under the tactical controller (roadmap section 8 slice M2). */
+  const take = process.env.GENERAL_CONTROLLER === '1' ? loadGeneralController(r, load) : null;
   const b = H.makeBattle(r);
   b.macroCommandEnabled = true;
   b.scene = { metadata: {} };
   r.BattleObjectiveSystem.attach(b, defs, {});
-  return { r, b, C: r.BattleCommanderAI, A: r.BattleAICoordinationHealth, T: 0 };
+  const w = { r, b, C: r.BattleCommanderAI, A: r.BattleAICoordinationHealth, T: 0, take, events };
+  WORLDS.push(w);
+  return w;
 }
 /* Two simulated seconds per step: the sampler then the commander tick, the order the battle loop
    uses. hooks(w) runs between them so a driver can move squads or flip objective state. */
@@ -80,6 +87,7 @@ function drive(w, until, hooks) {
     w.b.time = w.T;
     w.A.sample(w.b);
     if (hooks) hooks(w);
+    if (w.take) w.take(w.b);
     w.C.update(w.b, null, w.C.commandTick);
   }
 }
@@ -487,4 +495,28 @@ test('strategic main-effort preserves a progressing carrier bound for a differen
   assert.equal(strategicWakes(events, q.id).length, 0, 'no strategic re-task of the moving vehicle');
 });
 
+if (process.env.GENERAL_CONTROLLER === '1')
+  test('controller: every recovery stage and review ran inside a command.recover action', () => {
+    let stages = 0,
+      episodes = 0,
+      recovered = 0;
+    WORLDS.forEach(w => {
+      const st = w.r.BattleTacticalController.summary(w.b);
+      if (!st.stats) return;
+      assert.equal(st.stats.faults, 0, 'no controller fault: ' + JSON.stringify(st.stats.faultExamples));
+      const g = w.r.BattleTacticalGeneral.summary(w.b);
+      ['us', 'ge'].forEach(f => {
+        const row = g[f],
+          ran = w.events.filter(e => e.type === 'decision-strategic-recovery' && e.data.faction === f).length;
+        if (!row) return assert.equal(ran, 0);
+        assert.deepEqual(row.refused, {}, 'no command request was refused');
+        assert.ok(ran === 0 || row.recovery.episodes > 0, 'a stage ran only inside an action');
+        stages += ran;
+        episodes += row.recovery.episodes;
+        recovered += row.recovery.recovered;
+      });
+    });
+    assert.ok(stages > 0 && episodes > 0, 'stages ' + stages + ', episodes ' + episodes);
+    assert.ok(recovered > 0, 'an episode that made objective progress ended recovered');
+  });
 console.log('PASS ' + n + ' strategic-recovery review checks');

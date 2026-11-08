@@ -409,6 +409,33 @@
       return h.group.status !== 'assembling';
     }
   };
+  /* Slice M2. The recovery owner (22a) runs each ladder stage and keeps the episode's state on the
+     General; the action is accepted only for the episode that state is on and reports the last stage. */
+  function stallState(sim, faction) {
+    var C = root.BattleCommanderAI,
+      g = C && C.generalFor ? C.generalFor(sim, faction) : null;
+    return (g && g.stallRecovery) || null;
+  }
+  CAPS['command.recover'] = {
+    request: function (req, sim) {
+      var st = stallState(sim, req.faction);
+      if (!st || st.episode !== req.params.episode) return false;
+      return keep(req, sim, { faction: req.faction, episode: req.params.episode });
+    },
+    stage: function (h) {
+      var st = stallState(h.sim, h.faction),
+        last = st && st.history && st.history[st.history.length - 1];
+      if (!st || st.episode !== h.episode) mark(h, 'recovered', 'objective-progress');
+      else if (last && last.episode === h.episode) mark(h, 'staged', last.stage, last.time);
+    },
+    /* Nothing to undo: every brief a stage issued is the General's ordinary mission, with its own lifecycle. */
+    cancel: function () {
+      return true;
+    },
+    release: function () {
+      return true;
+    }
+  };
   CAPS['command.pickup'] = {
     request: function (req, sim) {
       var R = recon(),

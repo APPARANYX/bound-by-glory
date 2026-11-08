@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-/* The General under the tactical controller (roadmap section 8, slices M0 and M1): the command scope in
+/* The General under the tactical controller (roadmap section 8, slices M0, M1 and M2): the command scope in
    the capability contract, the per-side command unit in the controller (13a), and reconstitution and the
    fled pickup decided by the command policy (13j) through `command.reconstitute` / `command.pickup`
    (adapters in 13b, owner 22). The scenario checks are reconstitution-check.js and fled-man-check.js run
@@ -45,8 +45,8 @@ function req(capability, params, over) {
   );
 }
 
-test('the contract names the two command capabilities with the Macro owner', () => {
-  ['command.reconstitute', 'command.pickup'].forEach(cap => {
+test('the contract names the command capabilities with the Macro owner', () => {
+  ['command.reconstitute', 'command.pickup', 'command.recover'].forEach(cap => {
     assert.equal(C.capabilities[cap].scope, 'command');
     assert.equal(C.capabilities[cap].owner, 'Macro');
   });
@@ -87,6 +87,10 @@ test('command parameters are checked', () => {
   [{ squadIds: [] }, { squadIds: ['a', 'a'] }, { squadIds: 'us-0' }, { squadIds: [3] }].forEach(p =>
     assert.equal(C.validateRequest(req('command.reconstitute', p), context).reason, 'invalid-parameters')
   );
+  assert.equal(C.validateRequest(req('command.recover', { episode: '0' }), context).ok, true);
+  [{}, { episode: '' }, { episode: 0 }].forEach(p =>
+    assert.equal(C.validateRequest(req('command.recover', p), context).reason, 'invalid-parameters')
+  );
   [{ fledSquadId: 'a', intoSquadId: 'a' }, { fledSquadId: 'a' }].forEach(p =>
     assert.equal(C.validateRequest(req('command.pickup', p), context).reason, 'invalid-parameters')
   );
@@ -109,24 +113,33 @@ test('a legacy battle gains no controller state: commandUnit only reads unless t
   assert.equal(TC.commandUnit(sim, 'us'), u, 'one unit per side');
   assert.equal(TC.controls(sim, u), false, 'and it starts legacy');
 });
-test('?controllerReconstitution=0 turns the command policy off, so 13c never takes the unit', () => {
-  const on = {},
-    off = {};
-  load(on, 'battle/modules/13j-tactical-general.js', '?tacticalController=new');
-  load(off, 'battle/modules/13j-tactical-general.js', '?tacticalController=new&controllerReconstitution=0');
-  assert.equal(on.BattleTacticalGeneral.on, true);
-  assert.equal(off.BattleTacticalGeneral.on, false);
+test('each Macro slice has its own off flag; with both off 13c never takes the command unit', () => {
+  function owned(search) {
+    const r = {};
+    load(r, 'battle/modules/13j-tactical-general.js', '?tacticalController=new' + search);
+    const facts = { squads: [], town: null, owned: {}, recoveryWoke: false };
+    r.BattleTacticalGeneral.update({ sim: {}, squad: { faction: 'us', id: '@us' }, facts });
+    return { on: r.BattleTacticalGeneral.on, owned: facts.owned };
+  }
+  assert.deepEqual(owned(''), { on: true, owned: { reconstitution: true, recovery: true } });
+  assert.deepEqual(owned('&controllerReconstitution=0'), { on: true, owned: { recovery: true } });
+  assert.deepEqual(owned('&controllerRecovery=0'), { on: true, owned: { reconstitution: true } });
+  assert.deepEqual(owned('&controllerReconstitution=0&controllerRecovery=0'), { on: false, owned: {} });
   const src = fs.readFileSync(path.join(H.REPO, 'battle/modules/13c-tactical-march-provider.js'), 'utf8');
   assert.match(src, /G && G\.on && TC\.commandUnit \? TC\.commandUnit\(sim, f, true\)/);
 });
-test('commander-ai runs legacy reconstitution and pickup only when the General tick is not dispatched', () => {
+test('commander-ai runs each legacy Macro decision unless the General tick marked it owned', () => {
   const src = fs.readFileSync(path.join(H.REPO, 'battle/commander-ai.js'), 'utf8');
   assert.match(
     src,
-    /if \(!unit \|\| !TC\.dispatch\(sim, unit, 'generalTick'\)\) \{\s*reconstitute\(sim, faction\);\s*pickUpFled\(sim, faction\);\s*\}/
+    /if \(!owned \|\| !facts\.owned\.reconstitution\) \{\s*reconstitute\(sim, faction\);\s*pickUpFled\(sim, faction\);\s*\}/
+  );
+  assert.match(
+    src,
+    /owned && facts\.owned\.recovery \? facts\.recoveryWoke : runStrategicRecovery\(sim, faction, squads, town\)/
   );
 });
-['reconstitution-check.js', 'fled-man-check.js'].forEach(file =>
+['reconstitution-check.js', 'fled-man-check.js', 'strategic-recovery-review-check.js'].forEach(file =>
   test(file + ' passes with the General under the controller', () => {
     const out = execFileSync(process.execPath, [path.join(__dirname, file)], {
       env: Object.assign({}, process.env, { GENERAL_CONTROLLER: '1' }),

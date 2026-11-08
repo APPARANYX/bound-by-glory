@@ -258,8 +258,13 @@ keeps one command unit per side (`TC.commandUnit(sim, faction)`, id `@us`/`@ge`,
 `command.reconstitute` for each group (adapter: 22 `formGroup`; stage `briefed`, then `merged` or cancelled
 with the owner's dissolve reason), runs 22's own merge/dissolve step (`progressGroups`) and asks
 `command.pickup` for each fled pickup (`bestPickup`/`absorbFled`). A cancel (restart, switch) dissolves an
-assembling group through its owner. Readout: `BattleTacticalGeneral.summary(sim)` and
-`TC.summary(sim).commanders`.
+assembling group through its owner. Slice M2 (`?controllerRecovery=0`): the policy also runs the
+strategic recovery ladder. 22a exposes `planRecovery`, `adoptionHold`, `runStage`, `reviewDue` and
+`runReviewPass`; the policy opens one `command.recover` action per stall episode (`episode` = the side's
+last objective-progress time) before the first stage or review it runs, and finishes it `recovered`
+when the episode changes. Each slice marks what it owns in the dispatch facts (`facts.owned`), and
+commander-ai runs every Macro decision not marked there as before. Readout:
+`BattleTacticalGeneral.summary(sim)` and `TC.summary(sim).commanders`.
 
 `fire.control` asks `controllerFireControl.publish` in Meso to use 15a's existing publisher;
 `published` explicitly does not imply personal adoption. Engagement still uses each man's adopted
