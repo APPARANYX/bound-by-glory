@@ -1,0 +1,17 @@
+{
+  "branch": "work/benchmark-launch/cover770b-causal",
+  "launch_parent_sha": "787b22f3a2d99e8643db66a599c9bae87df35719",
+  "launch_sha": "039621aaa445e1afd54ebbe8cd5da6d118574ecd",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/787b22f3a2d99e8643db66a599c9bae87df35719",
+  "request": {
+    "benchmark": "causal",
+    "query": "tacticalController=new&strategicInterception=0",
+    "ref": "work/pin/cover770-787b22f3",
+    "seconds": "600",
+    "seeds": "20"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/cover770-787b22f3",
+  "source_sha_at_archive": "787b22f3a2d99e8643db66a599c9bae87df35719"
+}
