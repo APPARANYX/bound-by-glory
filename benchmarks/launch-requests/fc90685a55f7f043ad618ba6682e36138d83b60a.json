@@ -1,0 +1,17 @@
+{
+  "branch": "work/benchmark-launch/cover770-causal-tac-20261106",
+  "launch_parent_sha": "b279c60f927dfe5d66966402f8a4709ec6ab326f",
+  "launch_sha": "fc90685a55f7f043ad618ba6682e36138d83b60a",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/b279c60f927dfe5d66966402f8a4709ec6ab326f",
+  "request": {
+    "benchmark": "causal",
+    "query": "tacticalController=new&strategicInterception=0",
+    "ref": "claude/project-thread-kg44fx",
+    "seconds": "600",
+    "seeds": "20"
+  },
+  "schema_version": 1,
+  "source_ref": "claude/project-thread-kg44fx",
+  "source_sha_at_archive": null
+}
