@@ -3,7 +3,8 @@
 
 Deleting a run also deletes its logs and artifacts. Ivan's call (2026-11-08):
 benchmark and QA results are read as soon as they finish, so nothing older than
-a week is kept. Runs that are queued or still running are never touched.
+a week is kept. Runs that are queued or still running are never touched, and
+neither is any run on the head branch or head commit of an open pull request.
 
 The GITHUB_TOKEN allows about 1000 API requests an hour per repository, shared
 with every other workflow, so each pass deletes at most MAX_DELETE runs and
@@ -52,7 +53,18 @@ def write(line):
 cutoff = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=keep_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
 write(f"### Actions run retention: {'DRY RUN' if dry else 'DELETE'}, completed runs created before {cutoff}")
 
-deleted = 0
+open_branches, open_shas = set(), set()
+for pg in range(1, 6):
+    pulls = gh([f"repos/{repo}/pulls?state=open&per_page=100&page={pg}"]) or []
+    for pr in pulls:
+        open_shas.add(pr["head"]["sha"])
+        if (pr["head"].get("repo") or {}).get("full_name") == repo:
+            open_branches.add(pr["head"]["ref"])
+    if len(pulls) < 100:
+        break
+write(f"Keeping every run of {len(open_branches)} open PR branches: {', '.join(sorted(open_branches)) or 'none'}")
+
+deleted = kept = 0
 page = 1
 seen = set()
 stop = ""
@@ -60,27 +72,32 @@ while deleted < limit:
     if remaining() < rate_floor:
         stop = "API budget low, the next pass continues"
         break
-    # Deleting shifts the list, so a delete pass always rereads page 1; a dry
-    # run walks the pages instead.
+    # Deleting shifts the list, so a delete pass rereads the same page until a
+    # read deletes nothing; a dry run walks the pages.
     data = gh([f"repos/{repo}/actions/runs?created=%3C{cutoff}&status=completed&per_page=100&page={page}"])
-    runs = [r for r in data.get("workflow_runs", []) if r["id"] not in seen]
-    if not runs:
+    raw = data.get("workflow_runs", [])
+    if not raw:
         break
+    runs = [r for r in raw if r["id"] not in seen]
+    before = deleted
     for run in runs:
         if deleted >= limit:
             break
         seen.add(run["id"])
         if run.get("status") != "completed" or run.get("created_at", "") >= cutoff:
             continue
+        if run.get("head_branch") in open_branches or run.get("head_sha") in open_shas:
+            kept += 1
+            continue
         if not dry:
             gh(["-X", "DELETE", f"repos/{repo}/actions/runs/{run['id']}"])
         deleted += 1
         if deleted <= 50 or deleted % 100 == 0:
             write(f"- {'Would delete' if dry else 'Deleted'} {run['id']}: {run.get('name')} ({run.get('created_at')})")
-    if dry:
+    if dry or deleted == before:
         page += 1
 
 if not stop and deleted >= limit:
     stop = f"reached MAX_DELETE={limit}, the next pass continues"
 total = (gh([f"repos/{repo}/actions/runs?created=%3C{cutoff}&status=completed&per_page=1"]) or {}).get("total_count")
-write(f"{'Would delete' if dry else 'Deleted'}: {deleted}. Older completed runs left: {total}. {stop}".rstrip())
+write(f"{'Would delete' if dry else 'Deleted'}: {deleted}. Kept for open PRs: {kept}. Older completed runs left (open-PR runs included): {total}. {stop}".rstrip())
