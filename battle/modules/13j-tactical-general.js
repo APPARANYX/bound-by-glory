@@ -1,4 +1,4 @@
-/* The General's command policy under the tactical controller (roadmap section 8, slices M0, M1, M2).
+/* The General's command policy under the tactical controller (roadmap section 8, slices M0 to M4).
 
    The controller (13a) holds one command unit per side (`@us`/`@ge`). When this policy owns it, the
    General's reconstitution and fled pickup are decided here, on the existing commander tick
@@ -25,14 +25,23 @@
    through the owner (22a reconsiderMission, objective scoring in commander-doctrine) and the brief goes
    out through the ordinary issueMission path. The action stays `issued` until the Squad Leader accepts
    the brief, so a brief nobody adopted is visible instead of silently reissued. ?controllerBriefs=0
-   hands the wakes back to the legacy loop. With every flag off the command units stay untaken. */
+   hands the wakes back to the legacy loop.
+
+   Slice M4, transport: after the briefs, the policy asks the transport owner (58 quoteMission, pure)
+   whether a truck can serve each squad's executing brief and grants it as one `command.transport`
+   action, which follows the ride (boarding, embarked) until it ends. Module 58 keeps the quote, the
+   seats and the journey. The reserve commit needs no slice of its own: it is a General wake
+   (`reserve-commit`, 22a reserveDue) and so already a `command.brief` since M3. A truck granted with a
+   brief at publication stays inside the owner's issueMission. ?controllerTransport=0 hands the per-tick
+   allocation back to the legacy loop. With every flag off the command units stay untaken. */
 (function (root) {
   'use strict';
   var SEARCH = typeof location !== 'undefined' ? location.search || '' : '',
     RECON_ON = !/[?&]controllerReconstitution=(?:0|off|false)(?:&|#|$)/i.test(SEARCH),
     RECOVERY_ON = !/[?&]controllerRecovery=(?:0|off|false)(?:&|#|$)/i.test(SEARCH),
     BRIEFS_ON = !/[?&]controllerBriefs=(?:0|off|false)(?:&|#|$)/i.test(SEARCH),
-    ON = RECON_ON || RECOVERY_ON || BRIEFS_ON,
+    TRANSPORT_ON = !/[?&]controllerTransport=(?:0|off|false)(?:&|#|$)/i.test(SEARCH),
+    ON = RECON_ON || RECOVERY_ON || BRIEFS_ON || TRANSPORT_ON,
     units = new WeakMap(),
     towns = new WeakMap();
 
@@ -57,7 +66,10 @@
           briefed: 0,
           accepted: 0,
           unchanged: 0,
-          superseded: 0
+          superseded: 0,
+          rides: new Map(),
+          granted: 0,
+          rideEnds: {}
         })
       );
     return st;
@@ -78,6 +90,46 @@
     if (BRIEFS_ON && ctx.facts) {
       owned.briefs = true;
       briefs(ctx, ctx.facts);
+    }
+    if (TRANSPORT_ON && ctx.facts) {
+      owned.transport = true;
+      transport(ctx, ctx.facts);
+    }
+  }
+  /* M4. After the briefs, one command.transport per squad on an executing brief that the transport owner
+     quotes a truck for (58 quoteMission is pure; considerMission re-quotes and grants in the adapter). */
+  function transport(ctx, facts) {
+    var T = root.BattleSquadTransport;
+    if (!T || !T.quoteMission) return;
+    var sim = ctx.sim,
+      st = stateOf(ctx.squad),
+      squads = facts.squads || [];
+    st.rides.forEach(function (_, id) {
+      var s = ctx.stage(id);
+      if (s && (s.stage === 'boarding' || s.stage === 'embarked')) return;
+      var why = s ? s.reason : 'gone';
+      st.rideEnds[why] = (st.rideEnds[why] || 0) + 1;
+      ctx.finish(id, s ? s.stage + ':' + s.reason : 'gone');
+      st.rides.delete(id);
+    });
+    for (var i = 0; i < squads.length; i++) {
+      var sq = squads[i],
+        m = sq._macroMission;
+      if (!m || m.status !== 'executing') continue;
+      /* The owner's own guard: an ended ride on this brief is not a new opportunity. */
+      if (sq._transport && sq._transport.missionVersion === m.version) continue;
+      var quote = T.quoteMission(sim, sq, m);
+      if (!quote) continue;
+      var r = ctx.request('command.transport', null, {
+        targetSquadId: String(sq.id),
+        reason: 'truck ' + quote.vehicle.id
+      });
+      if (!r.ok) {
+        refuse(st, r.reason);
+        continue;
+      }
+      st.granted++;
+      st.rides.set(r.actionId, String(sq.id));
     }
   }
   /* M3. One command.brief per General wake; the wake reasons go back to the commander tick's readout. */
@@ -223,6 +275,11 @@
           unchanged: st.unchanged,
           superseded: st.superseded
         },
+        transport: {
+          live: st.rides.size,
+          granted: st.granted,
+          ended: Object.assign({}, st.rideEnds)
+        },
         recovery: {
           live: st.recover ? st.recover.episode : null,
           episodes: st.episodes,
@@ -241,6 +298,7 @@
     reconstitution: RECON_ON,
     recovery: RECOVERY_ON,
     briefs: BRIEFS_ON,
+    transport: TRANSPORT_ON,
     update: update,
     /* The town the commander tick is running with, for the brief adapter (13b); scenario data, not a decision. */
     townFor: function (sim) {

@@ -227,6 +227,17 @@
       ['BattleCommanderAI', 'BattleCommanderAI'],
       ['targetSquadId', 'reason']
     ),
+    /* Slice M4: the General grants a truck to a squad on its accepted brief (reason names the truck the
+       owner quoted). Module 58 keeps the journey; the action follows the ride until it ends. */
+    'command.transport': definition(
+      'command',
+      'Macro',
+      'considerMission (truck allocation for an executing brief; module 58 owns the journey)',
+      [],
+      ['boarding', 'embarked'],
+      ['BattleSquadTransport', 'BattleSquadTransport'],
+      ['targetSquadId', 'reason']
+    ),
     'command.pickup': definition(
       'command',
       'Macro',
