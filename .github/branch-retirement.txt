@@ -453,3 +453,25 @@ work/strategic-580-causal-control-20261020 fe974f895553f2c2f1316b7c813912f0305f2
 work/strategic-resume-endurance-20261020 666e406c2166dbf9b61657695b35bf25f2aa07fd archive
 work/strategic-screen-quote-control-20261020 35c601da65bb9e535a1179d93a9ecb333fa4fcdf archive
 work/tactical-march-provider-20261026 082d6cc0c862477f6c6405574c9f6ac6f18f9eac archive
+
+# 2026-11-08 15:00Z: #787 M2 gate leftovers (Ivan: drop them; results in #787 comments)
+work/benchmark-launch/pr787-m2-causal-head 19a1228ecb6cc6843700c5a75940f9799c4f620a no-archive
+work/benchmark-launch/pr787-m2-causal-main 9e1b63c9c3b2dd4347c025df25729854c68a0105 no-archive
+work/benchmark-launch/pr787-m2-head-flagoff-std-ge-defend 1627071597e8a5c81f37b70d1ed688f8e4238a52 no-archive
+work/benchmark-launch/pr787-m2-head-flagoff-std-meeting df5a86d849146a1f9757ad45a177c593475b0c1d no-archive
+work/benchmark-launch/pr787-m2-head-flagoff-std-us-defend a2296101373c7e1466f603ac973233362196621e no-archive
+work/benchmark-launch/pr787-m2-head-std-ge-defend 30ecada6234935e7c98658cd37f03f0cbf94c51e no-archive
+work/benchmark-launch/pr787-m2-head-std-meeting 71f185f044e5d111f05040b0fc2a88715512dd32 no-archive
+work/benchmark-launch/pr787-m2-head-std-us-defend e357fbbbbfd4e620f6d87b935d22d576865cb832 no-archive
+work/benchmark-launch/pr787-m2-main-std-ge-defend 3f78d58a29cdb4fc5cb7446a80cb330f857089d4 no-archive
+work/benchmark-launch/pr787-m2-main-std-meeting 6366deea36bb3ee6a028d6cb41faa80962edb5a3 no-archive
+work/benchmark-launch/pr787-m2-main-std-us-defend 75c240a133aa7366b85ce32c39f06490cb413fca no-archive
+work/benchmark-launch/pr787-m2-probe-head ca6a7803a39745dd911e416525829d75f5e56402 no-archive
+work/benchmark-launch/pr787-m2-probe-main e99b0bf53d13a1ef923c3b035969a474905529a1 no-archive
+work/benchmark-launch/pr787-m2-recon900-flagoff-meeting 04191f7b1fd24b824c022ca8409391137998d53c no-archive
+work/benchmark-launch/pr787-m2-recon900-flagoff-us-defend 0147a6f2293d29c03a6dcc646595044c49363701 no-archive
+work/benchmark-launch/pr787-m2-recon900-head-meeting ed28d76f37842c3e6ad169fb637e32c72b809e39 no-archive
+work/benchmark-launch/pr787-m2-recon900-head-us-defend 65162c23d8aa2917239844a2fad5b6becdee5613 no-archive
+work/benchmark-launch/pr787-m2-recon900-main-meeting 9a412c1c82f1c2f6e6269fa3bb2ac3145d938b68 no-archive
+work/benchmark-launch/pr787-m2-recon900-main-us-defend 2578b75ec46b4f13e013c4e03acb05559283be88 no-archive
+work/pin/pr787-m2-83fb5a0 83fb5a0462b496047ab02205053d0ec3007e8d63 no-archive
