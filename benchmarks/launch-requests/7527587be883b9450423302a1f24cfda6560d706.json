@@ -1,0 +1,23 @@
+{
+  "branch": "work/benchmark-launch/pr771-det-main-us-defend",
+  "launch_parent_sha": "e87475a766bf966901e436aba32dc5b282219ad4",
+  "launch_sha": "7527587be883b9450423302a1f24cfda6560d706",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "battle_type": "us-defend",
+    "benchmark": "standard",
+    "origin_agent": "human",
+    "purpose": "#771 deterministic: legacy vs all-off on main e87475a (us-defend)",
+    "query_off": "strategicInterception=0",
+    "query_on": "strategicInterception=0&tacticalController=new&controllerLeaderless=0&controllerAssault=0&controllerRetreat=0&controllerGrenade=0",
+    "ref": "main",
+    "seed": "controller-natural-20261026",
+    "seeds": "3",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "main",
+  "source_sha_at_archive": "e86cda4f9db8afa882ecd26f590620acb97ed5d0"
+}
