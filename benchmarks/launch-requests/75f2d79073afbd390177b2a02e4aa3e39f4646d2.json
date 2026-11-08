@@ -1,0 +1,23 @@
+{
+  "branch": "work/benchmark-launch/pr774-combat-renewal",
+  "launch_parent_sha": "1fd86140e3f4180d937d325c2ec2bc1d5da185ab",
+  "launch_sha": "75f2d79073afbd390177b2a02e4aa3e39f4646d2",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/1fd86140e3f4180d937d325c2ec2bc1d5da185ab",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "standard",
+    "origin_agent": "human",
+    "purpose": "PR #774 validation: paired 600s comparison of the combat-renewal rebrief fix (renewed combat holds survive squad rebriefs) against #766 counts; inspect seed 0002 ge-0 soldiers 50/51 (328-357s) and us-3 soldier 38 (250s)",
+    "query_off": "strategicInterception=0",
+    "query_on": "strategicInterception=0&tacticalController=new",
+    "ref": "work/combat-renewal-rebrief",
+    "seed": "controller-natural-20261026",
+    "seeds": "3",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/combat-renewal-rebrief",
+  "source_sha_at_archive": null
+}
