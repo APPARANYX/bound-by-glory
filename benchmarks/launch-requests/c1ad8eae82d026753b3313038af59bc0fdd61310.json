@@ -1,0 +1,17 @@
+{
+  "branch": "work/benchmark-launch/meso771-causal",
+  "launch_parent_sha": "e717141f9c574037f0f79f1af4b1d05b5eca2a2b",
+  "launch_sha": "c1ad8eae82d026753b3313038af59bc0fdd61310",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/e717141f9c574037f0f79f1af4b1d05b5eca2a2b",
+  "request": {
+    "benchmark": "causal",
+    "query": "tacticalController=new&strategicInterception=0",
+    "ref": "work/pin/meso771-e717141",
+    "seconds": "600",
+    "seeds": "20"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/meso771-e717141",
+  "source_sha_at_archive": "e717141f9c574037f0f79f1af4b1d05b5eca2a2b"
+}
