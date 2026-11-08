@@ -1,0 +1,17 @@
+{
+  "branch": "work/benchmark-launch/reuse773-causal",
+  "launch_parent_sha": "e87475a766bf966901e436aba32dc5b282219ad4",
+  "launch_sha": "571f69ef232b9bc3957eb155b2b6b99cf5397adc",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "benchmark": "causal",
+    "query": "tacticalController=new&strategicInterception=0",
+    "ref": "work/pin/reuse773-8261fe6",
+    "seconds": "600",
+    "seeds": "20"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/reuse773-8261fe6",
+  "source_sha_at_archive": "8261fe601978cf7c4c0ebc9ac8234267b1db9696"
+}
