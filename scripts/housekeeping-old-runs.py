@@ -4,7 +4,9 @@
 Deleting a run also deletes its logs and artifacts. Ivan's call (2026-11-08):
 benchmark and QA results are read as soon as they finish, so nothing older than
 a week is kept. Runs that are queued or still running are never touched, and
-neither is any run on the head branch or head commit of an open pull request.
+neither is any run on the head branch or head commit of an open pull request,
+or on any branch that still exists other than the default branch (main runs
+the benchmark dispatches and scheduled jobs, which are what this clears).
 
 The GITHUB_TOKEN allows about 1000 API requests an hour per repository, shared
 with every other workflow, so each pass deletes at most MAX_DELETE runs and
@@ -62,7 +64,18 @@ for pg in range(1, 6):
             open_branches.add(pr["head"]["ref"])
     if len(pulls) < 100:
         break
-write(f"Keeping every run of {len(open_branches)} open PR branches: {', '.join(sorted(open_branches)) or 'none'}")
+default_branch = gh([f"repos/{repo}"])["default_branch"]
+live_branches = set()
+for pg in range(1, 21):
+    batch = gh([f"repos/{repo}/branches?per_page=100&page={pg}"]) or []
+    live_branches.update(b["name"] for b in batch)
+    if len(batch) < 100:
+        break
+else:
+    raise SystemExit("More than 2000 branches; refusing to guess which still exist")
+live_branches.discard(default_branch)
+protected = open_branches | live_branches
+write(f"Keeping every run of {len(open_branches)} open PR branches and {len(live_branches)} existing branches (all but {default_branch})")
 
 deleted = kept = 0
 page = 1
@@ -86,7 +99,7 @@ while deleted < limit:
         seen.add(run["id"])
         if run.get("status") != "completed" or run.get("created_at", "") >= cutoff:
             continue
-        if run.get("head_branch") in open_branches or run.get("head_sha") in open_shas:
+        if run.get("head_branch") in protected or run.get("head_sha") in open_shas:
             kept += 1
             continue
         if not dry:
@@ -100,4 +113,4 @@ while deleted < limit:
 if not stop and deleted >= limit:
     stop = f"reached MAX_DELETE={limit}, the next pass continues"
 total = (gh([f"repos/{repo}/actions/runs?created=%3C{cutoff}&status=completed&per_page=1"]) or {}).get("total_count")
-write(f"{'Would delete' if dry else 'Deleted'}: {deleted}. Kept for open PRs: {kept}. Older completed runs left (open-PR runs included): {total}. {stop}".rstrip())
+write(f"{'Would delete' if dry else 'Deleted'}: {deleted}. Kept for open PRs and live branches: {kept}. Older completed runs left (kept runs included): {total}. {stop}".rstrip())
