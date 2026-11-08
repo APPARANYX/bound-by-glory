@@ -649,7 +649,7 @@
       facts = { squads: squads, town: town, owned: {}, recoveryWoke: false, wakeReasons: {} },
       owned = !!unit && TC.dispatch(sim, unit, 'generalTick', facts);
     /* Under the tactical controller the General's command policy (13j, roadmap section 8) owns each
-       decision it marks in facts.owned (reconstitution and the fled pickup: M1; strategic recovery: M2);
+       decision it marks in facts.owned (reconstitution and the fled pickup: M1; strategic recovery: M2; briefs: M3; per-tick truck allocation: M4);
        every decision it does not own runs here as before. */
     if (!owned || !facts.owned.reconstitution) {
       reconstitute(sim, faction);
@@ -679,6 +679,7 @@
       // unchanged: a marching squad can come across a truck after briefing.
       var mission = sq._macroMission;
       if (
+        !(owned && facts.owned.transport) &&
         mission &&
         mission.status === 'executing' &&
         root.BattleSquadTransport &&

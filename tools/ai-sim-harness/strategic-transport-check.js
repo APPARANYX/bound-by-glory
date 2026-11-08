@@ -1065,3 +1065,65 @@ console.log(
   assert(a.members.every(s => s.root.position.z >= t.position.z - 5));
 }
 console.log('PASS independent safe exits and reachable dismount assembly around blocked rear space');
+/* Roadmap section 8 slice M4: under the tactical controller the General grants the truck on his own
+   tick as one command.transport action that follows the ride; ?controllerTransport=0 leaves it to the
+   legacy commander loop. */
+{
+  const { loadGeneralController } = require('./general-controller-stack');
+  function world(search) {
+    const a = make(undefined, '?motorTransport=1&truckPhysics=0&truckAccess=0&truckCollision=0');
+    const take = loadGeneralController(
+      a.root,
+      (r, file, s) => loadModule(r, file, { location: { search: s == null ? '' : s } }),
+      search
+    );
+    take(a.sim);
+    const TC = a.root.BattleTacticalController,
+      unit = TC.commandUnit(a.sim, 'us');
+    function tick() {
+      const facts = {
+        squads: a.sim.factions.us.squads,
+        town: null,
+        owned: {},
+        recoveryWoke: false,
+        wakeReasons: {}
+      };
+      return { owned: TC.dispatch(a.sim, unit, 'generalTick', facts), facts };
+    }
+    return { a, TC, tick };
+  }
+  const { a, TC, tick } = world('');
+  a.brief().status = 'executing';
+  const first = tick();
+  assert.equal(first.owned, true);
+  assert.equal(first.facts.owned.transport, true, 'the General owns the per-tick truck allocation');
+  assert.equal(a.squad._transport.phase, 'boarding', 'the truck was granted through the action');
+  let G = a.root.BattleTacticalGeneral.summary(a.sim).us.transport;
+  assert.deepEqual([G.granted, G.live], [1, 1]);
+  const live = TC.summary(a.sim).live.find(x => x.capability === 'command.transport');
+  assert.equal(live.stage, 'boarding');
+  tick();
+  assert.equal(a.root.BattleTacticalGeneral.summary(a.sim).us.transport.granted, 1, 'one grant per ride');
+  for (
+    let i = 0;
+    i < 4000 && a.squad._transport.phase !== 'arrived' && a.squad._transport.phase !== 'aborted';
+    i++
+  )
+    a.run(0.15);
+  tick();
+  G = a.root.BattleTacticalGeneral.summary(a.sim).us.transport;
+  assert.equal(G.live, 0, 'the action ended with the ride');
+  assert.equal(
+    Object.values(G.ended).reduce((x, y) => x + y, 0),
+    1
+  );
+  assert.equal(a.root.BattleTacticalGeneral.summary(a.sim).us.refused.constructor, Object);
+  assert.deepEqual(a.root.BattleTacticalGeneral.summary(a.sim).us.refused, {});
+
+  const off = world('?controllerTransport=0');
+  off.a.brief().status = 'executing';
+  const t = off.tick();
+  assert.equal(!!t.facts.owned.transport, false, '?controllerTransport=0: the legacy loop allocates');
+  assert.equal(off.a.squad._transport, null);
+}
+console.log('PASS controller: the General grants trucks as command.transport actions (M4)');

@@ -467,6 +467,38 @@
       return true;
     }
   };
+  /* Slice M4. Module 58 grants the truck (considerMission re-quotes and seats the squad) and owns the
+     journey; the action follows that ride until it ends. A ride for an older brief is not this one. */
+  CAPS['command.transport'] = {
+    request: function (req, sim) {
+      var T = root.BattleSquadTransport,
+        sq = squadOf(sim, { faction: req.faction, squadId: req.params.targetSquadId }),
+        m = sq && sq._macroMission;
+      if (!T || !T.considerMission || !m || m.status !== 'executing' || !T.considerMission(sim, sq, m))
+        return false;
+      var t = sq._transport;
+      if (!t || t.missionVersion !== m.version) {
+        if (T.finish) T.finish(sim, sq, 'controller:untracked');
+        return false;
+      }
+      return keep(req, sim, { squad: sq, ride: t });
+    },
+    stage: function (h) {
+      var t = h.squad._transport,
+        r = h.ride;
+      if (t !== r || rideEnded(h)) mark(h, 'released', 'owner:' + (r.endReason || r.phase), r.endedAt);
+      else if (t.phase === 'embarked' || t.phase === 'disembarking')
+        mark(h, 'embarked', t.phase, t.embarkedAt);
+      else mark(h, 'boarding', 'boarding', h.requestedAt);
+    },
+    cancel: function (h, reason) {
+      var T = root.BattleSquadTransport,
+        t = h.squad._transport;
+      if (T && T.finish && t === h.ride) T.finish(h.sim, h.squad, 'controller:' + reason);
+      return true;
+    },
+    release: rideEnded
+  };
   CAPS['command.pickup'] = {
     request: function (req, sim) {
       var R = recon(),

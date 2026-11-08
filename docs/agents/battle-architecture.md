@@ -266,7 +266,11 @@ when the episode changes. Slice M3 (`?controllerBriefs=0`): the
 policy runs the General's per-squad wake rules (22a `wakeReason`) and opens one `command.brief` per wake;
 its adapter re-selects through 22a `reconsiderMission` and the brief goes out through `issueMission`. The
 action stays `issued` until the Squad Leader accepts it (`accepted`, or `unchanged` when the wake deduped)
-or the brief is replaced. Each slice marks what it owns in the dispatch facts (`facts.owned`), and
+or the brief is replaced. Slice M4 (`?controllerTransport=0`): after the briefs the policy asks 58
+`quoteMission` (pure) whether a truck can serve each squad's executing brief and opens one
+`command.transport` per grant (adapter: 58 `considerMission`; stages `boarding`, `embarked`, released
+when the ride ends; a cancel calls 58 `finish`). The reserve commit is a wake (`reserve-commit`) and so a
+`command.brief` since M3; a truck granted at publication stays inside `issueMission`. Each slice marks what it owns in the dispatch facts (`facts.owned`), and
 commander-ai runs every Macro decision not marked there as before. Readout:
 `BattleTacticalGeneral.summary(sim)` and `TC.summary(sim).commanders`.
 

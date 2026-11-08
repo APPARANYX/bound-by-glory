@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-/* The General under the tactical controller (roadmap section 8, slices M0, M1 and M2): the command scope in
+/* The General under the tactical controller (roadmap section 8, slices M0 to M4): the command scope in
    the capability contract, the per-side command unit in the controller (13a), and reconstitution and the
    fled pickup decided by the command policy (13j) through `command.reconstitute` / `command.pickup`
    (adapters in 13b, owner 22). The scenario checks are reconstitution-check.js and fled-man-check.js run
@@ -46,10 +46,12 @@ function req(capability, params, over) {
 }
 
 test('the contract names the command capabilities with the Macro owner', () => {
-  ['command.reconstitute', 'command.pickup', 'command.recover', 'command.brief'].forEach(cap => {
-    assert.equal(C.capabilities[cap].scope, 'command');
-    assert.equal(C.capabilities[cap].owner, 'Macro');
-  });
+  ['command.reconstitute', 'command.pickup', 'command.recover', 'command.brief', 'command.transport'].forEach(
+    cap => {
+      assert.equal(C.capabilities[cap].scope, 'command');
+      assert.equal(C.capabilities[cap].owner, 'Macro');
+    }
+  );
 });
 test('a command request is valid only on the side command unit, with no actor', () => {
   assert.equal(
@@ -132,21 +134,25 @@ test('each Macro slice has its own off flag; with both off 13c never takes the c
     r.BattleTacticalGeneral.update({ sim: {}, squad: { faction: 'us', id: '@us' }, facts });
     return { on: r.BattleTacticalGeneral.on, owned: facts.owned };
   }
-  const all = { reconstitution: true, recovery: true, briefs: true };
+  const all = { reconstitution: true, recovery: true, briefs: true, transport: true };
   assert.deepEqual(owned(''), { on: true, owned: all });
   [
     ['controllerReconstitution', 'reconstitution'],
     ['controllerRecovery', 'recovery'],
-    ['controllerBriefs', 'briefs']
+    ['controllerBriefs', 'briefs'],
+    ['controllerTransport', 'transport']
   ].forEach(([flag, key]) => {
     const rest = Object.assign({}, all);
     delete rest[key];
     assert.deepEqual(owned('&' + flag + '=0'), { on: true, owned: rest }, flag);
   });
-  assert.deepEqual(owned('&controllerReconstitution=0&controllerRecovery=0&controllerBriefs=0'), {
-    on: false,
-    owned: {}
-  });
+  assert.deepEqual(
+    owned('&controllerReconstitution=0&controllerRecovery=0&controllerBriefs=0&controllerTransport=0'),
+    {
+      on: false,
+      owned: {}
+    }
+  );
   const src = fs.readFileSync(path.join(H.REPO, 'battle/modules/13c-tactical-march-provider.js'), 'utf8');
   assert.match(src, /G && G\.on && TC\.commandUnit \? TC\.commandUnit\(sim, f, true\)/);
 });
@@ -161,6 +167,7 @@ test('commander-ai runs each legacy Macro decision unless the General tick marke
     /owned && facts\.owned\.recovery \? facts\.recoveryWoke : runStrategicRecovery\(sim, faction, squads, town\)/
   );
   assert.match(src, /reason = briefsOwned \? null : wakeReason\(sim, sq\)/);
+  assert.match(src, /!\(owned && facts\.owned\.transport\) &&\s*mission &&/);
 });
 ['reconstitution-check.js', 'fled-man-check.js', 'strategic-recovery-review-check.js'].forEach(file =>
   test(file + ' passes with the General under the controller', () => {
