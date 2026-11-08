@@ -1,0 +1,21 @@
+{
+  "branch": "work/benchmark-launch/768-standard-meeting",
+  "launch_parent_sha": "ef1367a62c5c85397220f3ce121b8e4e49bbf11a",
+  "launch_sha": "b99484b5213cc75ea731370ae16ac04848d7dbea",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "standard",
+    "origin_agent": "claude",
+    "purpose": "#768 inertness: records must be identical",
+    "query_off": "tacticalController=new&strategicInterception=0&fastRouteChecks=0",
+    "query_on": "tacticalController=new&strategicInterception=0",
+    "ref": "claude/project-thread-a3p046",
+    "seed": "fast768",
+    "seeds": "60"
+  },
+  "schema_version": 1,
+  "source_ref": "claude/project-thread-a3p046",
+  "source_sha_at_archive": null
+}
