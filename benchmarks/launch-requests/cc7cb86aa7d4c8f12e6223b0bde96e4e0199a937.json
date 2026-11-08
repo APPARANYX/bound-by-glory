@@ -1,0 +1,20 @@
+{
+  "branch": "work/benchmark-launch/768-probe-pack",
+  "launch_parent_sha": "ef1367a62c5c85397220f3ce121b8e4e49bbf11a",
+  "launch_sha": "cc7cb86aa7d4c8f12e6223b0bde96e4e0199a937",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "benchmark": "probe-pack",
+    "map": "tactical",
+    "origin_agent": "claude",
+    "purpose": "#768 inertness",
+    "query_off": "tacticalController=new&strategicInterception=0&fastRouteChecks=0",
+    "query_on": "tacticalController=new&strategicInterception=0",
+    "ref": "claude/project-thread-a3p046",
+    "seed": "pack-768"
+  },
+  "schema_version": 1,
+  "source_ref": "claude/project-thread-a3p046",
+  "source_sha_at_archive": null
+}
