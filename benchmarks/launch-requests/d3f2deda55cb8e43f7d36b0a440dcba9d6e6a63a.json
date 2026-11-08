@@ -1,0 +1,23 @@
+{
+  "branch": "work/benchmark-launch/pr771-det-base-ge-defend",
+  "launch_parent_sha": "ce85a93d3d995da00d54694f70c6a4bc6d381a2d",
+  "launch_sha": "d3f2deda55cb8e43f7d36b0a440dcba9d6e6a63a",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/ce85a93d3d995da00d54694f70c6a4bc6d381a2d",
+  "request": {
+    "battle_type": "ge-defend",
+    "benchmark": "standard",
+    "origin_agent": "human",
+    "purpose": "#771 deterministic: legacy vs new on baseline d23479d (ge-defend)",
+    "query_off": "strategicInterception=0",
+    "query_on": "strategicInterception=0&tacticalController=new",
+    "ref": "work/pin/meso771-base-d23479d",
+    "seed": "controller-natural-20261026",
+    "seeds": "3",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/meso771-base-d23479d",
+  "source_sha_at_archive": "d23479d7fa6a30f8c83d88fa797ce35292d19cec"
+}
