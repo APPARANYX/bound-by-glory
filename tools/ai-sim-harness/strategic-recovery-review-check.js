@@ -496,10 +496,11 @@ test('strategic main-effort preserves a progressing carrier bound for a differen
 });
 
 if (process.env.GENERAL_CONTROLLER === '1')
-  test('controller: every recovery stage and review ran inside a command.recover action', () => {
+  test('controller: every recovery stage ran inside a command.recover action and every wake was a command.brief', () => {
     let stages = 0,
       episodes = 0,
-      recovered = 0;
+      recovered = 0,
+      briefed = 0;
     WORLDS.forEach(w => {
       const st = w.r.BattleTacticalController.summary(w.b);
       if (!st.stats) return;
@@ -511,6 +512,11 @@ if (process.env.GENERAL_CONTROLLER === '1')
         if (!row) return assert.equal(ran, 0);
         assert.deepEqual(row.refused, {}, 'no command request was refused');
         assert.ok(ran === 0 || row.recovery.episodes > 0, 'a stage ran only inside an action');
+        assert.equal(
+          row.briefs.live + row.briefs.accepted + row.briefs.unchanged + row.briefs.superseded,
+          row.briefs.briefed
+        );
+        briefed += row.briefs.briefed;
         stages += ran;
         episodes += row.recovery.episodes;
         recovered += row.recovery.recovered;
@@ -518,5 +524,6 @@ if (process.env.GENERAL_CONTROLLER === '1')
     });
     assert.ok(stages > 0 && episodes > 0, 'stages ' + stages + ', episodes ' + episodes);
     assert.ok(recovered > 0, 'an episode that made objective progress ended recovered');
+    assert.ok(briefed > 0, 'General wakes went out as command.brief actions');
   });
 console.log('PASS ' + n + ' strategic-recovery review checks');

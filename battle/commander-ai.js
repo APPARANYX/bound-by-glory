@@ -646,7 +646,7 @@
       reasons = {},
       TC = root.BattleTacticalController,
       unit = TC && TC.commandUnit ? TC.commandUnit(sim, faction) : null,
-      facts = { squads: squads, town: town, owned: {}, recoveryWoke: false },
+      facts = { squads: squads, town: town, owned: {}, recoveryWoke: false, wakeReasons: {} },
       owned = !!unit && TC.dispatch(sim, unit, 'generalTick', facts);
     /* Under the tactical controller the General's command policy (13j, roadmap section 8) owns each
        decision it marks in facts.owned (reconstitution and the fled pickup: M1; strategic recovery: M2);
@@ -661,9 +661,15 @@
       woke = true;
       reasons['@' + faction] = 'strategic-recovery';
     }
+    var briefsOwned = owned && facts.owned.briefs;
+    if (briefsOwned)
+      Object.keys(facts.wakeReasons).forEach(function (id) {
+        woke = true;
+        reasons[id] = facts.wakeReasons[id];
+      });
     for (var i = 0; i < squads.length; i++) {
       var sq = squads[i],
-        reason = wakeReason(sim, sq);
+        reason = briefsOwned ? null : wakeReason(sim, sq);
       if (reason) {
         woke = true;
         reasons[sq.id] = reason;
