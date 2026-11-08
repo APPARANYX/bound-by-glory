@@ -1,0 +1,35 @@
+name: ⭐ Retire superseded branches
+
+# Deletes the branches listed in .github/branch-retirement.txt, archiving any
+# with commits nothing else keeps as archive/branch/<name> tags first. Skips a
+# branch whose tip moved since the list was made or that has an open PR.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'List what would be deleted without deleting it'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: retire-branches
+  cancel-in-progress: false
+
+jobs:
+  retire:
+    name: Retire listed branches
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive and delete
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: python3 scripts/retire-branches.py
