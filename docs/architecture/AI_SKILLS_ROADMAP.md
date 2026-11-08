@@ -242,7 +242,7 @@ Not blockers for the default switch. Each needs a confirmed failure before a fix
 - Engineer `states.rage` +129% (likely multiple-comparison noise); sergeant rage drop under #776 judged benign.
 
 **Command and writers:**
-- `writer-ping-pong` on one us-defend seed (#780 run 1704, seed -0020): two men flip `orderDestination` between squad-stability and prepared-defense at 580 to 598 s, controller on only.
+- `writer-ping-pong` on one us-defend seed (#780 run 1704, seed -0020): two men flip `orderDestination` between squad-stability and prepared-defense at 580 to 598 s, controller on only. Cause found 2026-11-08 on #793 (us-defend seed pr793-m3-20261108-0011, ge-3 man 86, 546 to 556 s): the controller released a man's order, a one-tick defend or regroup phase let the Squad Leader's fireteam slot publish, and while that slot was pending publishPersonalMovement committed the man's last adopted envelope, the released controller order, under the Squad Leader's name. Fixed in module 16: the controller is the senior writer for its squads and only its live order may use its key (?controllerReleaseFinal=0 restores; check in tactical-owner-adapters-check.js). Merged without a Muse gate on Ivan's word; confirm on the next gate that us-defend writer conflicts read 0. The phase flicker itself (assault to defend for 0.45 s in contact) is not addressed.
 - Four pre-existing causal stalls (`requires-command-or-route-review`, attackers idle 45 s at an interim waypoint).
 - #701: unexplained GE fire-silence rise.
 - Probe `contacts-cleared` 44 to 23 after #772 (more under-fire endings).

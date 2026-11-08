@@ -306,6 +306,11 @@
   var CONTROLLER_RETREAT_ON = !/[?&]controllerRetreat=(?:0|off|false)(?:&|#|$)/i.test(
     typeof location !== 'undefined' ? location.search || '' : ''
   );
+  /* A released controller movement order is never recommitted by another publisher (see
+     publishPersonalMovement). ?controllerReleaseFinal=0 restores the old fall-through. */
+  var CONTROLLER_RELEASE_FINAL_ON = !/[?&]controllerReleaseFinal=(?:0|off|false)(?:&|#|$)/i.test(
+    typeof location !== 'undefined' ? location.search || '' : ''
+  );
   function retainedRetreat(sq) {
     /* The provider stands down on either, as the resolver does; so the Squad Leader carries either. */
     return (
@@ -1125,6 +1130,17 @@
       adoptedKey = String(adopted.data.publishKey || ''),
       previous = point(s._fireteamDestination);
     if (!appliedPoint) return false;
+    /* A controller order its owner has ended stays ended. While a later publisher's order is still
+       pending, the man's last adopted envelope can be that released controller order; committing it
+       here brought it back under the publisher's name (a one-tick defend or regroup phase in contact
+       made Squad Command and the prepared post ping-pong over orderDestination). The controller is the
+       senior writer for its squads: only its live order may use its key. ?controllerReleaseFinal=0. */
+    if (
+      CONTROLLER_RELEASE_FINAL_ON &&
+      adoptedKey.indexOf('controller:') === 0 &&
+      !(_controllerMoves.get(s) && _controllerMoves.get(s).key === adoptedKey)
+    )
+      return false;
     if (
       !s._survivalMovementKey &&
       s._fireteamAdoptedEnvelope === adopted.envelopeId &&

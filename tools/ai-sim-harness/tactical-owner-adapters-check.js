@@ -465,6 +465,34 @@ test('switching back ends the controller order at its owner; legacy fireteams pu
   assert.notEqual(rec.data.publishKey, 'controller:' + res.actionId, 'Meso’s own slot replaced it');
 });
 
+/* us-defend seed pr793-m3-20261108-0011, ge-3 soldier 86 at t 549-556: the controller released his
+   order, a 0.45 s defend phase let the Squad Leader's fireteam slot publish, and while that slot was
+   pending the man's last adopted envelope (the released controller order) was committed again. */
+function releasedThenDefend(search) {
+  const w = moving(search),
+    CR = w.r.BattleCommandReception,
+    goal = { x: 8, z: 30 },
+    res = w.ctx.request('movement.move', w.s.id, { point: goal }),
+    rec = CR.peek(w.s, w.b, 'movement', 'soldier:' + String(w.s.id));
+  w.b.time = rec.adoptedAt + 0.01;
+  w.r.SquadAI.updateSquad(w.q, w.b);
+  assert.equal(w.s._fireteamPublishKey, 'controller:' + res.actionId, 'he took the controller order');
+  assert.equal(w.ctx.finish(res.actionId, 'done'), true);
+  assert.equal(w.r.BattleSquadStability.controllerMovement.current(w.s, null), false, 'released');
+  assert.equal(w.s._fireteamDestination, null);
+  w.q.commandPhase = 'defend';
+  w.b.time += 0.45;
+  w.r.SquadAI.updateSquad(w.q, w.b);
+  return { w, key: 'controller:' + res.actionId };
+}
+test('a released controller order is not committed again while a fireteam slot is pending', () => {
+  const { w, key } = releasedThenDefend();
+  assert.notEqual(w.s._fireteamPublishKey, key, 'the released controller order stayed released');
+  assert.equal(w.s._fireteamDestination, null, 'he waits for the slot he has not heard yet');
+  const { w: old, key: oldKey } = releasedThenDefend('?stressAct=0&commandRelay=0&controllerReleaseFinal=0');
+  assert.equal(old.s._fireteamPublishKey, oldKey, '?controllerReleaseFinal=0 restores the old fall-through');
+});
+
 test('movement.move is refused for a man in survival movement; the owner keeps it', () => {
   const w = moving();
   w.s._survivalMovementKey = 'survival';
