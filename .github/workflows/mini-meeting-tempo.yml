@@ -47,4 +47,4 @@ jobs:
           name: mini-meeting-tempo-679-evidence
           path: reports/mini-meeting-tempo/
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7

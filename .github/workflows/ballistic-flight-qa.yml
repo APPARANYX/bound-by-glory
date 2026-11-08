@@ -59,4 +59,4 @@ jobs:
           name: ballistic-flight-679-evidence
           path: reports/mini-flight-tempo/
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7

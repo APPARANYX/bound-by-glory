@@ -360,7 +360,7 @@ jobs:
           name: seeds-${{ github.run_number }}-shard-${{ matrix.shard }}
           path: reports/
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 7
 
       - name: Show server log on failure
         if: failure()

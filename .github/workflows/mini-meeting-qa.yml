@@ -55,4 +55,4 @@ jobs:
           name: mini-meeting-676-evidence
           path: reports/mini-meeting/
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7

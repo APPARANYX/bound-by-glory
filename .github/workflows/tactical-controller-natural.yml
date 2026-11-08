@@ -60,4 +60,5 @@ jobs:
         if: always()
         with:
           name: controller-natural-${{ matrix.battle }}
+          retention-days: 7
           path: reports/tactical-controller-natural/

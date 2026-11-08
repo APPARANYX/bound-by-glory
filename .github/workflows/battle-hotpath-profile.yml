@@ -96,7 +96,7 @@ jobs:
           name: battle-hotpath-${{ matrix.label }}-${{ github.run_number }}
           path: reports/profile/
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 7
       - name: Show server log on failure
         if: failure()
         run: tail -n 200 /tmp/battle-profile-php.log || true
@@ -156,7 +156,7 @@ jobs:
           name: battle-hotpath-manual-${{ github.run_number }}
           path: reports/profile/
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 7
       - name: Show server log on failure
         if: failure()
         run: tail -n 200 /tmp/battle-profile-php.log || true

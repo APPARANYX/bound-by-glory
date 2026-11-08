@@ -239,7 +239,7 @@ jobs:
             reports/
             ${{ runner.temp }}/strategic-diagnostics-php.log
           if-no-files-found: warn
-          retention-days: 21
+          retention-days: 7
 
   acceptance-report:
     name: Aggregate strategic diagnostic acceptance
@@ -375,5 +375,5 @@ jobs:
         with:
           name: strategic-acceptance-all-${{ github.run_number }}
           path: reports/all/
-          retention-days: 21
+          retention-days: 7
           if-no-files-found: warn

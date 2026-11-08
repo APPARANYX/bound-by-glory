@@ -61,6 +61,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: acoustic-budget-matrix
+          retention-days: 7
           path: audio-budget-results/
           if-no-files-found: warn
       - name: Confirm complete foreground measurements

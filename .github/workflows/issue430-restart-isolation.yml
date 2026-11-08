@@ -73,7 +73,7 @@ jobs:
           name: restart-isolation-${{ matrix.scenario }}-${{ github.run_number }}
           path: reports/restart430/
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7
 
   fresh-parity:
     name: ${{ matrix.scenario }} · fresh-page 1x/4x/8x parity
@@ -123,4 +123,4 @@ jobs:
           name: fresh-timescale-parity-${{ matrix.scenario }}-${{ github.run_number }}
           path: reports/timescale-parity/
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7

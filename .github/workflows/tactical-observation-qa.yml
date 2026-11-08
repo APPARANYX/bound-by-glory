@@ -79,6 +79,7 @@ jobs:
         if: always()
         with:
           name: tactical-observation-evidence
+          retention-days: 7
           path: closeups/tactical-observation/
 
   covered-bound:
@@ -99,6 +100,7 @@ jobs:
         if: always()
         with:
           name: covered-bound-evidence
+          retention-days: 7
           path: |
             closeups/tactical-observation/covered-bound-*.png
             closeups/tactical-observation/covered-bound-*.json
@@ -130,4 +132,5 @@ jobs:
         if: always()
         with:
           name: tactical-contact-evidence
+          retention-days: 7
           path: closeups/tactical-contact/

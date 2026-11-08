@@ -292,5 +292,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: phase-c-native-lab-smoke
+          retention-days: 7
           path: reports/phase-c-lab/
           if-no-files-found: ignore
