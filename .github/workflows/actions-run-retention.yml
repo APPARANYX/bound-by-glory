@@ -1,0 +1,44 @@
+name: ⭐ Actions run retention
+
+# Deletes completed workflow runs (with their logs and artifacts) older than
+# KEEP_DAYS. Benchmark and QA results are read as soon as a run finishes, so a
+# week of history is enough. Queued and running runs are never touched.
+# Hourly, because the GITHUB_TOKEN API budget caps each pass at MAX_DELETE runs;
+# once the backlog is gone a pass is a few API calls.
+
+on:
+  schedule:
+    - cron: '41 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'List what would be deleted without deleting it'
+        type: boolean
+        default: true
+      keep_days:
+        description: 'Keep runs created in the last N days'
+        type: number
+        default: 7
+
+permissions:
+  actions: write
+
+concurrency:
+  group: actions-run-retention
+  cancel-in-progress: false
+
+jobs:
+  purge:
+    name: Delete runs older than the retention window
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Delete old completed runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          KEEP_DAYS: ${{ github.event_name == 'workflow_dispatch' && inputs.keep_days || 7 }}
+          MAX_DELETE: 500
+        run: python3 scripts/housekeeping-old-runs.py
