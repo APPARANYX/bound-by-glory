@@ -6,7 +6,7 @@
    explicitly opts into diagnostic pinning with ?pin=1&ref=<ref>. This prevents stale ref
    query strings from freezing normal play on an old build. */
 
-$repo = 'APPARANYX/grasstex';
+$repo = 'APPARANYX/bound-by-glory';
 $pinRequested = isset($_GET['pin']) && $_GET['pin'] === '1';
 $requestedRef = ($pinRequested && isset($_GET['ref']) && $_GET['ref'] !== '') ? $_GET['ref'] : 'main';
 $root = dirname(__FILE__);

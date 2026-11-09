@@ -1,4 +1,4 @@
-# grasstex
+# Bound by Glory
 
 WW2 squad-AI Battle Sim lab (Babylon.js), plus the original grass/terrain rendering prototype
 now ported to `ww2fps`.
