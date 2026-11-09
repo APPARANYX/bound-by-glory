@@ -338,7 +338,6 @@
     }
     tapOutput();
     if (ctx.state !== 'running') throw new Error('AudioContext is ' + ctx.state + '; headless Chromium needs --autoplay-policy=no-user-gesture-required');
-    if (root.BattleAudioMix) root.BattleAudioMix.ensureLimiter(scene);
     var obstacleCount = configureAcoustics();
     if (fullMix) {
       if (!root.BattleFullAudioStress || !root.BattleGrenadeAudio ||
