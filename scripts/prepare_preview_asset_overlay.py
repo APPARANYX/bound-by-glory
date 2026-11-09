@@ -47,7 +47,9 @@ def changed_assets(base_ref: str) -> list[str]:
     )
 
 
-def rewrite_rules(removed: list[str]) -> str:
+def rewrite_rules(removed: list[str], site_root: str = "grasstex") -> str:
+    if not re.fullmatch(r"(grasstex|bound-by-glory)", site_root):
+        raise ValueError("Unsupported public site root")
     lines = [
         "# Branch asset overlay: files present here win; unchanged assets reuse production.",
         "# This file is generated at preview deploy time, never deployed into /grasstex/Assets.",
@@ -62,7 +64,7 @@ def rewrite_rules(removed: list[str]) -> str:
         [
             "  RewriteCond %{REQUEST_FILENAME} !-f",
             "  RewriteCond %{REQUEST_FILENAME} !-d",
-            "  RewriteRule ^(soldiers|animations|weapons|vehicles|effects|terrain)/(.+)$ /grasstex/Assets/$1/$2 [L,NE]",
+            f"  RewriteRule ^(soldiers|animations|weapons|vehicles|effects|terrain)/(.+)$ /{site_root}/Assets/$1/$2 [L,NE]",
             "</IfModule>",
             "",
         ]
@@ -70,7 +72,7 @@ def rewrite_rules(removed: list[str]) -> str:
     return "\n".join(lines)
 
 
-def build_overlay(base_ref: str, destination: Path) -> dict:
+def build_overlay(base_ref: str, destination: Path, site_root: str = "grasstex") -> dict:
     assets = destination / "Assets"
     assets.mkdir(parents=True, exist_ok=True)
     copied, removed = [], []
@@ -100,7 +102,7 @@ def build_overlay(base_ref: str, destination: Path) -> dict:
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     (destination / "asset-overlay.htaccess").write_text(
-        rewrite_rules(removed), encoding="utf-8"
+        rewrite_rules(removed, site_root), encoding="utf-8"
     )
     return manifest
 
@@ -109,8 +111,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-ref", default="origin/main")
     parser.add_argument("--output", type=Path, default=Path(".preview"))
+    parser.add_argument("--site-root", choices=["grasstex", "bound-by-glory"], default="grasstex")
     args = parser.parse_args()
-    result = build_overlay(args.base_ref, args.output)
+    result = build_overlay(args.base_ref, args.output, args.site_root)
     print(
         "Preview asset overlay: "
         f"{len(result['copied'])} changed files / "
