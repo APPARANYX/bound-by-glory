@@ -321,7 +321,7 @@
             audioRoot = root.BATTLE_API_BASE || '/bound-by-glory/',
             base = root.BATTLE_AUDIO_BASE || audioRoot + 'Assets/audio/';
           root.GTLog('[VOICE] request ' + base + file);
-          entry.sound = new (root.BattleAudioBackend ? root.BattleAudioBackend.Sound : BABYLON.Sound)(
+          entry.sound = new root.BattleAudioBackend.Sound(
             'voice-' + file,
             root.BattleAudioFormat ? root.BattleAudioFormat.url(base + file) : base + file,
             scene,
