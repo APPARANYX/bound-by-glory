@@ -238,6 +238,12 @@ function summarizeSamples(samples) {
             const maneuver = window.BattleTacticalCoveredManeuver;
             return {
               lab: d,
+              // Full lab chronology at the unchanged 4.5 s capture cadence, so the
+              // first stalled publication is retained alongside the terminal window.
+              causalActors: causal.report(sim).actorTails.map(row => ({
+                actor: row.actor,
+                sample: row.history[row.history.length - 1] || null
+              })),
               coveredShots,
               stationClaims: sim._roster.us.filter(s => positions?.current?.(s)).length,
               stationSummary: sim.factions.us.squads.map(s => ({
