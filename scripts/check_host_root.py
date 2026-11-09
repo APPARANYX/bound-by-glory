@@ -41,3 +41,19 @@ for root in ("grasstex", "bound-by-glory"):
     other = "bound-by-glory" if root == "grasstex" else "grasstex"
     assert f'src="/{other}/battle/core-runtime.js?' not in page
 print("PASS: both hosted roots produce matching API, asset, audio and script URLs")
+
+# Source fallbacks must not revive the removed FTP directory when the runtime
+# bootstrap is absent (e.g., standalone Audio Lab or preview/diagnostic pages).
+for source_path in (
+    "battle/acoustics.js",
+    "battle/battle-sim.js",
+    "battle/modules/09-voice-runtime.js",
+    "battle/modules/11-voice-variation.js",
+    "battle/audio-lab.js",
+    "battle/battle-control.js",
+    "battle/modules/59-strategic-truck-visual.js",
+):
+    source = (ROOT / source_path).read_text(encoding="utf-8")
+    assert "/grasstex/Assets/" not in source, f"Legacy hard-coded asset root in {source_path}"
+    assert "BATTLE_API_BASE" in source, f"Missing host-root-aware fallback in {source_path}"
+print("PASS: audio/asset JS fallbacks respect the active host root")
