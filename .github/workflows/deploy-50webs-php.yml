@@ -88,7 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
-      WEB_ROOT: ${{ vars.BATTLE_WEB_ROOT || 'grasstex' }}
+      WEB_ROOT: ${{ vars.BATTLE_WEB_ROOT || 'bound-by-glory' }}
 
     steps:
       - name: Checkout verified merge commit
