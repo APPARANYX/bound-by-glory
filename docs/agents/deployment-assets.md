@@ -1,5 +1,13 @@
 ## Deploy and assets
 
+## Hosted root migration (Bound by Glory)
+
+- The GitHub repository is `APPARANYX/bound-by-glory`. Its private audio dependency remains `APPARANYX/grasstex-audio`. GitHub repository names and 50webs directory names are independent.
+- Production and Actions branch-preview FTP jobs use the repository Actions variable `BATTLE_WEB_ROOT`; absent or blank means `grasstex` (the existing live path). The only supported values are `grasstex` and `bound-by-glory`. Both jobs validate the value and use it for FTP directories, preview URLs, verification and generated asset-overlay fallback rules. The PHP runtime derives API, asset and script URL prefixes from its served entrypoint rather than assuming a fixed host folder.
+- **Cutover gate:** do not set `BATTLE_WEB_ROOT=bound-by-glory` until the complete current `grasstex/` host directory has been copied to `bound-by-glory/` with hidden deployment manifests, `Assets/terrain/` (host-only), audio, calibrated sidecars, `state/` and runtime files intact. This cannot be performed by the GitHub PR and must be verified on the FTP server. No production directory should be deleted during the migration.
+- While the default remains `grasstex`, merge of this compatibility-only change must leave existing live deploys unaffected. Once the copy exists, set the variable, manually dispatch the production deploy, and check the resulting build tag and public URL `https://test.ivandpopov.com/bound-by-glory/battle_sim.php`. Verify preview.php, a branch preview with a real soldier FBX overlay, and hosted audio/policy endpoints before retiring any old URL. Existing tools, bookmarks and some historical docs still use `/grasstex/`, so preserve that path with a tested HTTP redirect or an operational alias. Do not remove the old tree until an explicit old-path audit and smoke test pass.
+
+
 - Production `/grasstex/battle_sim.php` is `battle_sim_local.php`, uploaded under that name by the
   deploy; it serves the deployed runtime and writes nothing to the host. The repo's own
   `battle_sim.php` (a GitHub-mirroring loader that writes git-tracked `Assets/` to the host and
