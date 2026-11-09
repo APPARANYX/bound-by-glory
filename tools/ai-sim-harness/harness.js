@@ -144,6 +144,7 @@ function bootstrap(opts) {
   /* Fire control and stance are base Engagement as well (lean-runtime and the {modules:false}
      checks fight and take stances), so this sub-module loads here too. */
   load(root, 'battle/modules/19b-engagement-fire-stance.js');
+  load(root, 'battle/modules/13k-tactical-soldier-policy.js');
   if (opts.modules !== false) {
     root.BattleModules = {
       registerSystem() {},

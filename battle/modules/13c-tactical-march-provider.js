@@ -496,6 +496,10 @@
         if (root.BattleTacticalGeneral) root.BattleTacticalGeneral.update(ctx);
       }
     },
+    soldierPolicy: function (slot, facts) {
+      if (!root.BattleTacticalSoldierPolicy) throw new Error('Micro soldier policy is missing');
+      return root.BattleTacticalSoldierPolicy.choose(slot, facts);
+    },
     adapters: OA.adapters,
     lifecycle: OA.lifecycle
   });

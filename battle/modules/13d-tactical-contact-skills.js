@@ -535,6 +535,41 @@
       (s.eng && s.eng.state === 'bound' && s.eng.urgentBound)
     )
       return null;
+    var P = root.BattleTacticalSoldierPolicy;
+    if (P && P.enabled(s, sim, 'drill.contact')) {
+      var pinned = s.suppressedUntil > sim.time,
+        prepare = !pinned && E.fireControlPreparing(s, sim),
+        grenade =
+          !pinned &&
+          !prepare &&
+          st &&
+          st.grenadier === String(s.id) &&
+          root.BattleGrenades &&
+          (root.BattleGrenades.pendingOf(s, sim) || root.BattleGrenades.assaultOpportunity(s, sim, GRENADE)),
+        canFire = false;
+      if (!pinned && !prepare && !grenade && s.target) {
+        var observed = observation(s, sim, st),
+          here = s.root && s.root.position;
+        canFire = !!(
+          observed.inRange &&
+          ((observed.visualLine && observed.ballisticLine) ||
+            (here &&
+              !s.moving &&
+              E.firingLineClear &&
+              (E.firingLineClear(s, s.target, here, 'crouch', sim) ||
+                E.firingLineClear(s, s.target, here, 'stand', sim))))
+        );
+      }
+      return P.select(s, sim, 'drill.contact', {
+        blocked: false,
+        pinned: pinned,
+        prepare: !!prepare,
+        grenade: !!grenade,
+        canFire: canFire,
+        suppress: !!(st && st.roles.has(String(s.id)) && st.points.has(String(s.id))),
+        underFire: E.underFireNow(s, sim)
+      }).value;
+    }
     if (s.suppressedUntil > sim.time) return 'pinned';
     if (E.fireControlPreparing(s, sim)) return 'prepare';
     if (

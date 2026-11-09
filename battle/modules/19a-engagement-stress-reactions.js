@@ -1,5 +1,6 @@
 /* Engagement stress-reactions sub-module (extracted from battle/engagement.js).
-   Behavior-neutral extraction: every function body moved verbatim from the parent file.
+   Native reaction effectors and legacy fallback. Under the active Micro slice, 13k chooses
+   the break/reaction from detached facts; this owner applies it and retains the existing clocks.
 
    What stress does to a man (module 17 numbers, `?stressAct=cower,flee,freeze,rage`): a
    rattled man under fire goes to ground (cower); a broken man runs (flee: to a refuge away
@@ -146,6 +147,11 @@
         },
         best = null,
         order = ['flee', 'freeze', 'rage'];
+      var P = root.BattleTacticalSoldierPolicy;
+      if (P && P.enabled(s, battle, 'stress.break'))
+        return P.select(s, battle, 'stress.break', {
+          weights: [w.flee, w.freeze, w.rage]
+        }).value;
       for (var i = 0; i < order.length; i++)
         if (w[order[i]] > 0 && (!best || w[order[i]] > w[best])) best = order[i];
       return best;
@@ -453,8 +459,26 @@
     }
     /* Rounds on the move: the usual gates but the one about speed (the shot group is already wider for a man who moves). */
     function fireOnTheMove(s, battle) {
-      if (!combatThreat(s.target) || s.reloading || battle.time < state(s).fireReadyAt) return false;
-      if (facingError(s, posOf(s.target)) > AIM_CONE * 2) return false;
+      var P = root.BattleTacticalSoldierPolicy;
+      if (P && P.enabled(s, battle, 'fire.personal')) {
+        var target = combatThreat(s.target);
+        if (
+          !P.select(s, battle, 'fire.personal', {
+            threat: !!target,
+            reloading: !!s.reloading,
+            settled: battle.time >= state(s).fireReadyAt,
+            stationary: true,
+            facing: !!target && facingError(s, posOf(s.target)) <= AIM_CONE * 2,
+            setup: true,
+            authorized: root.BattleEngagement.fireAuthorized(s, battle),
+            shock: false
+          }).value
+        )
+          return false;
+      } else {
+        if (!combatThreat(s.target) || s.reloading || battle.time < state(s).fireReadyAt) return false;
+        if (facingError(s, posOf(s.target)) > AIM_CONE * 2) return false;
+      }
       var d = dist(posOf(s).x, posOf(s).z, posOf(s.target).x, posOf(s.target).z);
       if (d > SA().engageRange(s)) return false;
       SA().tryFire(s, battle);
@@ -506,39 +530,72 @@
         want = cur,
         spentThisBreak = e.freezeSpentBrokenSince != null && e.freezeSpentBrokenSince === v.since;
 
-      /* Freeze is a bounded spell even if the man remains in the broken band. It does not end early
-       merely because stress decays; when its one-time timer expires, reassess what he does next. */
-      if (cur === 'freeze') {
-        if (!(e.freezeUntil > 0)) e.freezeUntil = (e.reactSince || now) + ACT_TUNING.REACT_MIN;
-        if (now >= e.freezeUntil) {
-          var next = null;
-          if (v.band >= 3) {
-            next = chooseBreak(s, battle, v, true);
-            if (!next && v.underFire && ACT.cower) next = 'cower';
-          } else if (v.band >= 2 && v.underFire && ACT.cower) next = 'cower';
-          var reason =
+      var P = root.BattleTacticalSoldierPolicy;
+      if (P && P.enabled(s, battle, 'stress.react')) {
+        if (cur === 'freeze' && !(e.freezeUntil > 0))
+          e.freezeUntil = (e.reactSince || now) + ACT_TUNING.REACT_MIN;
+        var expired = cur === 'freeze' && now >= e.freezeUntil,
+          needsBreak = v.band >= 3 && (expired || !cur || cur === 'cower'),
+          choice = needsBreak ? chooseBreak(s, battle, v, expired || spentThisBreak) : null;
+        if (cur === 'cower' && v.band < 3 && v.underFire) e.fearAt = now;
+        want = P.select(s, battle, 'stress.react', {
+          current: cur,
+          band: v.band,
+          underFire: !!v.underFire,
+          freezeExpired: !!expired,
+          choice: choice,
+          cower: !!ACT.cower,
+          quiet: now - e.fearAt >= ACT_TUNING.COWER_QUIET,
+          minimumElapsed: now - e.reactSince >= ACT_TUNING.REACT_MIN,
+          trance: !!(RAGE_TRANCE && cur === 'rage')
+        }).value;
+        if (expired)
+          finishFreeze(
+            s,
+            battle,
             v.band >= 3
-              ? 'duration-expired-broken:' + (next || 'advance')
-              : 'duration-expired-' + (v.band >= 2 ? 'rattled' : 'composed') + ':' + (next || 'advance');
-          finishFreeze(s, battle, reason);
-          want = next;
-        }
-      } else if (v.band >= 3) {
-        if (!cur || cur === 'cower')
-          want = chooseBreak(s, battle, v, spentThisBreak) || (cur === 'cower' ? 'cower' : null);
-      } else if (cur === 'cower') {
-        if (v.underFire) e.fearAt = now;
-        if (v.band < 2 || now - e.fearAt >= ACT_TUNING.COWER_QUIET) want = null;
-      } else if (cur) {
-        /* A trance (`?rageTrance=1`) does not end on calm: only rage() ends it. */
-        if (!(RAGE_TRANCE && cur === 'rage') && now - e.reactSince >= ACT_TUNING.REACT_MIN) want = null;
-      } else if (v.band >= 2 && v.underFire && ACT.cower) want = 'cower';
+              ? 'duration-expired-broken:' + (want || 'advance')
+              : 'duration-expired-' + (v.band >= 2 ? 'rattled' : 'composed') + ':' + (want || 'advance')
+          );
+      } else {
+        /* Freeze is a bounded spell even if the man remains in the broken band. It does not end early
+       merely because stress decays; when its one-time timer expires, reassess what he does next. */
+        if (cur === 'freeze') {
+          if (!(e.freezeUntil > 0)) e.freezeUntil = (e.reactSince || now) + ACT_TUNING.REACT_MIN;
+          if (now >= e.freezeUntil) {
+            var next = null;
+            if (v.band >= 3) {
+              next = chooseBreak(s, battle, v, true);
+              if (!next && v.underFire && ACT.cower) next = 'cower';
+            } else if (v.band >= 2 && v.underFire && ACT.cower) next = 'cower';
+            var reason =
+              v.band >= 3
+                ? 'duration-expired-broken:' + (next || 'advance')
+                : 'duration-expired-' + (v.band >= 2 ? 'rattled' : 'composed') + ':' + (next || 'advance');
+            finishFreeze(s, battle, reason);
+            want = next;
+          }
+        } else if (v.band >= 3) {
+          if (!cur || cur === 'cower')
+            want = chooseBreak(s, battle, v, spentThisBreak) || (cur === 'cower' ? 'cower' : null);
+        } else if (cur === 'cower') {
+          if (v.underFire) e.fearAt = now;
+          if (v.band < 2 || now - e.fearAt >= ACT_TUNING.COWER_QUIET) want = null;
+        } else if (cur) {
+          /* A trance (`?rageTrance=1`) does not end on calm: only rage() ends it. */
+          if (!(RAGE_TRANCE && cur === 'rage') && now - e.reactSince >= ACT_TUNING.REACT_MIN) want = null;
+        } else if (v.band >= 2 && v.underFire && ACT.cower) want = 'cower';
+      }
 
       if (want !== cur) {
         if (!want) {
           composed(s, battle, cur);
           return false;
         }
+        /* The personal reaction takes the existing actor resources before its native effector runs.
+           Do not leave a controller move/fire action live until the next squad policy tick. */
+        if (P && P.enabled(s, battle, 'stress.react'))
+          root.BattleTacticalController.interrupt(battle, s.squad, s.id, 'soldier-reaction:' + want);
         /* A man leaving a firing station is released from it first: a held station would pull him back. */
         var T = root.BattleTacticalPositions;
         if (T && T.current(s)) T.release(s, battle, 'broken');

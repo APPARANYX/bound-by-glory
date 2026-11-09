@@ -63,6 +63,17 @@ parameter when the URL names no controller (`?tacticalController=legacy` or `?co
 legacy); module code still reads only the query, so Node checks without it run legacy. The controller keeps its state in WeakMaps and adds no squad or soldier field.
 
 
+Micro U0–U4 uses the same active provider's `soldierPolicy` slot (13k). Owners project only detached
+facts to `BattleTacticalController.selectSoldier`; `tactical-capability-contract.js` declares the
+synchronous decision slots and validates their results. This slot is inside an existing soldier drill,
+not an additional resource-holding action: Engagement still applies stance, reserves/releases cover
+and executes reactions; 46 still owns ammunition and reload clocks; the resolver alone commits
+movement. Each on slice bypasses its pre-U chooser. Independent rollback flags are `controllerStance`,
+`controllerSoldierFire`, `controllerReactions` and `controllerDrill` (`=0`). Latest per-actor selections
+are in `summary().soldierDecisions`, stamped by mission/epoch/generation. They say `selected`, not
+fired/arrived: native owner evidence remains the execution oracle. Reactions interrupt only their
+actor's existing controller actions before taking over; no dosage or suppression-stress cap changes.
+
 Slice 4 (`13e-tactical-covered-maneuver.js`) chooses forward/back cover points and native
 actors under the same opt-in provider. `maneuver.cover` asks Meso's `controllerBound` to
 lease the existing `bound` kind for up to three independent personal movers. These flexible
