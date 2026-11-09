@@ -99,7 +99,7 @@ allQueries.slice(inputs.length).forEach((query, index) => {
     location: { search: '?' + query },
     BattleTacticalController: { selectSoldier() {}, soldierPolicyAvailable: () => true }
   };
-  loadModule(root, 'battle/modules/13k-tactical-soldier-policy.js');
+  loadModule(root, 'battle/modules/13k-tactical-soldier-policy.js', { location: root.location });
   const s = { squad: {} };
   for (const [slot, name] of [
     ['posture.commit', 'controllerStance'],
