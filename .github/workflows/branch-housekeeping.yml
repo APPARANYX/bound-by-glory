@@ -7,18 +7,19 @@ name: ⭐ Branch housekeeping
 # PR still uses it (#56 was opened on the branch #55 had just merged from). A later push simply
 # recreates the branch.
 #
-# Weekly sweep: any branch with no commit missing from main (git cherry, so squash-merged and
+# Daily sweep (plus weekly audit): any branch with no commit missing from main (git cherry, so squash-merged and
 # cherry-picked work counts as merged), no open PR, and a tip at least MIN_AGE_DAYS old. Branches
 # with unmerged commits are never deleted, only listed in the run summary for a human to judge.
-# Daily: successful benchmark launcher branches older than 2 days are archived to
+# Several times daily: successful benchmark launcher branches older than 2 days are archived to
 # benchmark-results with pinned historical source parents before guarded deletion.
 
 on:
   pull_request:
     types: [closed]
   schedule:
-    - cron: '17 6 * * 1' # full weekly sweep
-    - cron: '23 6 * * *' # daily archived benchmark-launch sweep
+    - cron: '17 6 * * 1' # full weekly sweep and audits
+    - cron: '17 7 * * *' # daily merged-branch sweep
+    - cron: '23 6,12,18 * * *' # successful benchmark-launch archive/cleanup
   workflow_dispatch:
     inputs:
       dry_run:
@@ -77,7 +78,7 @@ jobs:
 
   sweep:
     name: Sweep merged branches
-    if: (github.event_name == 'schedule' && github.event.schedule == '17 6 * * 1') || github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'schedule' && (github.event.schedule == '17 6 * * 1' || github.event.schedule == '17 7 * * *')) || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -148,7 +149,10 @@ jobs:
 
   benchmark-launch-sweep:
     name: Archive and retire completed launcher branches
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: >-
+      (github.event_name == 'schedule' &&
+      (github.event.schedule == '17 6 * * 1' || github.event.schedule == '23 6,12,18 * * *')) ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
