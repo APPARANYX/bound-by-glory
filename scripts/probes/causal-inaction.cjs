@@ -230,15 +230,37 @@
       history: history.slice(-MAX_HISTORY)
     });
   }
+  // Read canonical adoption directly: calling the native getter would settle reception.
+  function fireContext(s, sim) {
+    var CR = root.BattleCommandReception,
+      st = sim._commandReception,
+      by = st && st.adoptedBySoldier && st.adoptedBySoldier[String(s.id)],
+      rec = by && by['posture-fire|squad'],
+      native = !(CR && CR.postureEnabled && CR.postureEnabled()),
+      order = native ? s.squad.fireControl : rec && rec.data,
+      state = (order && order.state) || null,
+      suppressed = (+s.suppressedUntil || 0) > sim.time;
+    if (!native && rec && s.eng && s.eng.retreatEndedAt != null && !(rec.adoptedAt > s.eng.retreatEndedAt))
+      state = null;
+    return {
+      order: state,
+      shooterId: order && order.shooterId,
+      envelopeId: native ? null : (rec && rec.envelopeId) || null,
+      suppressed: suppressed,
+      // Incoming fire may override a HOLD. This is context, not an evaluated gate.
+      preparing:
+        !suppressed &&
+        (state === 'hold' || (state === 'precision' && String(order.shooterId) !== String(s.id)))
+    };
+  }
   function fireClassification(s, sim, f, d) {
     var rejects = {
       los: Math.max(0, (+s._losBlockedFire || 0) - f.los),
       crest: Math.max(0, (+s._crestBlockedFire || 0) - f.crest),
       terrain: Math.max(0, (+s._terrainBlockedSuppressiveFire || 0) - f.terrain)
     };
-    var recs = sim._commandReception && sim._commandReception.adoptedBySoldier,
-      rec = recs && recs[String(s.id)] && recs[String(s.id)]['posture-fire|squad'],
-      order = (rec && rec.data && rec.data.state) || null,
+    var activeContext = fireContext(s, sim),
+      order = activeContext.order,
       state = (s.eng && s.eng.state) || null;
     var denials = {};
     d.denials.forEach(function (e) {
@@ -251,6 +273,7 @@
       triggerRejectDeltas: rejects,
       directFireDenials: denials,
       roundsFired: 0,
+      intervalContext: Object.assign({}, f.context, { orders: Object.assign({}, f.context.orders) }),
       coverDecisions: d.coverEvents
         .filter(function (e) {
           return e.t >= f.since && e.t <= sim.time;
@@ -294,7 +317,7 @@
       order === 'hold' ||
       order === 'reposition' ||
       order === 'suppress' ||
-      (order === 'precision' && !(rec && rec.data && String(rec.data.shooterId) === String(s.id)))
+      (order === 'precision' && String(activeContext.shooterId) !== String(s.id))
     )
       return {
         evidence: evidence,
@@ -303,6 +326,28 @@
           confidence: 'likely',
           scope: 'state-correlation',
           interpretation: 'A restrictive order was observed, but no firing decision gate was directly traced.'
+        }
+      };
+    if (f.context.preparationSamples > 0)
+      return {
+        evidence: evidence,
+        result: {
+          code: 'preparation-observed-during-silence',
+          confidence: 'likely',
+          scope: 'sampled-interval-context',
+          interpretation:
+            'A personally adopted preparation order was observed within this silent interval. It may explain part of the interval; no decisive firing gate or continuous coverage is proved.'
+        }
+      };
+    if (f.context.suppressedSamples > 0)
+      return {
+        evidence: evidence,
+        result: {
+          code: 'suppression-observed-during-silence',
+          confidence: 'likely',
+          scope: 'sampled-interval-context',
+          interpretation:
+            'The native suppression timer was active during this interval. This is inhibition context, not proof that suppression prevented every possible shot.'
         }
       };
     if (state === 'cower' || state === 'freeze' || state === 'flee' || state === 'pinned')
@@ -393,10 +438,32 @@
         los: +s._losBlockedFire || 0,
         crest: +s._crestBlockedFire || 0,
         terrain: +s._terrainBlockedSuppressiveFire || 0,
-        reported: false
+        reported: false,
+        context: {
+          samples: 0,
+          preparationSamples: 0,
+          suppressedSamples: 0,
+          orders: {},
+          firstAt: sim.time,
+          lastAt: sim.time
+        }
       };
     }
     var f = d.fire;
+    if (!f.reported) {
+      var context = fireContext(s, sim);
+      f.context.samples++;
+      f.context.lastAt = sim.time;
+      if (context.preparing) f.context.preparationSamples++;
+      if (context.suppressed) f.context.suppressedSamples++;
+      var orderKey =
+        ['hold', 'precision', 'open', 'clear', 'suppress', 'reposition'].indexOf(context.order) >= 0
+          ? context.order
+          : context.order == null
+            ? 'absent'
+            : 'other';
+      bump(f.context.orders, orderKey);
+    }
     if (!f.reported && sim.time - f.since >= FIRE_SILENCE) {
       var c = fireClassification(s, sim, f, d);
       emit('fire-silence', s, f.since, sim.time, c.result, c.evidence, d.history);
@@ -474,6 +541,7 @@
     start: function (sim) {
       data = {
         schema: 'grasstex-causal-inaction-v1',
+        classificationVersion: 2,
         config: options,
         counts: {},
         reasons: {},

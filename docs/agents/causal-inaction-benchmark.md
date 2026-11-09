@@ -33,6 +33,20 @@ Files in reports/causal-inaction/: raw.json (per-battle original evidence), summ
 
 ## Contract and interpretation
 
+Classification version 2 keeps preparation and suppression observations across the entire
+sampled silent episode, rather than inferring from its end state alone. A HOLD that opens
+before reporting can yield `preparation-observed-during-silence`; an active suppression
+timer can yield `suppression-observed-during-silence` even outside the pinned FSM state.
+These labels are **likely sampled context**, not verified firing denials, proof of continuous
+coverage, or tactical-success verdicts. Direct denial and trigger evidence take precedence.
+`intervalContext` retains sample counts, bounded order categories and first/last sample times.
+A shot or target change starts fresh context. Canonical personally adopted orders are read
+without settlement; pre-retreat orders are ignored as in the native fire owner. `clear`
+releases fire control and is not independently a restrictive order. Absence of evidence
+remains unexplained. Episodes/counts are still retained; classification does not delete
+silence or alter gameplay. Compare historical totals only with the same classificationVersion.
+
+
 - Fire: five consecutive simulated seconds with a personally assigned living target and no actual onFire rounds produces a single episode. Direct Engagement fireAllowed / tryFire rejection branches optionally report exact denial reasons. Real trigger-path LOS, crest and suppressive-terrain rejection counters supply independent shot-attempt evidence. A shot resets the silence clock.
 - Movement: a stable order/destination at least 8 m away, under 1.5 m net movement in 12 seconds and a speed under 0.35 m/s produces an episode.
 - Cover: the shipping Engagement cover planner reports each real candidate-selection invocation as `normal-cover:selected`, `normal-cover:no-viable-cover`, `normal-cover:incumbent-preferred` or `normal-cover:reservation-failed`. Rejection counters record the actual gates taken: forward-guard, unreachable-memory, leader-anchor-limit, target-too-close, behind-order-line, lower-ranked-slot, no-standing-los, and path-unreachable. A planner invocation may reject multiple different slots; these are not mutually exclusive. The read-only cover observer never recomputes LOS or navigation itself. Selected firing-lane records now also retain the actor's last observed position, minimum observed distance to the goal, movement owner, and whether a death was observed within 0.6 m of the selected goal or farther away. This distinguishes a fatal exposure from an unobserved living arrival; the observation time is not necessarily the exact death timestamp.

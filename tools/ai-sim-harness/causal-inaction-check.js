@@ -59,6 +59,7 @@ function fixture(search, outcomeState) {
       }
     },
     BattleCommandReception: {
+      postureEnabled: () => true,
       adopted: () => {
         mutations++;
         throw Error('command settled');
@@ -426,3 +427,68 @@ const boundedReport = bounded.probe.report(bounded.sim);
 assert.equal(boundedReport.actorTails.length, 160);
 assert.equal(boundedReport.actorTailsOmitted, 11);
 console.log('PASS causal terminal witnesses retain explicit actor-cap omissions');
+
+function fireOrder(f, state, shooterId) {
+  f.sim._commandReception.adoptedBySoldier[76]['posture-fire|squad'] = {
+    envelopeId: 'fire-' + state,
+    adoptedAt: f.sim.time,
+    data: { state, shooterId }
+  };
+}
+const preparation = fixture('?probeIds=76', 'none');
+for (let t = 0; t <= 5; t++) {
+  fireOrder(preparation, t < 3 ? 'hold' : 'open');
+  preparation.sample(t);
+}
+let episode = preparation.probe.report(preparation.sim).episodes[0];
+assert.equal(episode.code, 'preparation-observed-during-silence');
+assert.equal(episode.confidence, 'likely');
+assert.equal(episode.evidence.fireOrder, 'open');
+assert.equal(episode.evidence.intervalContext.preparationSamples, 3);
+assert.equal(episode.evidence.intervalContext.orders.hold, 3);
+assert.equal(episode.evidence.intervalContext.orders.open, 3);
+assert.equal(preparation.stats().mutations, 0);
+assert.equal(preparation.stats().randoms, 0);
+
+const suppressed = fixture('?probeIds=76', 'none');
+suppressed.soldier.eng.state = 'station';
+suppressed.soldier.suppressedUntil = 3;
+for (let t = 0; t <= 5; t++) suppressed.sample(t);
+episode = suppressed.probe.report(suppressed.sim).episodes[0];
+assert.equal(episode.code, 'suppression-observed-during-silence');
+assert.equal(episode.evidence.intervalContext.suppressedSamples, 3);
+assert.equal(episode.confidence, 'likely', 'suppression context is not a traced denial');
+
+for (const state of ['clear', 'open', 'precision']) {
+  const f = fixture('?probeIds=76', 'none');
+  fireOrder(f, state, '76');
+  for (let t = 0; t <= 5; t++) f.sample(t);
+  assert.equal(
+    f.probe.report(f.sim).episodes[0].code,
+    'unexplained-fire-silence',
+    'clear/open and the designated marksman cannot invent a preparation explanation'
+  );
+}
+const reset = fixture('?probeIds=76', 'none');
+fireOrder(reset, 'hold');
+reset.sample(0);
+reset.sample(1);
+reset.sim.onFire(reset.soldier);
+fireOrder(reset, 'open');
+for (let t = 2; t <= 7; t++) reset.sample(t);
+assert.equal(
+  reset.probe.report(reset.sim).episodes[0].code,
+  'unexplained-fire-silence',
+  'a shot starts a fresh interval without carrying old preparation forward'
+);
+const superseded = fixture('?probeIds=76', 'none');
+fireOrder(superseded, 'hold');
+superseded.soldier.eng.retreatEndedAt = 1;
+for (let t = 0; t <= 5; t++) superseded.sample(t);
+assert.equal(
+  superseded.probe.report(superseded.sim).episodes[0].evidence.intervalContext.preparationSamples,
+  0
+);
+console.log(
+  'PASS temporal fire context: HOLD-to-OPEN, expired suppression, honest unknowns, shot reset and stale orders'
+);
