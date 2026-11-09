@@ -138,7 +138,7 @@
       ['locomotion'],
       ['published', 'adopted', 'applied', 'resolved', 'arrived'],
       ['Meso', 'BattleCommandReception', 'Meso', 'BattleMovementResolver', 'BattleExecutionOutcome'],
-      ['point']
+      ['point', 'skill']
     ),
     'movement.hold': definition(
       'actor',
@@ -285,7 +285,8 @@
       !def.parameters.every(function (k) {
         return ((k === 'moverId' || k === 'moverIds' || k === 'supportRelocation') &&
           request.capability === 'maneuver.cover') ||
-          (k === 'point' && request.capability === 'combat.contact')
+          (k === 'point' && request.capability === 'combat.contact') ||
+          (k === 'skill' && request.capability === 'movement.move')
           ? true
           : Object.hasOwn(p, k);
       })
@@ -310,6 +311,8 @@
           new Set(p.moverIds).size !== p.moverIds.length ||
           Object.hasOwn(p, 'moverId'))) ||
       (Object.hasOwn(p, 'point') && !point(p.point)) ||
+      (Object.hasOwn(p, 'skill') &&
+        ['defense', 'regroup', 'recon', 'structure', 'retreat'].indexOf(p.skill) < 0) ||
       (Object.hasOwn(p, 'threat') && !point(p.threat)) ||
       (Object.hasOwn(p, 'stationId') && !text(p.stationId)) ||
       (Object.hasOwn(p, 'squadIds') &&

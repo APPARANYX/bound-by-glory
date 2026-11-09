@@ -139,6 +139,14 @@ Navigation is optional via the harness battle's `_movementRoot`; ordinary combat
 assertions about mechanism, not dice outcomes, and sweep `HARNESS_SEED=1..40` before trusting a
 new check.
 
+`tactical-squad-skills-check.js` covers S1b–S1f personal action ownership, stable prepared
+posts and regroup targets, non-spatial recon receipt holds, remnant survival extraction,
+refused/stale plan authority, interruption, mission/roster/possession invalidation, restart,
+independent rollback flags and legacy publication. `tactical-structure-gate-check.js` also
+checks that the real structure chain's observation effector recognizes the adopted action.
+These are controlled fixtures; use Muse's exact-head Skills Lab and matched-seed battle
+validation for natural behavior and performance acceptance.
+
 **M3C ownership checks** (`scripts/check-*.cjs`). Not in CI, so run them when touching command or movement ownership:
 
 ```bash

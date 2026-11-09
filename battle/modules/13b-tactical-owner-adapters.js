@@ -168,7 +168,7 @@
           sq = squadOf(sim, req),
           s = manOf(sq, req);
         if (!s || !M) return false;
-        var order = M.publish(sq, sim, s, req.params.point, req.actionId);
+        var order = M.publish(sq, sim, s, req.params.point, req.actionId, req.params.skill);
         if (!order) return false;
         return keep(req, sim, { man: s, order: order });
       },

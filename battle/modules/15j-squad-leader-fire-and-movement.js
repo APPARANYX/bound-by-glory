@@ -98,6 +98,9 @@
         TC &&
         root.BattleTacticalMarchProvider &&
         root.BattleTacticalMarchProvider.structure &&
+        !(
+          root.BattleTacticalMarchProvider.skillOn && root.BattleTacticalMarchProvider.skillOn('structure')
+        ) &&
         localPlan &&
         localPlan.structuresOn &&
         TC.controls(battle, sq)

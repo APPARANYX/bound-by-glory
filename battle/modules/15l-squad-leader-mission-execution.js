@@ -424,6 +424,88 @@
       sq.objective = copy(wp);
       return true;
     }
+    /* S1d/e: shared native decisions, called by the selected provider for each enabled skill.
+       Off flags leave just that decision with the retained mission path. */
+    function controllerReconHeld(sim, sq) {
+      var legs = sq.route || [],
+        index = Math.max(0, Math.min(legs.length - 1, +sq.routeIndex || 0));
+      return !!(
+        missionHoldOn() &&
+        legs.length &&
+        reconHeld(
+          sim,
+          sq,
+          sq._macroMission,
+          legs[index],
+          index === legs.length - 1,
+          average(sq),
+          cfg(sim, sq)
+        )
+      );
+    }
+    function controllerMissionSkills(sim, sq, legBefore, recon, structure) {
+      var m = sq._macroMission,
+        ex = sq._missionExecution,
+        pos = average(sq),
+        c = cfg(sim, sq);
+      var MP = root.BattleTacticalMarchProvider,
+        leg = MP && MP.leg ? MP.leg(sq) : null,
+        plain = !m || !/^(screen|intercept|reserve|hold)$/.test(m.intent || '');
+      /* This owner holds routeIndex, and the structure chain keys its entry evidence on it. The provider's
+           mission.execute (publishControllerMission, guarded for retreat, regroup, succession and a stale
+           brief) is the one write of the leg it is marching; when it was refused the chain keeps the
+           old leg. Only with the chain on, so every other battle is unchanged. */
+      var LPC = ctx.localPlan && ctx.localPlan();
+      if (
+        structure &&
+        leg &&
+        MP.structure &&
+        LPC &&
+        LPC.structuresOn &&
+        leg.index >= 0 &&
+        pos &&
+        +sq.routeIndex === leg.index
+      ) {
+        var fromLeg = legBefore,
+          changed = fromLeg !== leg.index;
+        if (changed && leg.index > fromLeg && LPC.noteStructureHandback && sq.route[fromLeg])
+          LPC.noteStructureHandback(sim, sq, sq.route[fromLeg]);
+        /* A new leg gets its lease; so does a building leg the squad is already on when the controller
+             takes it (no lease yet, and no firefight resume pending, which has its own path). */
+        if (
+          (changed && leg.index > fromLeg) ||
+          (!changed &&
+            leg.index > 0 &&
+            !L.get(sq, 'route-transition') &&
+            !(ex && ex.contactRouteResume) &&
+            entryGate(sim, sq, leg.point))
+        )
+          grantRouteLeg(
+            sim,
+            sq,
+            Math.max(0, leg.index - 1),
+            leg.index,
+            leg.point,
+            pos,
+            +c.routeArrivalRadius || 8
+          );
+      }
+      if (structure && leg && MP.structure && LPC && LPC.structuresOn && pos && +sq.routeIndex === leg.index)
+        resumeContactLeg(sim, sq, m, ex, leg.index, leg.point, pos, +c.routeArrivalRadius || 8);
+      if (recon && leg && (missionHoldOn() || !reconHeld(sim, sq, m, leg.point, leg.final, pos, c))) {
+        var started = plain && reconStart(sim, sq, m, leg.point, leg.final, pos, c);
+        if (
+          !started &&
+          leg.final &&
+          m &&
+          m.objectiveId &&
+          m.action !== 'hold' &&
+          m.action !== 'regroup' &&
+          m.action !== 'support'
+        )
+          defenderRecon(sim, sq, m, leg.point, pos);
+      }
+    }
     /* Squad Leader execution of the General's brief: the only runtime writer of phase, legs and the squad
    objective point. Without a brief (Macro OFF) the Squad Leader walks the assigned approach route. */
     function executeMission(sim, sq, town) {
@@ -475,6 +557,11 @@
         var heldLegs = sq.route || [],
           heldIndex = Math.max(0, Math.min(heldLegs.length - 1, +sq.routeIndex || 0));
         if (
+          !(
+            root.BattleTacticalMarchProvider &&
+            root.BattleTacticalMarchProvider.skillOn &&
+            root.BattleTacticalMarchProvider.skillOn('recon')
+          ) &&
           missionHoldOn() &&
           heldLegs.length &&
           reconHeld(sim, sq, m, heldLegs[heldIndex], heldIndex === heldLegs.length - 1, pos, c)
@@ -485,62 +572,14 @@
         /* Not a mission hold: the replacement executes the brief. Loop Watch keeps judging its progress,
            and the controller counts these dispatches in its summary. */
         TC.dispatch(sim, sq, 'executeMission');
-        var MP = root.BattleTacticalMarchProvider,
-          leg = MP && MP.leg ? MP.leg(sq) : null,
-          plain = !m || !/^(screen|intercept|reserve|hold)$/.test(m.intent || '');
-        /* This owner holds routeIndex, and the structure chain keys its entry evidence on it. The provider's
-           mission.execute (publishControllerMission, guarded for retreat, regroup, succession and a stale
-           brief) is the one write of the leg it is marching; when it was refused the chain keeps the
-           old leg. Only with the chain on, so every other battle is unchanged. */
-        var LPC = ctx.localPlan && ctx.localPlan();
-        if (
-          leg &&
-          MP.structure &&
-          LPC &&
-          LPC.structuresOn &&
-          leg.index >= 0 &&
-          pos &&
-          +sq.routeIndex === leg.index
-        ) {
-          var fromLeg = legBefore,
-            changed = fromLeg !== leg.index;
-          if (changed && leg.index > fromLeg && LPC.noteStructureHandback && sq.route[fromLeg])
-            LPC.noteStructureHandback(sim, sq, sq.route[fromLeg]);
-          /* A new leg gets its lease; so does a building leg the squad is already on when the controller
-             takes it (no lease yet, and no firefight resume pending, which has its own path). */
-          if (
-            (changed && leg.index > fromLeg) ||
-            (!changed &&
-              leg.index > 0 &&
-              !L.get(sq, 'route-transition') &&
-              !(ex && ex.contactRouteResume) &&
-              entryGate(sim, sq, leg.point))
-          )
-            grantRouteLeg(
-              sim,
-              sq,
-              Math.max(0, leg.index - 1),
-              leg.index,
-              leg.point,
-              pos,
-              +c.routeArrivalRadius || 8
-            );
-        }
-        if (leg && MP.structure && LPC && LPC.structuresOn && pos && +sq.routeIndex === leg.index)
-          resumeContactLeg(sim, sq, m, ex, leg.index, leg.point, pos, +c.routeArrivalRadius || 8);
-        if (leg && (missionHoldOn() || !reconHeld(sim, sq, m, leg.point, leg.final, pos, c))) {
-          var started = plain && reconStart(sim, sq, m, leg.point, leg.final, pos, c);
-          if (
-            !started &&
-            leg.final &&
-            m &&
-            m.objectiveId &&
-            m.action !== 'hold' &&
-            m.action !== 'regroup' &&
-            m.action !== 'support'
-          )
-            defenderRecon(sim, sq, m, leg.point, pos);
-        }
+        var skills = root.BattleTacticalMarchProvider;
+        controllerMissionSkills(
+          sim,
+          sq,
+          legBefore,
+          !(skills && skills.skillOn && skills.skillOn('recon')),
+          !(skills && skills.skillOn && skills.skillOn('structure'))
+        );
         return;
       }
       /* A firefight under this brief is a commitment: contact never advances legs or rewrites phase. */
@@ -729,6 +768,8 @@
       objectivePhase: objectivePhase,
       controllerMission: {
         publish: publishControllerMission,
+        reconHeld: controllerReconHeld,
+        skills: controllerMissionSkills,
         heldBy: controllerMissionHeldBy,
         objectivePhase: objectivePhase,
         assaultCommitted: assaultCommitted

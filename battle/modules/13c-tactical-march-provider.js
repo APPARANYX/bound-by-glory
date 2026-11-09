@@ -32,7 +32,98 @@
     PHASE_BAND = !/[?&]controllerPhaseBand=0(?:&|#|$)/i.test(SEARCH),
     ID = 'march';
   var squads = new WeakMap(),
+    skillSquads = new WeakMap(),
     warned = false;
+
+  function skillState(sq) {
+    var st = skillSquads.get(sq);
+    if (!st) skillSquads.set(sq, (st = { kind: null, token: null, men: new Map(), stopped: new Map() }));
+    return st;
+  }
+  function releaseSkill(ctx, reason) {
+    var st = skillState(ctx.squad);
+    st.men.forEach(function (cur) {
+      ctx.finish(cur.id, reason);
+    });
+    st.men.clear();
+    st.stopped.clear();
+  }
+  function sameSkillOrder(a, b) {
+    var S = root.BattleSquadStability.controllerSkills;
+    return a.key === b.key && (a.receipt || dist(a.point, b.point) <= S.epsilon);
+  }
+  /* S1b-f: select the retained skill, reuse its native geometry, then ask for each man's
+     movement through the contract. No legacy fireteam publisher executes for a ported skill. */
+  function squadSkill(ctx) {
+    var Q = root.BattleSquadStability,
+      S = Q && Q.controllerSkills,
+      kind = S && S.kind(ctx.squad, ctx.sim),
+      st = skillState(ctx.squad),
+      token =
+        ctx.token &&
+        [
+          ctx.token.generation,
+          ctx.token.controllerEpoch,
+          ctx.token.missionVersion,
+          ctx.token.rosterRevision
+        ].join(':');
+    if (!kind || !S.enabled(kind)) kind = null;
+    st.battle = ctx.sim;
+    st.at = ctx.sim.time;
+    if (kind !== st.kind || token !== st.token) {
+      releaseSkill(ctx, 'squad-skill-changed');
+      st.kind = kind;
+      st.token = token;
+    }
+    if (!kind) return false;
+    standDown(ctx, stateOf(ctx.squad), 'squad-skill:' + kind);
+    var orders = S.plan(ctx.squad, ctx.sim, kind),
+      seen = new Set();
+    orders.forEach(function (o) {
+      var id = String(o.man.id),
+        cur = st.men.get(id),
+        intent = { key: o.key, point: o.point, receipt: !!(o.options && o.options.adoptHere) };
+      /* Native stations, covered bounds and personal combat retain their own locomotion.
+         Retreat and regroup keep their native urgent precedence in the resolver. */
+      var why = kind !== 'retreat' && kind !== 'regroup' && yields(ctx.squad, o.man, ctx.sim);
+      if (why) {
+        if (cur) ctx.finish(cur.id, why);
+        st.men.delete(id);
+        st.stopped.set(id, Object.assign({}, intent, { reason: why, retry: true }));
+        return;
+      }
+      seen.add(id);
+      if (cur && !sameSkillOrder(cur, intent)) {
+        ctx.finish(cur.id, 'squad-skill-order-changed');
+        st.men.delete(id);
+        cur = null;
+      }
+      if (cur) {
+        var stage = ctx.stage(cur.id);
+        if (stage && stage.stage !== 'cancelled') return;
+        ctx.finish(cur.id, 'squad-skill-owner-ended');
+        st.men.delete(id);
+        st.stopped.set(
+          id,
+          Object.assign({}, intent, { reason: stage ? stage.reason : 'interrupted', retry: false })
+        );
+      }
+      var stopped = st.stopped.get(id);
+      if (stopped && sameSkillOrder(stopped, intent) && !stopped.retry) return;
+      var res = ctx.request('movement.move', id, { point: o.point, skill: kind });
+      if (res.ok) {
+        st.men.set(id, Object.assign({}, intent, { id: res.actionId }));
+        st.stopped.delete(id);
+      } else st.stopped.set(id, Object.assign({}, intent, { reason: 'refused:' + res.reason, retry: true }));
+    });
+    st.men.forEach(function (cur, id) {
+      if (!seen.has(id)) {
+        ctx.finish(cur.id, 'squad-skill-order-ended');
+        st.men.delete(id);
+      }
+    });
+    return true;
+  }
 
   function point(v) {
     return v && isFinite(+v.x) && isFinite(+v.z) ? { x: +v.x, z: +v.z } : null;
@@ -114,7 +205,24 @@
       m = sq._macroMission || null;
     var Q = root.BattleSquadStability,
       M = Q && Q.controllerMission,
-      held = M && M.heldBy && M.heldBy(sq);
+      skillLegBefore = +sq.routeIndex || 0;
+    var held = M && M.heldBy && M.heldBy(sq);
+    if (held && held !== 'recon') {
+      st.idle = 'yield:' + held;
+      return;
+    }
+    if (
+      skillOn('recon') &&
+      M &&
+      M.reconHeld &&
+      sq.state !== 'retreat' &&
+      sq.commandPhase !== 'retreat' &&
+      M.reconHeld(sim, sq)
+    ) {
+      st.idle = 'yield:recon';
+      return;
+    }
+    held = M && M.heldBy && M.heldBy(sq);
     if (held) {
       st.idle = 'yield:' + held;
       return;
@@ -187,6 +295,7 @@
       st.leg = ownerLeg(sq, last);
       aim(st, legs, here);
     }
+    if (M && M.skills) M.skills(sim, sq, skillLegBefore, skillOn('recon'), skillOn('structure'));
   }
   function ownerLeg(sq, last) {
     return Math.max(0, Math.min(last, Math.floor(+sq.routeIndex) || 0));
@@ -256,6 +365,10 @@
     var sq = ctx.squad,
       st = stateOf(sq),
       Q = root.BattleSquadStability;
+    if (squadSkill(ctx)) {
+      st.idle = 'skill:' + skillState(sq).kind;
+      return;
+    }
     /* The resolver treats either as retreat; so does the provider. */
     if (sq.state === 'retreat' || sq.commandPhase === 'retreat') return standDown(ctx, st, 'retreat');
     /* Recon and regroup are the Squad Leader's own skills, reused as they are: while one holds the
@@ -366,6 +479,10 @@
     }
   }
   function noop() {}
+  function skillOn(kind) {
+    var Q = root.BattleSquadStability;
+    return !!(ON && Q && Q.controllerSkills && Q.controllerSkills.enabled(kind));
+  }
 
   /* Take every squad on both sides; a refused switch is retried by the controller's own backoff. */
   function takeAll(sim) {
@@ -424,6 +541,11 @@
           row.maneuver = root.BattleTacticalCoveredManeuver.summary(a[i]);
         if (root.BattleTacticalAmbushSkill) row.ambush = root.BattleTacticalAmbushSkill.summary(a[i]);
         if (root.BattleTacticalFlankAssault) row.flank = root.BattleTacticalFlankAssault.summary(a[i]);
+        var skill = skillState(a[i]);
+        row.squadSkill = { kind: skill.kind, actions: skill.men.size, stopped: {} };
+        skill.stopped.forEach(function (s) {
+          row.squadSkill.stopped[s.reason] = (row.squadSkill.stopped[s.reason] || 0) + 1;
+        });
         st.men.forEach(function (cur) {
           var l = byId[cur.actionId],
             key = cur.kind + ':' + (l ? l.stage : 'gone');
@@ -443,6 +565,11 @@
     structure: STRUCTURE,
     clear: CLEAR,
     singleWriter: SINGLE,
+    skillOn: skillOn,
+    ownsSkill: function (sq, sim) {
+      var st = skillSquads.get(sq);
+      return !!(st && st.kind && st.battle === sim && st.at === sim.time);
+    },
     id: ID,
     summary: summary,
     target: function (sq) {
@@ -457,6 +584,11 @@
       standDown(ctx, stateOf(ctx.squad), 'covered-maneuver');
     },
     releaseMan: function (ctx, man) {
+      var skill = skillState(ctx.squad),
+        personal = skill.men.get(String(man.id));
+      if (personal) ctx.finish(personal.id, 'squad-skill-handoff');
+      skill.men.delete(String(man.id));
+      skill.stopped.delete(String(man.id));
       var st = stateOf(ctx.squad),
         id = String(man.id),
         cur = st.men.get(id);
@@ -473,11 +605,17 @@
     id: ID,
     policies: {
       squadCommand: squadCommand,
-      commanderTick: noop,
+      commanderTick: function (ctx) {
+        var Q = root.BattleSquadStability;
+        if (skillOn('regroup')) Q.controllerSkills.review(ctx.sim, ctx.squad);
+      },
       fireAndMovement: function (ctx) {
         /* Succession (15d) is noted once per dispatch; each skill below reads the same test itself. */
         var Q = root.BattleSquadStability;
         if (Q && Q.noteControllerSuccession) Q.noteControllerSuccession(ctx.sim, ctx.squad, ctx.facts);
+        var LP = Q && Q.localPlan;
+        if (skillOn('structure') && STRUCTURE && LP && LP.structuresOn)
+          LP.update(ctx.sim, ctx.squad, ctx.facts);
         root.BattleTacticalContactSkills.update(ctx);
         /* The flank decision runs first: the covered-bound skill reads its goal on the same step. */
         if (root.BattleTacticalFlankAssault) root.BattleTacticalFlankAssault.update(ctx);

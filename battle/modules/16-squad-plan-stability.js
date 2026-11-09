@@ -1177,6 +1177,13 @@
   }
   function carryControllerMove(sq, battle, s, order) {
     if (s.dead || s.isPlayer || s.squad !== sq) return false;
+    if (
+      order.options &&
+      order.options.adoptHere &&
+      s._fireteamPublishKey === order.key &&
+      movementExecutionCurrent(s, battle)
+    )
+      return false;
     return controllerMovementOwner('Meso controller personal movement', function () {
       var applied = publishPersonalMovement(
         sq,
@@ -1184,21 +1191,37 @@
         s,
         order.point,
         order.key,
-        false,
-        'controller',
-        'controller order',
-        publishStats(battle)
+        !!order.urgent,
+        order.kind || 'controller',
+        order.reason || 'controller order',
+        publishStats(battle),
+        order.options
       );
+      /* A recon HOLD takes effect where the recipient actually heard it. Keep the native
+         task's receipt point, so the next planning pass cannot order him back to its premise. */
+      if (order.skill === 'recon' && order.options && order.options.adoptHere && applied && sq._reconTask)
+        sq._reconTask.holdPoints[String(s.id)] = copy(s._fireteamDestination);
       if (s._fireteamPublishKey === order.key && s._movementResolver)
         order.proposal = s._movementResolver.order;
       return applied;
     });
   }
-  function controllerMove(sq, battle, s, next, key) {
+  function controllerMove(sq, battle, s, next, key, skill) {
     var p = point(next);
     if (!sq || !battle || !s || !p || !key || s.dead || s.isPlayer || s.squad !== sq) return null;
-    if (s._survivalMovementKey) return null;
+    var planned = skill && controllerSkillOrder(sq, battle, s, skill, p);
+    if (skill && !planned) return null;
+    if (s._survivalMovementKey && !(planned && planned.options && planned.options.survivalFallback))
+      return null;
     var order = { squad: sq, point: p, key: 'controller:' + String(key), publishedAt: +battle.time || 0 };
+    if (planned) {
+      order.skill = skill;
+      order.nativeKey = planned.key;
+      order.kind = planned.kind;
+      order.reason = planned.reason;
+      order.urgent = planned.urgent;
+      order.options = planned.options;
+    }
     _controllerMoves.set(s, order);
     carryControllerMove(sq, battle, s, order);
     return order;
@@ -1214,6 +1237,7 @@
     return controllerMovementOwner('Meso controller movement release', function () {
       if (s && _controllerMoves.get(s) === order) {
         _controllerMoves.delete(s);
+        if (s._survivalMovementKey === order.key) s._survivalMovementKey = null;
         if (s._fireteamPublishKey === order.key) {
           s._fireteamDestination = null;
           s._fireteamPublishKey = null;
@@ -2581,6 +2605,89 @@
             ? 'defense'
             : null;
   }
+  /* S1b-f share the existing skill logic, but select it under the provider and publish
+     every personal intent as movement.move. Each rollback restores just that retained path. */
+  var SKILL_FLAGS = {
+      defense: 'controllerDefensivePosts',
+      regroup: 'controllerRegroup',
+      recon: 'controllerRecon',
+      structure: 'controllerStructureClearing',
+      retreat: 'controllerRetreatSkill'
+    },
+    _skillPlans = new WeakMap();
+  var _skillEnabled = {};
+  Object.keys(SKILL_FLAGS).forEach(function (kind) {
+    _skillEnabled[kind] = !new RegExp('[?&]' + SKILL_FLAGS[kind] + '=(?:0|off|false)(?:&|#|$)', 'i').test(
+      (root.location && root.location.search) || ''
+    );
+  });
+  function controllerSkillEnabled(kind) {
+    return !!_skillEnabled[kind];
+  }
+  function controllerSkillKind(sq, battle) {
+    if (sq.state === 'retreat' || sq.commandPhase === 'retreat')
+      return retainedRetreat(sq) ? 'retreat' : null;
+    return retainedSkill(sq, battle);
+  }
+  function planControllerSkill(sq, battle, kind) {
+    if (!controllerSkillEnabled(kind) || controllerSkillKind(sq, battle) !== kind) return [];
+    var TC = root.BattleTacticalController;
+    if (!TC || !TC.controls(battle, sq)) return [];
+    var plan = {
+      battle: battle,
+      at: battle.time,
+      mission: missionVersion(sq),
+      kind: kind,
+      orders: new Map()
+    };
+    _skillPlans.set(sq, plan);
+    advanceSquadAnchor(sq, battle);
+    updateFireteams(sq, battle, function (q, b, s, next, key, urgent, orderKind, reason, stats, options) {
+      if (!s || s.dead || s.isPlayer || s.squad !== sq) return false;
+      var current = _controllerMoves.get(s);
+      plan.orders.set(String(s.id), {
+        man: s,
+        point: copy(next),
+        key: key,
+        urgent: !!urgent,
+        kind: orderKind,
+        reason: reason,
+        options: options || null
+      });
+      return !!(
+        current &&
+        current.skill === kind &&
+        current.nativeKey === key &&
+        s._fireteamPublishKey === current.key &&
+        movementExecutionCurrent(s, battle)
+      );
+    });
+    publishForwardLine(sq, battle);
+    return Array.from(plan.orders.values()).map(function (order) {
+      return {
+        man: order.man,
+        point: copy(order.point),
+        key: order.key,
+        options: order.options && order.options.adoptHere ? { adoptHere: true } : null
+      };
+    });
+  }
+  function controllerSkillOrder(sq, battle, s, kind, p) {
+    var plan = _skillPlans.get(sq),
+      order = plan && plan.orders.get(String(s.id));
+    return plan &&
+      plan.battle === battle &&
+      plan.at === battle.time &&
+      plan.mission === missionVersion(sq) &&
+      plan.kind === kind &&
+      controllerSkillEnabled(kind) &&
+      controllerSkillKind(sq, battle) === kind &&
+      order &&
+      order.man === s &&
+      dist(order.point, p) <= ORDER_PUBLISH_EPS
+      ? order
+      : null;
+  }
   /* The Squad Leader is SquadAI's squadCommand owner: status, fire and movement, anchor, fireteam slots. */
   root.SquadAI.extend('squadCommand', 'squad-leader', function (sq, battle) {
     updateSquadState(sq, battle);
@@ -2590,6 +2697,10 @@
     var TC = root.BattleTacticalController;
     if (TC && TC.dispatch(battle, sq, 'squadCommand')) {
       carryControllerMoves(sq, battle);
+      var skill = controllerSkillKind(sq, battle);
+      /* A refusal stays a controller refusal; it must never reactivate legacy publication. */
+      var provider = root.BattleTacticalMarchProvider;
+      if (skill && provider && provider.ownsSkill && provider.ownsSkill(sq, battle)) return;
       /* Recon and regroup are retained Squad Leader skills: while either lease holds, the provider
          has stood down and this skill's own fireteam orders are the squad's only movement. So is
          retreat movement (the provider stands down on retreat): see retainedRetreat. */
@@ -2715,8 +2826,8 @@
           if (_lp && _lp.on) _lp.update(sim, q);
           if (_postures && _postures.on) _postures.update(sim, q);
         }
-        /* Cohesion review (regroup) is a retained skill under any controller. */
-        updateCohesion(sim, q);
+        var skills = root.BattleTacticalMarchProvider;
+        if (legacy || !skills || !skills.skillOn || !skills.skillOn('regroup')) updateCohesion(sim, q);
         if (legacy && (LEASE_CONFLICTS_ON || (_lp && _lp.on))) resolveLeaseConflicts(sim, q);
         executeMission(sim, q, town);
         if (legacy) updatePlan(sim, q);
@@ -2740,6 +2851,13 @@
     requestReview: requestReview,
     /* Recon, regroup or a defensive phase (prepared posts, hold posts), when one of these retained skills holds the squad; a provider yields to it. */
     retainedSkill: retainedSkill,
+    controllerSkills: {
+      enabled: controllerSkillEnabled,
+      kind: controllerSkillKind,
+      plan: planControllerSkill,
+      review: updateCohesion,
+      epsilon: ORDER_PUBLISH_EPS
+    },
     /* A defensive phase: its men hold prepared and hold posts (15h), which a provider's movers must not override. */
     defensivePhase: function (sq) {
       return !!DEFENSIVE[sq.commandPhase] && sq.state !== 'retreat';
@@ -2759,6 +2877,15 @@
     },
     controllerMovement: {
       publish: controllerMove,
+      nativeCurrent: function (s, skill, key) {
+        var order = s && _controllerMoves.get(s);
+        return !!(
+          order &&
+          order.skill === skill &&
+          order.nativeKey === key &&
+          s._fireteamPublishKey === order.key
+        );
+      },
       current: function (s, order) {
         return !!(s && order && _controllerMoves.get(s) === order);
       },

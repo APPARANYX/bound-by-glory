@@ -756,7 +756,11 @@ test('retreat, mission supersession, possession and restart cancel native contac
   w.q.commandPhase = 'retreat';
   w.TC.dispatch(w.b, w.q, 'fireAndMovement', { underFire: 1 });
   w.TC.dispatch(w.b, w.q, 'squadCommand');
-  assert.equal(live(w).length, 0);
+  assert.equal(
+    live(w).filter(a => a.capability !== 'movement.move').length,
+    0,
+    'contact actions ended; retreat owns movement'
+  );
   assert.equal(w.q.fireControl, null);
   w.TC.beforeRestart(w.b);
   assert.equal(w.TC.summary(w.b).actions, 0);
