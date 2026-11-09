@@ -106,7 +106,8 @@
     applyGroundHeights(currentGround);
     var mat = new BABYLON.StandardMaterial('battleFieldMat', scene);
     mat.specularColor = BABYLON.Color3.Black();
-    var base = root.BATTLE_ASSET_BASE || 'https://test.ivandpopov.com/grasstex/Assets/';
+    var assetRoot = root.BATTLE_API_BASE || '/bound-by-glory/';
+    var base = root.BATTLE_ASSET_BASE || assetRoot + 'Assets/';
     var dirt = new BABYLON.Texture(
       base + 'dirttex.png',
       scene,
@@ -149,7 +150,8 @@
     );
     mat.backFaceCulling = false;
     mat.disableDepthWrite = true;
-    var base = root.BATTLE_ASSET_BASE || 'https://test.ivandpopov.com/grasstex/Assets/';
+    var assetRoot = root.BATTLE_API_BASE || '/bound-by-glory/';
+    var base = root.BATTLE_ASSET_BASE || assetRoot + 'Assets/';
     mat.setTexture(
       'skyTexture',
       new BABYLON.Texture(base + 'skytex.png', scene, false, false, BABYLON.Texture.BILINEAR_SAMPLINGMODE)

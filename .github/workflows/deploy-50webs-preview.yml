@@ -223,6 +223,19 @@ jobs:
           overlay_metadata="$(curl -fsSL "$overlay_metadata_url")"
           python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["assetOverlay"] and d["version"]==1' "$overlay_metadata"
           echo "Preview FBX overlay verified: $overlay_test_url"
+          # Unlike FBX, private audio may be missing despite a valid runtime/preview.
+          # Probe the actual production audio files reached by the new runtime base.
+          audio_manifest_url="https://test.ivandpopov.com/${WEB_ROOT}/Assets/audio/manifest.json"
+          curl --fail --silent --show-error --location "$audio_manifest_url" \
+            | python3 -c 'import json,sys; data=json.load(sys.stdin); assert data.get("categories",{}).get("weapons"), "Audio manifest missing weapon categories"'
+          for clip in 'weapons/hmg-m1919a4-01.mp3' 'grenades/explosion-01.mp3'; do
+            clip_url="https://test.ivandpopov.com/${WEB_ROOT}/Assets/audio/$clip"
+            if ! curl --fail --silent --show-error --location --head "$clip_url" >/dev/null; then
+              echo "::error::Hosted audio missing at $clip_url; check FTP Assets/audio, deployment tracker and renamed root"
+              exit 1
+            fi
+            echo "Hosted audio available: $clip_url"
+          done
           # The battle page is not enough: check the exact vehicle-lab URL as well.
           # This is conditional so an unrelated historical branch without the lab
           # remains previewable using the same generic workflow.
