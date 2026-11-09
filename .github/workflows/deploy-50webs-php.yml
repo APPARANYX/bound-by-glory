@@ -307,7 +307,7 @@ jobs:
           set net:timeout 15
           set ftp:ssl-allow no
           set ftp:passive-mode true
-          cd "$WEB_ROOT"/Assets
+          cd "$WEB_ROOT/Assets"
           set cmd:fail-exit no
           find soldiers
           find animations
@@ -337,7 +337,7 @@ jobs:
           set net:timeout 15
           set ftp:ssl-allow no
           set ftp:passive-mode true
-          cd "$WEB_ROOT"/Assets/audio
+          cd "$WEB_ROOT/Assets/audio"
           find voices
           bye
           LFTP
