@@ -20,6 +20,8 @@ try{
   const r=await fetch(REPO+PINNED+'/game.html?ts='+Date.now(),{cache:'no-store'});
   if(!r.ok)throw new Error('HTTP '+r.status);
   let html=await r.text();
+  /* The pinned v59 loader was authored before the repository moved to APPARANYX. */
+  html=html.replaceAll('https://raw.githubusercontent.com/Teethree89/grasstex/',REPO);
   if(html.indexOf(OLD_TERRAIN)<0&&haveAssets)
     throw new Error('pinned loader changed shape; refusing to inject baked terrain');
 
