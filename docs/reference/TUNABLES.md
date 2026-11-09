@@ -126,6 +126,7 @@ constant; `RETREAT_CASUALTY_FRAC` below is `squad-ai.js`'s fallback for a squad 
 - `ZONES`, `ZONE_ODDS` — wound zone definitions and probabilities
 
 ### 23-grenades.js (on by default; `?grenades=0` disables)
+- `TARGET_EFFECTIVE_RADIUS = 5` m — controller-only area targeting may aim at a landing point within 35 m for a fresh reported enemy up to 40 m away, subject to a clear fragment line, throw arc and full friendly clearance. This is the fragment model’s 5 m reference distance, not guaranteed damage or the 22 m outer cutoff. `controllerGrenadeArea=0` restores direct-target range. Scatter, roll, cover and stance still determine actual wounds.
 - `SquadAI.LOADOUTS.*.grenades = { sergeant: 2, rifleman: 2, gunner: 1, scout: 2, engineer: 3 }`, `LOADOUT_MAX = 3` — carried inventory; no refill on possession/rearm
 - `RANGE = 30`, `CONF_MIN = 0.5`, `CONTACT_FRESH = 6`, `DECISION_EVERY = 1.5`, `FRIEND_CLEAR = 13` — throw range (m), personal-contact confidence/age (s), remembered-contact review cadence (s), friendly clearance including scatter (m)
 - `WINDUP = 0.9`, `COOLDOWN = 18`, `FUSE = 3.6` — decision-to-release, release cooldown, landed fuse (s)
