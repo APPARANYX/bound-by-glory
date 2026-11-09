@@ -305,3 +305,124 @@ for (const phase of ['boarding', 'embarked', 'disembarking']) {
   assert.equal(infantry.evidence.transport, null);
 }
 console.log('PASS transport ownership classification retains boarding evidence and dismount failures');
+
+// Scheduled timing, canonical adoption and controller selection are distinct witnesses.
+// Any settling/planning API is deliberately poisoned; sampling may only observe.
+const witness = fixture('?probeIds=76', 'none');
+const latest = {
+  envelopeId: 'env-new',
+  signature: 'move:new',
+  sourceId: 'leader-1',
+  relayId: 'relay-2',
+  channel: 'mixed-relay',
+  phase: 'received',
+  issuedAt: 80,
+  receivedAt: 81,
+  processedAt: 82,
+  adoptedAt: 83,
+  data: { publishKey: 'new-key', missionVersion: 2 },
+  point: { x: 4, z: 20 }
+};
+const old = {
+  ...latest,
+  envelopeId: 'env-old',
+  phase: 'adopted',
+  data: { publishKey: 'old-key', missionVersion: 1 }
+};
+witness.sim._commandReception.bySoldier = { 76: { 'movement|soldier:76': latest } };
+witness.sim._commandReception.adoptedBySoldier[76]['movement|soldier:76'] = old;
+let peeks = 0;
+witness.root.BattleCommandReception.peek = () => {
+  peeks++;
+  return { ...latest, phase: 'adopted' };
+};
+witness.root.BattleCommandReception.adoptedView = () => {
+  throw Error('settling read');
+};
+witness.root.BattleCommandReception.snapshot = () => {
+  throw Error('settling snapshot');
+};
+const action = {
+  squad: 'ge-2',
+  actorId: '76',
+  actionId: 'bound-9',
+  capability: 'combat.bound',
+  stage: 'accepted',
+  reason: 'published:await-personal-adoption',
+  since: 89.4
+};
+const selection = {
+  squad: 'ge-2',
+  actorId: '76',
+  slot: 'fire.personal',
+  stage: 'selected',
+  value: false,
+  reason: 'movement',
+  at: 90
+};
+witness.root.BattleTacticalController = {
+  summary: () => ({ live: [action], soldierDecisions: [selection] })
+};
+witness.soldier._fireteamAdoptedEnvelope = 'env-old';
+witness.soldier._fireteamPublishKey = 'old-key';
+witness.soldier.weapon = { ammo: 0, reserveAmmo: 16 };
+witness.soldier.eng.fireReadyAt = 200;
+witness.soldier.destination = { x: 0, z: 0 }; // at-feet hold must still retain the terminal witness
+witness.root.BattleGrenades = {
+  pendingOf: () => ({ decidedAt: 198, releaseAt: 201, source: 'contact-policy' }),
+  count: () => 2,
+  cooldownLeft: () => 0,
+  assaultAssessment: () => {
+    throw Error('grenade gate reevaluated');
+  },
+  assaultOpportunity: () => {
+    throw Error('grenade planner reevaluated');
+  }
+};
+const before = JSON.stringify(witness.sim._commandReception);
+for (let t = 190; t <= 210; t++) witness.sample(t);
+const tail = witness.probe.report(witness.sim).actorTails[0];
+assert.equal(tail.actor, 'ge:76');
+assert.equal(tail.history.length, 10);
+assert.equal(tail.history.at(-1).t, 210);
+const row = tail.history.at(-1);
+assert.equal(row.commands.movement.latest.phase, 'received', 'stored phase retained');
+assert.equal(row.commands.movement.projectedPhase, 'adopted', 'clock projection is separate');
+assert.equal(row.commands.movement.adopted.envelopeId, 'env-old', 'scheduled time is not adoption');
+assert.equal(row.commands.movement.adoptedIsLatest, false);
+assert.equal(row.commands.movement.latest.publishKey, 'new-key');
+assert.equal(row.commands.movement.appliedEnvelope, 'env-old');
+assert.equal(row.commands.movement.appliedPublishKey, 'old-key');
+assert.equal(row.commands.movement.latest.relayId, 'relay-2');
+assert.equal(row.controller.actions[0].since, 89.4);
+assert.equal(row.controller.selections[0].stage, 'selected', 'selection never becomes discharge');
+assert.equal(row.fireContext.fireReadyAt, 200);
+assert.equal(row.fireContext.ammo, 0);
+assert.equal(row.grenade.pending.releaseAt, 201, 'pending is not a native release receipt');
+assert.equal(JSON.stringify(witness.sim._commandReception), before, 'no command settlement or writes');
+assert.ok(peeks > 0);
+latest.data.publishKey = 'later';
+latest.point.x = 99;
+action.reason = 'later';
+selection.reason = 'later';
+assert.equal(row.commands.movement.latest.publishKey, 'new-key', 'receipt data detached');
+assert.equal(row.commands.movement.latest.point.x, 4, 'receipt position detached');
+assert.equal(row.controller.actions[0].reason, 'published:await-personal-adoption');
+assert.equal(row.controller.selections[0].reason, 'movement');
+assert.equal(witness.stats().mutations, 0);
+assert.equal(witness.stats().randoms, 0);
+console.log(
+  'PASS causal witnesses: adoption vs projection, terminal hold, detached bounded evidence, no settlement/planning'
+);
+
+const bounded = fixture('?probeSide=ge', 'none');
+bounded.root.BattleModules.unitsFor = () =>
+  Array.from({ length: 171 }, (_, i) => ({
+    ...bounded.soldier,
+    id: 1000 + i
+  }));
+bounded.sample(0);
+const boundedReport = bounded.probe.report(bounded.sim);
+assert.equal(boundedReport.actorTails.length, 160);
+assert.equal(boundedReport.actorTailsOmitted, 11);
+console.log('PASS causal terminal witnesses retain explicit actor-cap omissions');
