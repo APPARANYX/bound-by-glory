@@ -190,6 +190,20 @@
   }
   function startReload(s, battle) {
     if (!s || !s.weapon || s.reloading || s.clearingStoppage) return false;
+    var P = root.BattleTacticalSoldierPolicy;
+    if (
+      P &&
+      P.enabled(s, battle, 'weapon.reload') &&
+      !P.select(s, battle, 'weapon.reload', {
+        armed: !!s.weapon,
+        fled: !!(s.eng && s.eng.fledPhase),
+        reloading: !!s.reloading,
+        clearing: !!s.clearingStoppage,
+        empty: (+s.weapon.ammo || 0) <= 0,
+        reserve: (+s.weapon.reserveAmmo || 0) > 0
+      }).value
+    )
+      return false;
     var w = s.weapon;
     if ((+w.ammo || 0) > 0 || (+w.reserveAmmo || 0) <= 0) return false;
     var seconds = Math.max(0.8, +w.stats.reloadTime || 2.5),

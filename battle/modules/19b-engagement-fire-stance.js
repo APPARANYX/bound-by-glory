@@ -1,5 +1,6 @@
 /* Engagement fire-and-stance sub-module (extracted from battle/engagement.js).
-   Behavior-neutral extraction: every function body moved verbatim from the parent file.
+   Native fire/stance effectors and legacy fallback. Under the active Micro slices, 13k
+   chooses from detached physical/permission facts; this owner applies and revalidates the choice.
 
    This module owns the firefight's fire control and ground game: the per-soldier
    fire-permission layer (fireControlTuning, underFireNow, fireControlOf, fireAuthorized,
@@ -75,6 +76,10 @@
       SUPPRESS_PAUSE = ctx.SUPPRESS_PAUSE,
       USEFUL_COVER = ctx.USEFUL_COVER;
 
+    function micro(s, battle, slot) {
+      var P = root.BattleTacticalSoldierPolicy;
+      return P && P.enabled(s, battle, slot) ? P : null;
+    }
     function engagementLive(s, battle) {
       var q = s.squad;
       if (!q || battle.winner || q.state === 'retreat') return false;
@@ -195,7 +200,9 @@
       var target = at || s.target;
       if (!COVER_FIRE || !combatThreat(target) || want === 'stand' || s.suppressedUntil > battle.time)
         return want;
-      var here = posOf(s);
+      var here = posOf(s),
+        P = micro(s, battle, 'posture.see'),
+        visible = [false, false, false];
       for (var i = STANCE_ORDER.indexOf(want); i < STANCE_ORDER.length; i++) {
         /* Sight over a wall is insufficient if the muzzle would hit it.
            For genuine personal targets use the ballistics owner's same
@@ -204,9 +211,13 @@
           target === s.target && s.weapon
             ? firingLineClear(s, target, here, STANCE_ORDER[i], battle)
             : seesFrom(here, STANCE_ORDER[i], target, battle);
-        if (line) return STANCE_ORDER[i];
+        if (line) {
+          if (!P) return STANCE_ORDER[i];
+          visible[i] = true;
+          break;
+        }
       }
-      return want; // he sees him from no stance: nothing to lose by staying low
+      return P ? P.select(s, battle, 'posture.see', { want: want, visible: visible }).value : want;
     }
 
     /* ---- stance ------------------------------------------------------------------------------- */
@@ -255,7 +266,18 @@
       /* Reload is a live weapon obligation, not an expired posture lease.
          Keep the stance chosen by Engagement at crouch or lower until the
          ammunition owner finishes, even when a station/march pose renews. */
-      if (RELOAD_STANCE_HOLD && s.reloading && stance === 'stand' && reason !== 'player-possession') {
+      var P = micro(s, battle, 'posture.commit');
+      if (P && reason !== 'player-possession') {
+        var selected = P.select(s, battle, 'posture.commit', {
+          want: stance,
+          current: e.stance,
+          reloading: !!s.reloading,
+          reloadHold: RELOAD_STANCE_HOLD,
+          possession: false
+        });
+        stance = selected.value;
+        if (selected.reason === 'reload') reason = 'reload';
+      } else if (RELOAD_STANCE_HOLD && s.reloading && stance === 'stand' && reason !== 'player-possession') {
         stance = e.stance === 'prone' || e.stance === 'crawl' ? e.stance : 'crouch';
         reason = 'reload';
       }
@@ -334,7 +356,19 @@
       return F && F.coverAt ? F.coverAt(battle.obstacles, p.x, p.z, 'crouch') : 1;
     }
     function fightingStance(s, battle, distanceToTarget, coverValue) {
-      var suppressed = s.suppressedUntil > battle.time;
+      var suppressed = s.suppressedUntil > battle.time,
+        P = micro(s, battle, 'posture.fight');
+      if (P)
+        return P.select(s, battle, 'posture.fight', {
+          proneRole: !!PRONE_ROLES[s.role],
+          suppressed: suppressed,
+          coverStance: COVER_STANCE,
+          usefulCover: coverValue <= USEFUL_COVER,
+          crouchCovered:
+            !(PRONE_ROLES[s.role] && COVER_STANCE && coverValue <= USEFUL_COVER && suppressed) ||
+            crouchCover(s, battle) <= USEFUL_COVER,
+          longRange: distanceToTarget > Math.max(70, SA().engageRange(s) * 0.55)
+        }).value;
       if (!PRONE_ROLES[s.role]) return 'crouch';
       if (COVER_STANCE && coverValue <= USEFUL_COVER)
         return suppressed && crouchCover(s, battle) > USEFUL_COVER ? 'prone' : 'crouch';
@@ -360,7 +394,26 @@
       return false;
     }
     function fireAllowed(s, battle) {
-      var e = state(s);
+      var e = state(s),
+        P = micro(s, battle, 'fire.personal');
+      if (P) {
+        var target = combatThreat(s.target),
+          selection = P.select(s, battle, 'fire.personal', {
+            threat: !!target,
+            reloading: !!s.reloading,
+            settled: battle.time >= e.fireReadyAt,
+            stationary: !movingTooFast(s) && !s.crawling,
+            facing: !!target && facingError(s, posOf(s.target)) <= AIM_CONE,
+            setup: !(SA().isMachineGun(s) && !s.setUp && (e.state === 'engage' || s.state === 'hardpoint')),
+            authorized: fireAuthorized(s, battle),
+            shock: battle.time < shockUntil(s)
+          });
+        if (!selection.value) {
+          if (selection.reason === 'shock') noteShock(s, 'fire');
+          return reportFireDenial(s, battle, selection.reason);
+        }
+        return true;
+      }
       if (!combatThreat(s.target)) return reportFireDenial(s, battle, 'no-threat');
       if (s.reloading) return reportFireDenial(s, battle, 'reloading');
       if (battle.time < e.fireReadyAt) return reportFireDenial(s, battle, 'aim-settling');
@@ -402,16 +455,37 @@
             crouching: { value: pose === 'crouch' },
             tacticalCrouch: { value: pose === 'crouch' }
           });
-        if (A.canSuppress(proxy, point, battle, true)) return pose;
+        if (A.canSuppress(proxy, point, battle, true)) {
+          var P = micro(s, battle, 'posture.see');
+          if (!P) return pose;
+          var visible = [false, false, false];
+          visible[i] = true;
+          return P.select(s, battle, 'posture.see', { want: 'prone', visible: visible }).value;
+        }
       }
       return null;
     }
     function suppress(s, battle, point) {
       var e = state(s);
-      if (!point || s.reloading || movingTooFast(s) || s.crawling) return false;
-      if (!fireAuthorized(s, battle)) return false;
-      if (battle.time < e.burstPauseUntil || battle.time < e.fireReadyAt) return false;
-      if (facingError(s, point) > AIM_CONE) return false;
+      var P = micro(s, battle, 'fire.suppress');
+      if (P) {
+        if (
+          !P.select(s, battle, 'fire.suppress', {
+            point: !!point,
+            busy: !!s.reloading,
+            stationary: !movingTooFast(s) && !s.crawling,
+            authorized: fireAuthorized(s, battle),
+            ready: battle.time >= e.burstPauseUntil && battle.time >= e.fireReadyAt,
+            facing: !!point && facingError(s, point) <= AIM_CONE
+          }).value
+        )
+          return false;
+      } else {
+        if (!point || s.reloading || movingTooFast(s) || s.crawling) return false;
+        if (!fireAuthorized(s, battle)) return false;
+        if (battle.time < e.burstPauseUntil || battle.time < e.fireReadyAt) return false;
+        if (facingError(s, point) > AIM_CONE) return false;
+      }
       if (SA().isMachineGun(s)) {
         if (!e.setUpSince) e.setUpSince = battle.time;
         s.setUp = battle.time - e.setUpSince > GUNNER_SETUP * statScale(s, 'setup');
