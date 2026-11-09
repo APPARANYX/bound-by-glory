@@ -395,7 +395,8 @@
       voiceLog('[VOICE] waiting ' + file);
       return handle;
     }
-    var base = window.BATTLE_AUDIO_BASE || ((window.BATTLE_API_BASE || '/bound-by-glory/') + 'Assets/audio/'),
+    var audioRoot = window.BATTLE_API_BASE || '/bound-by-glory/';
+    var base = window.BATTLE_AUDIO_BASE || audioRoot + 'Assets/audio/',
       url = window.BattleAudioFormat ? window.BattleAudioFormat.url(base + file) : base + file;
     voiceLog('[VOICE] request ' + url + ' profile=' + (profile.id || 'neutral'));
     entry = cache[file] = {
