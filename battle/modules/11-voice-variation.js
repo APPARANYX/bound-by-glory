@@ -251,9 +251,7 @@
     } catch (_) {}
   }
   function playAt(entry, req) {
-    var ae = root.BattleAudioBackend
-        ? root.BattleAudioBackend.engine()
-        : root.BABYLON && root.BABYLON.Engine && root.BABYLON.Engine.audioEngine,
+    var ae = root.BattleAudioBackend.engine(),
       ctx = ae && ae.audioContext,
       scene = req.soldier && req.soldier.root && req.soldier.root.getScene && req.soldier.root.getScene();
     if (
@@ -412,7 +410,7 @@
     };
     try {
       var scene = soldier.root.getScene();
-      entry.sound = new (root.BattleAudioBackend ? root.BattleAudioBackend.Sound : BABYLON.Sound)(
+      entry.sound = new root.BattleAudioBackend.Sound(
         'voice-' + file,
         url,
         scene,
