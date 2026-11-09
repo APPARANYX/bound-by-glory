@@ -282,7 +282,7 @@ window.BattleLoading=(function(){
       // then verify the real context before allowing either Start or Skills Play.
       var ctx=ae.audioContext;
       if(!ctx){console.error('[AUDIO] Audio context missing');return false;}
-      observeAudioRenderErrors(ctx);
+      if(typeof observeAudioRenderErrors==='function')observeAudioRenderErrors(ctx);
       var resuming=ctx.state!=='running'&&ctx.resume?ctx.resume():Promise.resolve();
       var unlocking=typeof ae.unlock==='function'?ae.unlock():undefined;
       await Promise.all([resuming,unlocking]);
