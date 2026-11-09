@@ -37,6 +37,8 @@ const sandbox = {
   audioRecovery: {attempts: 0,successes: 0,failures: 0},
   Promise, Math
 };
+sandbox.BattleAudioBackend = sandbox.window.BattleAudioBackend;
+sandbox.BattleAudioMix = sandbox.window.BattleAudioMix;
 vm.runInNewContext(block, sandbox, {filename: 'battle-audio-recovery-fixture.js'});
 (async () => {
   assert.equal(await sandbox.window.__battleUnlockAudio__(), true, 'first click unlocks');
