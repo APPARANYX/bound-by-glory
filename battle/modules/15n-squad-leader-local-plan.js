@@ -564,7 +564,11 @@
       var o = st.orders.find(function (o) {
         return o.soldierId === String(s.id);
       });
-      return o && s._fireteamPublishKey === o.key ? o : null;
+      var M = root.BattleSquadStability && root.BattleSquadStability.controllerMovement;
+      return o &&
+        (s._fireteamPublishKey === o.key || (M && M.nativeCurrent && M.nativeCurrent(s, 'structure', o.key)))
+        ? o
+        : null;
     }
     function trackStructure(sq, inputs) {
       var st = inputs.execution && inputs.execution.structure,

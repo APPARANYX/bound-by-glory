@@ -8,8 +8,19 @@ const path = require('node:path');
 const { loadModule } = require('./module-loader');
 const repo = path.resolve(__dirname, '../..');
 const names = ['strategicInterception', 'motorTransport', 'aerialRecon', 'interception', 'truckCollision'];
+const skillFlags = [
+  'controllerDefensivePosts',
+  'controllerRegroup',
+  'controllerRecon',
+  'controllerStructureClearing',
+  'controllerRetreatSkill'
+];
 const inputs = Array.from({ length: 32 }, (_, mask) =>
-  Object.fromEntries(names.map((name, bit) => [name, mask & (1 << bit) ? '1' : '0']))
+  Object.fromEntries(
+    names
+      .map((name, bit) => [name, mask & (1 << bit) ? '1' : '0'])
+      .concat(skillFlags.map((name, bit) => [name, mask & (1 << bit) ? '1' : '0']))
+  )
 );
 const microNames = ['controllerStance', 'controllerSoldierFire', 'controllerReactions', 'controllerDrill'];
 const microInputs = Array.from({ length: 16 }, (_, mask) =>
@@ -30,6 +41,10 @@ const allQueries = JSON.parse(
 const queries = allQueries.slice(0, inputs.length);
 for (const profile of ['strategic', 'legacy'])
   queries.forEach((query, index) => {
+    const forwarded = new URLSearchParams(query);
+    skillFlags.forEach(name =>
+      assert.equal(forwarded.get(name), inputs[index][name], 'S1 rollback forwarding: ' + name)
+    );
     const hooks = {};
     const root = {
       location: { search: '?' + query },

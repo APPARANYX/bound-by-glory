@@ -195,6 +195,29 @@ replaces it (`cancelled: owner:replaced`). Its stage is `resolved` when it wins 
 or other authority wins. Cancel withdraws only that proposal. The resolver keeps no time for
 selection or arrival, so those stages carry the first read that saw them.
 
+S1b–S1f selects the remaining Squad Leader skills in provider 13c. Module 16's
+`controllerSkills.plan` reuses the native defensive-post, stable-regroup, scout/hold,
+structure-order and retreat geometry, collecting personal intents instead of publishing
+legacy fireteam slots or team movement envelopes. Each intent becomes `movement.move`
+with an optional `skill` label. The movement adapter accepts that label only against the
+same-tick owner plan, current skill, actor, mission and point; urgency, non-spatial recon
+holds and survival exceptions are derived by the owner, never supplied by the caller.
+Command Reception and the resolver still own adoption and physical movement. A main-body
+recon hold latches its receipt position once. Structure observation recognizes the adopted
+controller action by its native order key. Cancellation never resurrects the same intent;
+a changed native intent or a new mission/roster/controller tuple permits a new selection.
+The summary's `squadSkill` reports the selected skill, live action count and refusal/stop reasons.
+
+Regroup review runs at the provider's commander tick; recon selection and structure-leg
+handoffs run in its mission policy; structure-plan review runs in its fire-and-movement
+policy. Native recon lease reconciliation, retreat/rally/succession lifecycle, geometry,
+leases, post claims, physiology and transport adoption remain with their existing owners.
+`controllerDefensivePosts=0`, `controllerRegroup=0`, `controllerRecon=0`,
+`controllerStructureClearing=0` and `controllerRetreatSkill=0` independently restore those
+retained paths. Legacy mode stays on the original publishers. The earlier
+`controllerRetreat=0` control keeps its original meaning. These switches are forwarded by
+the preview launcher. Offline coverage does not establish browser/battle acceptance.
+
 `battle/modules/13c-tactical-march-provider.js` (`BattleTacticalMarchProvider`) is slice 2 of the
 replacement: the first provider, on only under `?tacticalController=new` (one flag for both sides).
 It takes every squad at battle start and on each commander tick through `requestMode`, and runs foundational march/contact skills. `executeMission` advances its own leg index along the retained `sq.route` once the

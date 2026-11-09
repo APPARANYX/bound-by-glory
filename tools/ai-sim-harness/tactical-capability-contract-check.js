@@ -58,6 +58,20 @@ function begin(req = request(), ctx = context()) {
   assert.equal(result.ok, true);
   return result.receipt;
 }
+check('S1 movement labels are optional, closed to five skills and grant no caller-supplied urgency', () => {
+  for (const skill of ['defense', 'regroup', 'recon', 'structure', 'retreat'])
+    assert.equal(
+      C.validateRequest(request({ params: { point: { x: 1, z: 2 }, skill } }), context()).ok,
+      true
+    );
+  for (const params of [
+    { point: { x: 1, z: 2 }, skill: 'unknown' },
+    { point: { x: 1, z: 2 }, skill: 'retreat', urgent: true },
+    { point: { x: 1, z: 2 }, skill: 'retreat', survivalFallback: true },
+    { skill: 'recon' }
+  ])
+    assert.equal(C.validateRequest(request({ params }), context()).ok, false);
+});
 check('normalization detaches and freezes request without mutating owner projection', () => {
   const req = request(),
     ctx = context(),

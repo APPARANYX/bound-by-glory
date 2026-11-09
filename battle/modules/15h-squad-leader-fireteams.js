@@ -75,14 +75,17 @@
       ].join('|');
     }
 
-    function updateFireteams(sq, battle) {
+    /* S1: the controller reuses the skill's geometry and commitments, but collects personal
+       intents instead of publishing legacy fireteam slots. Only the movement adapter may apply them. */
+    function updateFireteams(sq, battle, emit) {
+      var publishMovement = emit || publishPersonalMovement;
       sq._fireteamOrders = sq._fireteamOrders || {};
       if (leaderlessActive(sq) && sq.state !== 'retreat') {
         if (BUDDY_PAIRS_ON) updateBuddyPairs(sq, battle);
         return;
       }
       if (sq._reconTask && L.get(sq, 'recon')) {
-        publishReconOrders(sq, battle);
+        publishReconOrders(sq, battle, emit);
         return;
       }
       /* A 1-4 man retreating remnant is extracting, not maneuvering as fireteams. Do not manufacture
@@ -103,6 +106,7 @@
           extractStats.intentChecks++;
           var previous = point(s._fireteamDestination);
           if (
+            !emit &&
             previous &&
             dist(previous, home) <= ORDER_PUBLISH_EPS &&
             s._fireteamPublishKey === extractKey &&
@@ -111,7 +115,7 @@
             extractStats.intentCoalesced++;
             return;
           }
-          publishPersonalMovement(
+          publishMovement(
             sq,
             battle,
             s,
@@ -142,6 +146,7 @@
           if (!s || s.dead || s.incapacitated || s.isPlayer) return;
           securityStats.intentChecks++;
           if (
+            !emit &&
             point(s._fireteamDestination) &&
             dist(s._fireteamDestination, o.point) <= ORDER_PUBLISH_EPS &&
             s._fireteamPublishKey === o.key &&
@@ -150,7 +155,7 @@
             securityStats.intentCoalesced++;
             return;
           }
-          publishPersonalMovement(
+          publishMovement(
             sq,
             battle,
             s,
@@ -214,7 +219,7 @@
         }
         if (!defensive && !regroup && !urgent) followTeamForward(sq, key, m, cur);
         var CR = root.BattleCommandReception;
-        if (issued && CR && CR.publish)
+        if (!emit && issued && CR && CR.publish)
           CR.publish(sq, battle, 'movement', m, {
             scope: 'fireteam:' + key,
             action: urgent ? 'retreat' : regroup ? 'regroup' : defensive ? 'hold-position' : 'formation',
@@ -276,6 +281,7 @@
           /* With reception enabled the publisher must also supersede a pending
            command, even when a restored mission reuses the executed destination. */
           if (
+            !emit &&
             previous &&
             dist(previous, next) <= ORDER_PUBLISH_EPS &&
             s._fireteamPublishKey === publishKey &&
@@ -284,7 +290,7 @@
             stats.intentCoalesced++;
             continue;
           }
-          var applied = publishPersonalMovement(
+          var applied = publishMovement(
             sq,
             battle,
             s,
@@ -327,7 +333,7 @@
             } else {
               if (s._lostContactRetreatSince == null) s._lostContactRetreatSince = battle.time;
               if (battle.time - s._lostContactRetreatSince >= 6) {
-                publishPersonalMovement(
+                publishMovement(
                   sq,
                   battle,
                   s,

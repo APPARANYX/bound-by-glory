@@ -737,7 +737,8 @@
       } else task.arrivedAt = null;
       return task;
     }
-    function publishReconOrders(sq, battle) {
+    function publishReconOrders(sq, battle, emit) {
+      var publishMovement = emit || publishPersonalMovement;
       var task = sq && sq._reconTask;
       if (!task) return false;
       var selected = {};
@@ -745,7 +746,7 @@
       var members = commanded(sq),
         stats = publishStats(battle),
         CR = root.BattleCommandReception;
-      if (CR && CR.publish)
+      if (!emit && CR && CR.publish)
         CR.publish(sq, battle, 'movement', members, {
           scope: 'recon',
           action: 'scouts-forward',
@@ -766,6 +767,7 @@
           reconKind = selected[id] ? 'recon' : 'recon-hold';
         stats.intentChecks++;
         if (
+          !emit &&
           previous &&
           dist(previous, next) <= ORDER_PUBLISH_EPS &&
           man._fireteamPublishKey === key &&
@@ -774,7 +776,7 @@
           stats.intentCoalesced++;
           continue;
         }
-        var applied = publishPersonalMovement(
+        var applied = publishMovement(
           sq,
           battle,
           man,

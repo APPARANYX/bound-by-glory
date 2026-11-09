@@ -120,7 +120,8 @@ test('a controlled remnant briefed to a reconstitution rally is ordered to the r
     assert.ok(d(x.point, RALLY) < 30, 'goal ' + JSON.stringify(x.point) + ' is at the rally');
   });
   assert.ok(Object.keys(w.q._fireteamOrders || {}).length > 0, 'urgent fireteam orders carry the retreat');
-  assert.equal(w.TC.summary(w.b).actions, 0, 'the provider stays stood down: no second mover');
+  assert.equal(w.TC.summary(w.b).actions, g.length, 'each retreating man has one owned controller action');
+  w.q.members.filter(s => !s.dead).forEach(s => assert.match(s._fireteamPublishKey, /^controller:/));
 });
 
 test('?controllerRetreat=0 is the control: no fireteam orders, every man falls back to home', () => {
@@ -174,7 +175,7 @@ test('a retreat phase alone is carried too: the provider stands down on it, so t
     w.b.time += 0.5;
     tick(w.r, w.b, w.q);
     assert.ok(w.q.commandPhase === 'retreat' || w.q.state === 'retreat', 'still a retreat phase');
-    assert.equal(w.TC.summary(w.b).actions, 0, 'the provider stood down');
+    assert.equal(w.TC.summary(w.b).actions, want ? 7 : 0, 'retreat is explicitly owned when enabled');
     assert.equal(Object.keys(w.q._fireteamOrders).length > 0, want, 'fireteam orders' + extra);
   }
 });

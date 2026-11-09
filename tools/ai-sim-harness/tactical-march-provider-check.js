@@ -220,7 +220,9 @@ test('a hold the owner ended is listed with its reason and not asked for again o
 });
 
 test('retreat wins: every order is finished at its owner, nothing is published, and the march resumes after', () => {
-  const w = world();
+  const w = world(
+    '?stressAct=0&commandRelay=0&scoutsForward=0&tacticalController=new&controllerRetreatSkill=0'
+  );
   w.systems['tactical-march-provider'].onBattleStart(w.b);
   tick(w);
   const men = alive(w),
@@ -271,8 +273,8 @@ test('live contact stands down march without issuing distant route-leg orders', 
   assert.equal(w.TC.summary(w.b).actions, alive(w).length, 'march resumes after contact ends');
 });
 
-test('a recon or regroup lease holds the squad: the march stands down, and asks again the step the lease ends', () => {
-  const w = world(),
+test('with regroup rollback the lease holds the squad and the march resumes when it ends', () => {
+  const w = world('?stressAct=0&commandRelay=0&scoutsForward=0&tacticalController=new&controllerRegroup=0'),
     L = w.r.BattleLeases;
   w.systems['tactical-march-provider'].onBattleStart(w.b);
   tick(w);
@@ -288,8 +290,10 @@ test('a recon or regroup lease holds the squad: the march stands down, and asks 
   assert.equal(w.TC.summary(w.b).actions, alive(w).length, 'no gap with the men standing orderless');
 });
 
-test('a defensive phase stays with the fireteam owner: no march order beside a prepared post', () => {
-  const w = world();
+test('with defensive-post rollback the march yields to the retained fireteam owner', () => {
+  const w = world(
+    '?stressAct=0&commandRelay=0&scoutsForward=0&tacticalController=new&controllerDefensivePosts=0'
+  );
   w.systems['tactical-march-provider'].onBattleStart(w.b);
   tick(w);
   assert.equal(w.TC.summary(w.b).actions, alive(w).length);
@@ -326,7 +330,9 @@ test('a squad holding a defensive phase is marched when it is given a new brief'
 });
 
 test('a retreat phase alone also stands the provider down, as it does the resolver', () => {
-  const w = world();
+  const w = world(
+    '?stressAct=0&commandRelay=0&scoutsForward=0&tacticalController=new&controllerRetreatSkill=0'
+  );
   w.systems['tactical-march-provider'].onBattleStart(w.b);
   tick(w);
   w.q.commandPhase = 'retreat';
@@ -390,7 +396,7 @@ test('a clearing order keeps the march going in a quiet contact; ?controllerClea
 });
 
 test('?controllerStructure=0 marches past a gated leg as before', () => {
-  const w = world('?stressAct=0&commandRelay=0&tacticalController=new&controllerStructure=0');
+  const w = world('?stressAct=0&commandRelay=0&scoutsForward=0&tacticalController=new&controllerStructure=0');
   w.r.BattleSquadStability.localPlan = { entryRequired: () => true, entrySatisfied: () => false };
   w.systems['tactical-march-provider'].onBattleStart(w.b);
   tick(w);
