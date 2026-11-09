@@ -89,6 +89,9 @@ jobs:
       - name: Preview launcher
         run: python3 scripts/check-preview-launcher.py
 
+      - name: Hosted root compatibility
+        run: python3 scripts/check_host_root.py
+
       - name: Python
         run: |
           set -euo pipefail
