@@ -92,7 +92,81 @@
       carrierPosition: position(t.position)
     };
   }
-  function sampleRow(s, o, sim) {
+  /* Peek projects timing without settling commands. The canonical adopted slot is read
+     directly: adoptedView/snapshot would advance command reception while observing it. */
+  function receipt(rec) {
+    if (!rec) return null;
+    var out = {};
+    [
+      'envelopeId',
+      'signature',
+      'sourceId',
+      'relayId',
+      'channel',
+      'phase',
+      'issuedAt',
+      'receivedAt',
+      'processedAt',
+      'adoptedAt',
+      'unreachable'
+    ].forEach(function (k) {
+      if (rec[k] == null || ['string', 'number', 'boolean'].indexOf(typeof rec[k]) >= 0)
+        out[k] = rec[k] == null ? null : rec[k];
+    });
+    var d = rec.data || {};
+    out.publishKey = d.publishKey == null ? null : String(d.publishKey);
+    out.missionVersion = d.missionVersion == null ? null : d.missionVersion;
+    out.fireState = d.state || null;
+    out.point = position(rec.point);
+    return out;
+  }
+  function commandWitness(s, sim, category, scope) {
+    var st = sim._commandReception,
+      id = String(s.id),
+      slot = category + '|' + scope,
+      latest = st && st.bySoldier && st.bySoldier[id] && st.bySoldier[id][slot],
+      adopted = st && st.adoptedBySoldier && st.adoptedBySoldier[id] && st.adoptedBySoldier[id][slot],
+      CR = root.BattleCommandReception,
+      projected = CR && CR.peek ? CR.peek(s, sim, category, scope) : null;
+    return {
+      latest: receipt(latest),
+      projectedPhase: projected ? projected.phase : null,
+      adopted: receipt(adopted),
+      adoptedIsLatest: latest && adopted ? latest.envelopeId === adopted.envelopeId : null,
+      appliedEnvelope: category === 'movement' ? s._fireteamAdoptedEnvelope || null : null,
+      appliedPublishKey: category === 'movement' ? s._fireteamPublishKey || null : null
+    };
+  }
+  function controllerWitness(s, summary) {
+    function own(row) {
+      return String(row.actorId) === String(s.id) && row.squad === s.squad.id;
+    }
+    var actions = (summary.live || []).filter(own),
+      selections = (summary.soldierDecisions || []).filter(own);
+    return {
+      actionsOmitted: Math.max(0, actions.length - 4),
+      selectionsOmitted: Math.max(0, selections.length - 12),
+      actions: actions.slice(0, 4).map(function (r) {
+        return Object.assign({}, r);
+      }),
+      /* Selection is context, never evidence of discharge, arrival or grenade release. */
+      selections: selections.slice(0, 12).map(function (r) {
+        return Object.assign({}, r);
+      })
+    };
+  }
+  function grenadeWitness(s, sim) {
+    var G = root.BattleGrenades,
+      plan = G && G.pendingOf ? G.pendingOf(s, sim) : null;
+    return {
+      carried: G && G.count ? G.count(s) : null,
+      cooldownLeft: G && G.cooldownLeft ? G.cooldownLeft(s, sim) : null,
+      pending: plan
+        ? { decidedAt: plan.decidedAt, releaseAt: plan.releaseAt, source: plan.source || null }
+        : null
+    };
+  }
+  function sampleRow(s, o, sim, summary) {
     var resolver = s._movementResolver && s._movementResolver.last;
     return {
       t: round(sim.time),
@@ -111,6 +185,21 @@
       stop: s._movementStopReason || null,
       speed: round(s.moveSpeed),
       transport: transportEvidence(s, sim),
+      commands: {
+        movement: commandWitness(s, sim, 'movement', 'soldier:' + String(s.id)),
+        fire: commandWitness(s, sim, 'posture-fire', 'squad')
+      },
+      controller: controllerWitness(s, summary),
+      fireContext: {
+        stateSince: s.eng && Number.isFinite(s.eng.since) ? s.eng.since : null,
+        stateUntil: s.eng && Number.isFinite(s.eng.until) ? s.eng.until : null,
+        fireReadyAt: s.eng && Number.isFinite(s.eng.fireReadyAt) ? s.eng.fireReadyAt : null,
+        suppressedUntil: Number.isFinite(s.suppressedUntil) ? s.suppressedUntil : null,
+        reloading: !!s.reloading,
+        ammo: s.weapon && Number.isFinite(s.weapon.ammo) ? s.weapon.ammo : null,
+        reserve: s.weapon && Number.isFinite(s.weapon.reserveAmmo) ? s.weapon.reserveAmmo : null
+      },
+      grenade: grenadeWitness(s, sim),
       losRejects: +s._losBlockedFire || 0,
       crestRejects: +s._crestBlockedFire || 0,
       terrainRejects: +s._terrainBlockedSuppressiveFire || 0
@@ -480,6 +569,8 @@
     },
     sample: function (sim) {
       var all = root.BattleModules.unitsFor(sim),
+        T = root.BattleTacticalController,
+        summary = T && T.summary ? T.summary(sim) : {},
         selected = 0;
       for (var i = 0; i < all.length; i++) {
         var s = all[i];
@@ -513,7 +604,7 @@
           d.coverLane.arrivedAt = round(sim.time);
           d.coverLane.status = 'physically-arrived';
         }
-        d.history.push(sampleRow(s, o, sim));
+        d.history.push(sampleRow(s, o, sim, summary));
         if (d.history.length > MAX_HISTORY) d.history.shift();
         recordFire(s, sim, d);
         recordMovement(s, sim, d, o);
@@ -521,6 +612,14 @@
       data.actorsObserved = Math.max(data.actorsObserved, selected);
     },
     report: function () {
+      /* Keep the terminal window even if the first episode was emitted 100 seconds ago,
+         or the resolver holds at the actor's feet (no distant destination to flag). */
+      data.actorTails = [];
+      data.actorTailsOmitted = Math.max(0, units.size - MAX_EPISODES);
+      units.forEach(function (d, actor) {
+        if (data.actorTails.length < MAX_EPISODES)
+          data.actorTails.push({ actor: actor, history: d.history.slice() });
+      });
       return data;
     }
   };

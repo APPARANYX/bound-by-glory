@@ -134,7 +134,10 @@ function summarizeSamples(samples) {
     /* Matched window lifecycles: no rolling history/person arrivals/failures mix. */
     startedCoveredWindows: last.maneuvers.reduce((n, z) => n + (z.windowsStarted || 0), 0),
     completedCoveredWindows: last.maneuvers.reduce((n, z) => n + (z.windowsCompleted || 0), 0),
-    partiallyCompletedCoveredWindows: last.maneuvers.reduce((n, z) => n + (z.windowsPartiallyCompleted || 0), 0),
+    partiallyCompletedCoveredWindows: last.maneuvers.reduce(
+      (n, z) => n + (z.windowsPartiallyCompleted || 0),
+      0
+    ),
     abortedCoveredWindows: last.maneuvers.reduce((n, z) => n + (z.windowsAborted || 0), 0),
     acceptedPersonalOrders: last.maneuvers.reduce((n, z) => n + (z.personalOrdersAccepted || 0), 0),
     rejectedPersonalOrders: last.maneuvers.reduce((n, z) => n + (z.personalOrdersRejected || 0), 0),
@@ -194,6 +197,7 @@ function summarizeSamples(samples) {
         timeout: 120000
       });
       await page.addScriptTag({ path: 'scripts/probes/covered-maneuver-observer.js' });
+      await page.addScriptTag({ path: 'scripts/probes/causal-inaction.cjs' });
       await page.evaluate(() => (window.coveredTrace = installCoveredManeuverObserver(__battle__)));
       const first = await page.evaluate(() => BattleSkillsLab.snapshot());
       assert.equal(first.controller, c.arm, 'matched requested controller flag');
@@ -210,7 +214,9 @@ function summarizeSamples(samples) {
         ({ seconds, retreat }) => {
           const sim = window.__battle__,
             lab = window.BattleSkillsLab,
-            samples = [];
+            samples = [],
+            causal = window.BattleProbes['causal-inaction'];
+          causal.start(sim);
           let coveredShots = 0;
           const priorFire = sim.onFire;
           sim.onFire = function (s) {
@@ -225,6 +231,7 @@ function summarizeSamples(samples) {
           };
           if (retreat) lab.stageRetreat();
           function sample() {
+            causal.sample(sim); // observe only; native advance cadence stays unchanged
             const d = lab.snapshot(),
               positions = window.BattleTacticalPositions;
             const station = window.BattleTacticalStationSkill;
@@ -255,6 +262,20 @@ function summarizeSamples(samples) {
         },
         { seconds: SIM_SECONDS, retreat: c.retreat }
       );
+      // Persist the witness before acceptance assertions, including a missing finisher.
+      const causal = await page.evaluate(() => BattleProbes['causal-inaction'].report(__battle__));
+      fs.writeFileSync(
+        dir +
+          '/' +
+          c.distance +
+          'm-' +
+          c.arm +
+          '-' +
+          (c.cover || 'staggered') +
+          (c.retreat ? '-casualty' : '') +
+          '-causal.json',
+        JSON.stringify({ sampleEverySimSeconds: 4.5, report: causal }, null, 2)
+      );
       const trace = await page.evaluate(() => coveredTrace);
       fs.writeFileSync(
         dir + '/' + c.distance + 'm-' + (c.cover || 'staggered') + '-trace.json',
@@ -280,9 +301,7 @@ function summarizeSamples(samples) {
       assert.equal(captured[captured.length - 1].lab.paused, true, 'time cap pauses without victory');
       const gaitData = captured[captured.length - 1].lab.gaitTelemetry;
       if (c.arm === 'new') {
-        const diagnosticSquads = captured[captured.length - 1].lab.squads.filter(s =>
-          s.id.startsWith('us:')
-        );
+        const diagnosticSquads = captured[captured.length - 1].lab.squads.filter(s => s.id.startsWith('us:'));
         assert.ok(
           diagnosticSquads.some(s => s.grenadeDiagnostic && s.grenadeDiagnostic.reasons),
           'active native contact owner exports grenade refusal reasons'
@@ -294,7 +313,10 @@ function summarizeSamples(samples) {
       }
       assert.ok(Object.keys(gaitData.byGait).length > 0, 'native simulation captured physical gait');
       if (c.arm === 'new' && summary.totalPhysicalArrivals > 0) {
-        assert.ok(Object.keys(gaitData.coveredBounds).length > 0, 'arriving native bounds have measured gait');
+        assert.ok(
+          Object.keys(gaitData.coveredBounds).length > 0,
+          'arriving native bounds have measured gait'
+        );
         assert.ok(
           Object.values(gaitData.coveredBounds).every(g => g.distanceM > 0 && g.averageActualMps > 0),
           'covered gait summary includes actual physical displacement and speed'
