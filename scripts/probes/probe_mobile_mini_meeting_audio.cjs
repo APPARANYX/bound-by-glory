@@ -15,7 +15,7 @@ const base = process.env.MOBILE_MINI_URL;
 if (!base || !/^https?:\/\//.test(base))
   throw new Error('Provide staged MOBILE_MINI_URL pointing at battle_sim.php');
 const out = path.resolve(process.env.MOBILE_MINI_OUT || 'reports/mobile-mini-audio');
-const backend = process.env.MOBILE_MINI_BACKEND || 'babylon';
+const backend = process.env.MOBILE_MINI_BACKEND || 'howler';
 const warmup = Math.max(0, Math.min(180, +process.env.MOBILE_MINI_WARMUP_SECONDS || 0));
 const seconds = Math.max(12, Math.min(65, +process.env.MOBILE_MINI_SECONDS || 30));
 fs.mkdirSync(out, { recursive: true });
