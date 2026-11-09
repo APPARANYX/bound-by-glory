@@ -15,7 +15,7 @@
   root.BATTLE_ACOUSTICS = root.BATTLE_ACOUSTICS || { speedOfSoundMps: SPEED_OF_SOUND, profiles: cfg };
 
   try {
-    var base = root.BATTLE_AUDIO_BASE || 'https://test.ivandpopov.com/grasstex/Assets/audio/';
+    var base = root.BATTLE_AUDIO_BASE || ((root.BATTLE_API_BASE || '/bound-by-glory/') + 'Assets/audio/');
     fetch(base + 'acoustics.json?ts=' + Date.now(), { cache: 'no-store' })
       .then(function (r) {
         return r.ok ? r.json() : null;
@@ -317,7 +317,7 @@
         var entry = (cache[file] = { file: file, sound: null, ready: false });
         try {
           var scene = soldier.root.getScene(),
-            base = root.BATTLE_AUDIO_BASE || 'https://test.ivandpopov.com/grasstex/Assets/audio/';
+            base = root.BATTLE_AUDIO_BASE || ((root.BATTLE_API_BASE || '/bound-by-glory/') + 'Assets/audio/');
           root.GTLog('[VOICE] request ' + base + file);
           entry.sound = new (root.BattleAudioBackend ? root.BattleAudioBackend.Sound : BABYLON.Sound)(
             'voice-' + file,
