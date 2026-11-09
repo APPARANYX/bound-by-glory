@@ -95,6 +95,8 @@ async function checkUnlock() {
       if (ctx.state === 'running') this.unlocked = true;
     }
   };
+  const logger = { log() {}, warn() {}, error() {} };
+  const noop = () => {};
   const getUnlock = engine =>
     new Function(
       'BABYLON',
@@ -103,7 +105,7 @@ async function checkUnlock() {
       'enableLiveAudioMeter',
       'observeAudioRenderErrors',
       unlockSource + '; return unlockAudio;'
-    )({ Engine: { audioEngine: engine } }, {}, { log() {}, warn() {}, error() {} }, () => {}, () => {});
+    )({ Engine: { audioEngine: engine } }, {}, logger, noop, noop);
   const promise = getUnlock(ae)();
   assert.deepEqual(calls, ['resume', 'unlock'], 'both calls happen synchronously inside the gesture');
   ctx.state = 'running';
