@@ -1,0 +1,5 @@
+# Temporary, method-preserving compatibility alias for renamed 50webs site.
+# Installed only in a newly created, otherwise empty /grasstex/ directory.
+# Keep old audio, benchmarks and POST APIs forwarding while updating callers.
+RewriteEngine On
+RewriteRule ^(.*)$ /bound-by-glory/$1 [R=307,L,NE]
