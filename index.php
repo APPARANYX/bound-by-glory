@@ -1,5 +1,5 @@
 <?php
-$github = 'https://raw.githubusercontent.com/APPARANYX/grasstex/main/index.html?pull=' . time();
+$github = 'https://raw.githubusercontent.com/APPARANYX/bound-by-glory/main/index.html?pull=' . time();
 $fallback = dirname(__FILE__) . '/index.html';
 
 header('Content-Type: text/html; charset=utf-8');

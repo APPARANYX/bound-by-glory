@@ -18,7 +18,7 @@
    ?ref=<branch> always resolves the branch's current head, so that URL is a stable link to share.
    Staged commits are immutable and reused; the oldest are pruned past KEEP. */
 
-$repo = 'APPARANYX/grasstex';
+$repo = 'APPARANYX/bound-by-glory';
 $root = dirname(__FILE__);
 require_once $root . '/runtime-contract.php';
 $previewRoot = $root . '/preview';
@@ -88,7 +88,7 @@ function valid_branch($name) {
 function parse_ref_input($input, &$error) {
     $input = trim((string)$input);
     $pos = false;
-    foreach (array($GLOBALS['repo'], 'Teethree89/grasstex') as $repoName) {
+    foreach (array($GLOBALS['repo'], 'APPARANYX/grasstex', 'Teethree89/grasstex') as $repoName) {
         $prefix = 'github.com/' . $repoName . '/';
         $pos = stripos($input, $prefix);
         if ($pos !== false) break;

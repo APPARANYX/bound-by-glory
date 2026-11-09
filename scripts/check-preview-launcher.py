@@ -159,7 +159,8 @@ check(stage('truncated', str_repeat('c', 40), $root, $previewRoot, $error) === n
 $testTree = array('tree' => array($html, entry('battle/wrong.js', 'not the response')));
 check(stage('bad', str_repeat('d', 40), $root, $previewRoot, $error) === null, 'bad download cannot publish');
 check(!is_dir($previewRoot . '/ref-' . str_repeat('d', 12)), 'no partial publication');
-check(parse_ref_input('https://github.com/APPARANYX/grasstex/tree/main', $error) === array('branch', 'main'), 'organization URL');
+check(parse_ref_input('https://github.com/APPARANYX/bound-by-glory/tree/main', $error) === array('branch', 'main'), 'current repository URL');
+check(parse_ref_input('https://github.com/APPARANYX/grasstex/tree/main', $error) === array('branch', 'main'), 'renamed repository alias');
 check(parse_ref_input('https://github.com/Teethree89/grasstex/tree/main', $error) === array('branch', 'main'), 'legacy repository URL');
 check(parse_ref_input('https://github.com/other/grasstex/tree/main', $error) === null, 'foreign URL rejected');
 echo json_encode(array('warmRuntimeMs' => round($warmMs, 2), 'runtimeFiles' => 24, 'warmDownloads' => 0, 'deltaDownloads' => 1)) . "\n";

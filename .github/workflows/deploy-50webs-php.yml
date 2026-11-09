@@ -87,6 +87,8 @@ jobs:
     if: needs.gate.outputs.should_deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    env:
+      WEB_ROOT: ${{ vars.BATTLE_WEB_ROOT || 'bound-by-glory' }}
 
     steps:
       - name: Checkout verified merge commit
@@ -103,6 +105,7 @@ jobs:
           expected="${{ needs.gate.outputs.target_sha }}"
           actual="$(git rev-parse HEAD)"
           test "$actual" = "$expected"
+          case "$WEB_ROOT" in grasstex|bound-by-glory) ;; *) echo "::error::Unsupported BATTLE_WEB_ROOT: $WEB_ROOT"; exit 1 ;; esac
           echo "Deploy source pinned to verified merge commit: $actual"
 
       # No audio clip is in this public repo: check out the private APPARANYX/grasstex-audio at the
@@ -243,7 +246,7 @@ jobs:
           set net:timeout 15
           set ftp:ssl-allow no
           set ftp:passive-mode true
-          cd grasstex
+          cd "$WEB_ROOT"
           get .battle-audio-tracker.json -o "$GITHUB_WORKSPACE/.audio-remote-tracker.json"
           bye
           LFTP
@@ -254,7 +257,7 @@ jobs:
           set net:timeout 15
           set ftp:ssl-allow no
           set ftp:passive-mode true
-          cd grasstex
+          cd "$WEB_ROOT"
           get .battle-deploy.sha256.tsv -o "$GITHUB_WORKSPACE/.deploy-remote.sha256.tsv"
           bye
           LFTP
@@ -298,13 +301,13 @@ jobs:
         run: |
           set -u
           [[ -f .deploy-remote.sha256.tsv ]] || { echo "No remote state: this run uploads everything anyway."; exit 0; }
-          lftp -u "$FTP_USER","$FTP_PASSWORD" "$FTP_HOST" <<'LFTP' > .fbx-remote-files.txt || true
+          lftp -u "$FTP_USER","$FTP_PASSWORD" "$FTP_HOST" <<LFTP > .fbx-remote-files.txt || true
           set cmd:fail-exit yes
           set net:max-retries 2
           set net:timeout 15
           set ftp:ssl-allow no
           set ftp:passive-mode true
-          cd grasstex/Assets
+          cd "$WEB_ROOT/Assets"
           set cmd:fail-exit no
           find soldiers
           find animations
@@ -328,13 +331,13 @@ jobs:
           : "${FTP_PASSWORD:?Missing repository secret FTP_PASS}"
           rm -f .audio-remote-files.txt .audio-remote-files.raw
 
-          if lftp -u "$FTP_USER","$FTP_PASSWORD" "$FTP_HOST" <<'LFTP' > .audio-remote-files.raw
+          if lftp -u "$FTP_USER","$FTP_PASSWORD" "$FTP_HOST" <<LFTP > .audio-remote-files.raw
           set cmd:fail-exit yes
           set net:max-retries 2
           set net:timeout 15
           set ftp:ssl-allow no
           set ftp:passive-mode true
-          cd grasstex/Assets/audio
+          cd "$WEB_ROOT/Assets/audio"
           find voices
           bye
           LFTP
@@ -432,7 +435,7 @@ jobs:
           set net:timeout 15
           set ftp:ssl-allow no
           set ftp:passive-mode true
-          cd grasstex
+          cd "$WEB_ROOT"
 
           source "$GITHUB_WORKSPACE/.deploy-plan/deletes.lftp"
           source "$GITHUB_WORKSPACE/.deploy-plan/uploads.lftp"
@@ -485,8 +488,8 @@ jobs:
             echo ""
             echo "- Build: **${{ steps.version.outputs.version }}** (tag \`build-${{ steps.version.outputs.version }}\`, cache epoch \`${{ steps.version.outputs.cacheEpoch }}\`)"
             echo "- Source: \`main@$(git rev-parse --short HEAD)\`"
-            echo "- Battle: \`/grasstex/battle_sim.php\`"
-            echo "- Review: \`/grasstex/battle_metrics.php\`"
+            echo "- Battle: \`/${WEB_ROOT}/battle_sim.php\`"
+            echo "- Review: \`/${WEB_ROOT}/battle_metrics.php\`"
             echo "- Runtime uploads: **$runtime_uploads**"
             echo "- Post-runtime uploads: **$post_uploads**"
             echo "- Unchanged managed files skipped: **$unchanged**"
@@ -494,7 +497,7 @@ jobs:
             echo "- Runtime deploy comparison: SHA-256 content hash, not timestamps"
             echo "- Voice MP3 upload: existence-based; already-deployed MP3s are never re-uploaded"
             echo "- Audio changed since the last deploy: **${{ steps.audio.outputs.changed }}** (audio steps skipped when false)"
-            echo "- Deployment state: \`/grasstex/.battle-deploy.sha256.tsv\` published last"
+            echo "- Deployment state: \`/${WEB_ROOT}/.battle-deploy.sha256.tsv\` published last"
             echo "- Trigger: every push to \`main\` plus manual dispatch"
             echo "- Build number: highest \`build-v<N>\` tag + 1 at start; the tag is pushed only after a successful deploy"
           } >> "$GITHUB_STEP_SUMMARY"

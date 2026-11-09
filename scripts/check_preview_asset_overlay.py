@@ -81,6 +81,13 @@ with tempfile.TemporaryDirectory(prefix="grasstex-preview-overlay-") as folder:
         assert "animations/Removed\\.fbx$ - [G,L]" in rules
         assert "RewriteCond %{REQUEST_FILENAME} !-f" in rules
         assert "/grasstex/Assets/$1/$2" in rules
+        assert "/bound-by-glory/Assets/$1/$2" in overlay.rewrite_rules([], "bound-by-glory")
+        assert "/grasstex/Assets/$1/$2" in overlay.rewrite_rules([], "grasstex")
+        try:
+            overlay.rewrite_rules([], "../../escape")
+            assert False, "Unsafe site root accepted"
+        except ValueError:
+            pass
         assert json.loads((stage / "asset-overlay.json").read_text()) == result
         # Identical asset trees must stage zero FBX and keep production fallback.
         clean = base / "clean"
