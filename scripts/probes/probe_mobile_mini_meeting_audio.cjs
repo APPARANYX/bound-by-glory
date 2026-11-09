@@ -244,7 +244,7 @@ function summary(result) {
             { timeout: warmup * 1000 }
           );
         await page.evaluate(() => {
-          const ae = window.BattleAudioBackend ? BattleAudioBackend.engine() : BABYLON.Engine.audioEngine,
+          const ae = BattleAudioBackend.engine(),
             ctx = ae?.audioContext,
             master = ae?.masterGain;
           let analyser = null,
@@ -334,7 +334,7 @@ function summary(result) {
           const b = window.__battle__,
             engine = b.scene.getEngine();
           const audioc = (
-            window.BattleAudioBackend ? BattleAudioBackend.engine() : window.BABYLON.Engine.audioEngine
+            BattleAudioBackend.engine()
           )?.audioContext;
           const value = {
             time: b.time,

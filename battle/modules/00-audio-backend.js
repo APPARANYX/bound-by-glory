@@ -15,7 +15,9 @@
   // panners on per-sample processing (~13x cost per 3D voice), slowing the audio
   // clock under load. Direct writes skip unchanged values and never use the
   // timeline. ?audioSpatialWrite=automation restores Howler's per-frame path.
-  var spatialAutomation = /(?:^|[?&])audioSpatialWrite=automation(?:&|$)/.test((root.location && root.location.search) || '');
+  var spatialAutomation = /(?:^|[?&])audioSpatialWrite=automation(?:&|$)/.test(
+    (root.location && root.location.search) || ''
+  );
   var listenerState = null;
   var scenes = new WeakMap(),
     clips = new Map(),
@@ -48,27 +50,26 @@
   function init() {
     root.Howler.autoSuspend = false;
     root.Howler.volume(); // Public API initializes the one Web Audio context.
-    if (!root.Howler.usingWebAudio || !root.Howler.ctx)
-      throw new Error('Howler experiment requires Web Audio');
+    if (!root.Howler.usingWebAudio || !root.Howler.ctx) throw new Error('Howler playback requires Web Audio');
   }
   var ready = new Promise(function (resolve, reject) {
-        function loaded() {
-          try {
-            init();
-            resolve();
-          } catch (e) {
-            reject(e);
-          }
-        }
-        if (root.Howl && root.Howler) return loaded();
-        var script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/howler@2.2.4/dist/howler.min.js';
-        script.onload = loaded;
-        script.onerror = function () {
-          reject(new Error('Could not load Howler 2.2.4'));
-        };
-        document.head.appendChild(script);
-      });
+    function loaded() {
+      try {
+        init();
+        resolve();
+      } catch (e) {
+        reject(e);
+      }
+    }
+    if (root.Howl && root.Howler) return loaded();
+    var script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/howler@2.2.4/dist/howler.min.js';
+    script.onload = loaded;
+    script.onerror = function () {
+      reject(new Error('Could not load Howler 2.2.4'));
+    };
+    document.head.appendChild(script);
+  });
   // The page bootstrap awaits and surfaces this rejection; avoid an early unhandled event.
   ready.catch(function () {});
   function engine() {

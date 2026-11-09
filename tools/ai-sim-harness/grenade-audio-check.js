@@ -21,7 +21,7 @@ function test(name, fn) {
 const pending = new Set();
 function load(search, engine) {
   const r = {};
-  if (engine) r.BABYLON = { Engine: { audioEngine: engine } };
+  r.BattleAudioBackend = { engine: () => engine || null };
   if (search != null) r.location = { search };
   new Function('window', 'globalThis', 'location', CORE)(r, r, r.location);
   r.BattleGrenades = {

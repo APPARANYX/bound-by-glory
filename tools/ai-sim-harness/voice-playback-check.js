@@ -113,7 +113,7 @@ function runModule(rel, invalidate, suspended = false) {
     assert.equal(handle.started, false, 'no voice starts while context is suspended');
     assert.equal(handle.ended, true, 'unavailable voice handle completes');
     assert.equal(sounds[0].played, 0);
-    ctx.BABYLON.Engine.audioEngine.audioContext.state = 'running';
+    audioContext.state = 'running';
     ctx.performance.now = () => 6000;
     const next = ctx.BattleVoiceScheduler.enqueue(soldier, 'engage', null, { priority: 'tactical' });
     assert.equal(next.started, true, 'new voice starts after resume');

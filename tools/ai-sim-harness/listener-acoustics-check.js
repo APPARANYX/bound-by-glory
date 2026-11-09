@@ -122,10 +122,7 @@ function world(flags = '') {
   assert.equal(w.api.active, 2, 'priority never increases processing budget');
   assert.equal(w.api.stats.replacedCapacity, 1, 'higher priority replaces far slot');
   assert.ok(far1.neutralized || far2.neutralized, 'evicted source continues dry');
-  assert.equal(
-    w.api.prepare(w.sound(), { x: 900, y: 1.6, z: 0 }, 'gunDistant', 0.001, w.scene),
-    false
-  );
+  assert.equal(w.api.prepare(w.sound(), { x: 900, y: 1.6, z: 0 }, 'gunDistant', 0.001, w.scene), false);
   assert.equal(w.api.stats.skippedCapacity, 1, 'lower priority plays without filtered slot');
 }
 {

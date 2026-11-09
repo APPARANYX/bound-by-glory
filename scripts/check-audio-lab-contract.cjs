@@ -47,7 +47,7 @@ assert.match(full, /sim\.onShot/, 'ballistic audio invoked');
 assert.match(full, /catalogPlayed/, 'catalog coverage separately measured');
 assert.match(lab, /audibleOutputSamples:/, 'nonzero master output verification');
 assert.match(html, /full-audio-stress\.js/, 'full-mix companion loaded');
-assert.match(read('battle/modules/00a-audio-mix.js'), /fullMix=1/, 'lab opt-in uses battle compressor');
+assert.doesNotMatch(read('battle/modules/00a-audio-mix.js'), /createDynamicsCompressor|ensureLimiter/, 'Howler owns output without a Babylon soundtrack compressor');
 assert.match(lab, /us:\s*\['rifle'/);
 assert.match(lab, /ge:\s*\['rifle'/);
 assert.match(lab, /Number\(query\.get\('squads'\)\) \|\| 5/, 'default five squads per side');
@@ -69,7 +69,8 @@ assert.match(
 assert.match(acoustics, /acousticPriority=1/, 'priority acoustics experiment is opt-in');
 assert.match(acoustics, /stats\.replacedCapacity\+\+/, 'priority preemption telemetry');
 assert.match(acoustics, /acousticHoldMs/, 'bounded optional minimum acoustic record residence');
-assert.match(acoustics, /linearRampToValueAtTime/, 'displaced reverb send ramps instead of snapping');
+assert.match(acoustics, /e\.sound\.neutralizeAcoustics\(\)/, 'displaced routes delegate to the Howler owner');
+assert.match(read('battle/modules/00-audio-backend.js'), /chain\.send\.gain\.setTargetAtTime\(0, t, 0\.008\)/, 'Howler fades displaced wet sends');
 assert.match(
   lab,
   /acousticHoldMs: root\.BattleListenerAcoustics/,
