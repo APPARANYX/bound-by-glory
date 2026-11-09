@@ -1,0 +1,1 @@
+MOVED: 21 of 21 pairs changed (median first part 249 s); 7 of 42 counters under p 0.05 (about 2.1 by chance), 3 under 0.0012; casualties -6.4% (p 0.5811)
