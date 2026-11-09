@@ -33,6 +33,7 @@ html,body{height:100%;margin:0;padding:0;overflow:hidden;background:#0f141c;font
 #controls{display:flex;gap:6px;margin-top:10px}#controls button{flex:1;padding:5px 4px;background:#1c2116;border:1px solid #46512f;color:#d9dcc4;font-size:11px;border-radius:5px;cursor:pointer}#controls button.active{background:#3c4a26;color:#fff}#controls button:hover{background:#2a331c}
 #restartBtn{margin-top:8px;width:100%;padding:6px;background:#3a2020;border:1px solid #6b3232;color:#f1d9d9;border-radius:5px;cursor:pointer;font-size:11px}#restartBtn:hover{background:#4a2828}
 #startBtn{margin-top:8px;width:100%;padding:8px;background:#3c4a26;border:1px solid #6b8a44;color:#fff;border-radius:5px;cursor:pointer;font-size:12px;font-weight:700}#startBtn:hover{background:#4a5c2e}#startBtn[hidden]{display:none}
+#audioRecoverBtn{margin-top:8px;width:100%;padding:8px;background:#50351c;border:1px solid #bd8852;color:#fff3d8;border-radius:5px;cursor:pointer;font-size:12px;font-weight:700}#audioRecoverBtn[hidden]{display:none}
 #debugPanel{margin-top:8px;border-top:1px solid rgba(255,255,255,.1);padding-top:7px}#debugPanel summary{cursor:pointer;color:#b9bea7;font-size:11px;user-select:none;list-style-position:inside}#debugConsole{margin-top:6px;height:145px;overflow:auto;background:#070907;border:1px solid rgba(255,255,255,.12);border-radius:5px;padding:6px;color:#b8c4ad;font:10px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.debug-warn{color:#d8c57c}.debug-error{color:#e58d8d}
 #animationLab{position:fixed;right:12px;bottom:12px;z-index:14;width:260px;padding:9px;background:rgba(14,17,12,.93);border:1px solid rgba(255,255,255,.14);border-radius:8px;color:#e7e7dc;box-shadow:0 7px 24px rgba(0,0,0,.25);transition:transform .2s ease,opacity .15s}#animationLab[hidden]{display:none}#animationLab h2{margin:0 0 7px;font-size:11px;letter-spacing:.08em;color:#fff;display:flex;justify-content:space-between;align-items:center}#animationLab canvas{display:block;width:100%;height:190px;background:#242b22;border:1px solid rgba(255,255,255,.1);border-radius:5px}#animationLab select{display:block;width:100%;box-sizing:border-box;margin-top:7px;padding:5px;border:1px solid #46512f;border-radius:4px;background:#1c2116;color:#e7e7dc;font-size:11px}#animationLab small{display:block;margin-top:6px;color:#a8ab8e;line-height:1.35}#animationLabClose,#animationLabToggle{border:1px solid #596342;border-radius:5px;background:#1c2116;color:#d9dcc4;cursor:pointer;font-size:11px}#animationLabClose{padding:2px 6px}#animationLabToggle{position:fixed;right:12px;bottom:12px;z-index:13;padding:7px 9px;box-shadow:0 4px 14px rgba(0,0,0,.25)}#animationLabToggle[hidden]{display:none}
 #animationLab .frame-controls{display:flex;align-items:center;gap:7px;margin-top:8px;font-size:11px;color:#c5ccb9}#animationLab .frame-controls button{border:1px solid #596342;border-radius:5px;background:#1c2116;color:#d9dcc4;padding:5px 8px;cursor:pointer}#animationLab .frame-controls input{flex:1;min-width:30px;accent-color:#99b96c}#animationLab .frame-controls output{min-width:54px;text-align:right;font-variant-numeric:tabular-nums}
@@ -97,6 +98,7 @@ window.BattleLoading=(function(){
   <div class="row"><span>Time</span><span id="clock">0:00</span></div>
   <div id="cameraHint">Camera: WASD pan · Shift = faster · mouse orbit/zoom</div>
   <button id="startBtn" type="button">&#9654; Start battle</button>
+  <button id="audioRecoverBtn" type="button" hidden>Sound stopped — Retry audio</button>
   <div id="controls"><button data-speed="1">1&times;</button><button data-speed="4" class="active">4&times;</button><button data-speed="8">8&times;</button></div>
   <button id="restartBtn" type="button">End battle</button>
   <details id="debugPanel"><summary>Console</summary><div id="debugConsole"></div></details>
@@ -254,7 +256,24 @@ window.BattleLoading=(function(){
     frameInput.addEventListener('change',function(){seekFrame(frameInput.value);});
     window.__battleMotionLab={state:function(){var fx=labSoldier&&labSoldier._fbx,p=labSoldier&&labSoldier.root.position;return{pose:labPose,frame:+frameInput.value,paused:labPaused,rootX:p&&p.x||0,rootZ:p&&p.z||0,twoHand:fx&&fx.twoHand||0,supportErrorCm:fx&&fx.supportErrorCm,clip:source.textContent};}};
   })();
-  var startBtn=document.getElementById('startBtn');
+  var startBtn=document.getElementById('startBtn'),
+      audioRecoverBtn=document.getElementById('audioRecoverBtn'),observedAudioContext=null;
+  function observeAudioRenderErrors(ctx){
+    if(!ctx||ctx===observedAudioContext||typeof ctx.addEventListener!=='function')return;
+    observedAudioContext=ctx;
+    ctx.addEventListener('error',function(){
+      // Chromium emits this on a renderer/device failure, then may suspend the
+      // AudioContext even though Start successfully unlocked it beforehand.
+      var record={wallMs:Math.round(performance.now()),state:ctx.state,
+        time:ctx.currentTime,sampleRate:ctx.sampleRate};
+      audioRendererErrors.push(record);if(audioRendererErrors.length>12)audioRendererErrors.shift();
+      audioRecoverBtn.hidden=false;
+      console.error('[AUDIO] AudioContext render/device error; click Retry audio',record);
+    });
+    ctx.addEventListener('statechange',function(){
+      if(audioRendererErrors.length&&ctx.state==='suspended')audioRecoverBtn.hidden=false;
+    });
+  }
   async function unlockAudio(){
     var ae=window.BattleAudioBackend?BattleAudioBackend.engine():BABYLON.Engine.audioEngine;
     if(!ae){console.error('[AUDIO] Babylon engine missing');return false;}
@@ -263,6 +282,7 @@ window.BattleLoading=(function(){
       // then verify the real context before allowing either Start or Skills Play.
       var ctx=ae.audioContext;
       if(!ctx){console.error('[AUDIO] Audio context missing');return false;}
+      observeAudioRenderErrors(ctx);
       var resuming=ctx.state!=='running'&&ctx.resume?ctx.resume():Promise.resolve();
       var unlocking=typeof ae.unlock==='function'?ae.unlock():undefined;
       await Promise.all([resuming,unlocking]);
@@ -276,9 +296,24 @@ window.BattleLoading=(function(){
     }catch(e){console.error('[AUDIO] unlock failed',e);return false;}
   }
   window.__battleUnlockAudio__=unlockAudio;
+  audioRecoverBtn.addEventListener('click',async function(){
+    // Must be a user gesture; never silently restart or replace audio contexts.
+    audioRecovery.attempts++;
+    var ok=await unlockAudio();
+    if(ok){
+      audioRecovery.successes++;
+      audioRecoverBtn.hidden=true;
+      console.log('[AUDIO] retry resumed context; audible device output not yet proven');
+    }else{
+      audioRecovery.failures++;
+      audioRecoverBtn.hidden=false;
+      console.error('[AUDIO] retry could not resume context; check browser output device');
+    }
+  });
   // Opt-in continuous master-output trace for real battles (?audioDiag=1).
   // Audio-only synthetic lab uses the same analyser route, but has no renderer or AI.
   var liveAudioHistory=[],liveAudioMeter=null,liveAudioMeterTimer=null;
+  var audioRendererErrors=[],audioRecovery={attempts:0,successes:0,failures:0};
   var audioContinuity=[],audioEvents=[],audioMarkers=[],lastAudioSample=null,lastAudioState='';
   var liveAudioData=null,liveMeterNode=null,meterChunks=[];
   function audioCopy(value){return value==null?null:JSON.parse(JSON.stringify(value));}
@@ -400,7 +435,8 @@ window.BattleLoading=(function(){
       audioFormat:window.BattleAudioFormat&&BattleAudioFormat.state,
       output:liveOutput(),outputHistory:audioCopy(liveAudioHistory),
       continuity:audioCopy(audioContinuity),events:audioCopy(audioEvents),silenceMarkers:audioCopy(audioMarkers),
-      diagnosticVersion:4,
+      diagnosticVersion:4,audioRenderErrors:audioCopy(audioRendererErrors),
+      audioRecovery:audioCopy(audioRecovery),
       environment:{userAgent:navigator.userAgent,build:window.BATTLE_BUILD_DEPLOYED||BUILD,
         ref:window.BATTLE_REF||null,sampleRate:ae&&ae.audioContext&&ae.audioContext.sampleRate,
         baseLatency:ae&&ae.audioContext&&ae.audioContext.baseLatency,
