@@ -161,7 +161,8 @@
     return st;
   }
   function baseUrl() {
-    var base = root.BATTLE_SOLDIER_ASSET_BASE || root.BATTLE_ASSET_BASE || ((root.BATTLE_API_BASE || '/bound-by-glory/') + 'Assets/');
+    var assetRoot = root.BATTLE_API_BASE || '/bound-by-glory/';
+    var base = root.BATTLE_SOLDIER_ASSET_BASE || root.BATTLE_ASSET_BASE || assetRoot + 'Assets/';
     return String(base).replace(/\/?$/, '/');
   }
   function fetchAsset(category, name) {
