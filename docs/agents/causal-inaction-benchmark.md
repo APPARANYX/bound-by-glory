@@ -33,6 +33,33 @@ Files in reports/causal-inaction/: raw.json (per-battle original evidence), summ
 
 ## Contract and interpretation
 
+Classification version 3 adds optional native execution tags: Micro update entry,
+preparation-held-fire, suppression-held-fire, bound-await-adoption, recognition-held-fire,
+firing-path entry, weapon attempt and ammunition-gate refusal. March/watch drills and
+station transit, sector rejection and blocked aperture branches are also tagged; this
+verifies their execution, not the correctness of their tactical selection. Tags fire only inside
+branches the owner already executes. Missing hooks are harmless; observer errors are
+caught at the native call site. No extra gate, LOS query, RNG, decision or timer is run.
+
+`executed-nonfiring-decision` is **verified at decision-branch scope only**. The existing
+direct-denial/trigger labels retain precedence. The same interval still carries v2 likely
+context and all raw events; no single tag verifies continuous silence or proves that the
+behavior is correct. `evidence.decisions` keeps owner, actor (episode), target, action key,
+mission version, canonical fire envelope, simulation timestamp and bounded event counts.
+Coverage counts native update timestamps, timestamps with an executed inhibition,
+firing-path entry, weapon attempt, and other update timestamps. Multiple branches can
+occur at one timestamp, so these counts are not exclusive and cannot be converted into
+seconds or a continuous explained fraction. A weapon attempt is not a native discharge.
+Updates with no terminal trace and intervals without update evidence remain unproven.
+
+Per actor, at most 512 recent decision events within 10 simulated seconds are retained;
+capacity losses are explicit in decisionEventsOmitted and omittedLifetime. No lifecycle
+state is settled while capturing evidence. The vocabulary is fixed to keep counts bounded.
+Uninstrumented branches remain unknown rather than being inferred from missing tags.
+Historical v2 observer-only overlays cannot collect these events without the matching
+instrumentation-only native-owner patch; keep runtime, hook and observer provenance.
+
+
 Classification version 2 keeps preparation and suppression observations across the entire
 sampled silent episode, rather than inferring from its end state alone. A HOLD that opens
 before reporting can yield `preparation-observed-during-silence`; an active suppression

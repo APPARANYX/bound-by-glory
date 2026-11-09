@@ -296,7 +296,22 @@
   /* SquadAI slots: the weapon must be able to discharge before any shot, and every round that leaves
    it (aimed or suppressive) costs ammunition and heat. */
   function ready(s, battle) {
-    return !unavailable(s, battle);
+    var result = !unavailable(s, battle),
+      tap = root.BattleCausalInaction;
+    if (!result && tap && tap.decision) {
+      var reason =
+        !s || !s.weapon
+          ? 'weapon-missing'
+          : s.clearingStoppage || s.weapon.jammed
+            ? 'weapon-stoppage'
+            : s.reloading
+              ? 'weapon-reloading'
+              : 'weapon-empty';
+      try {
+        tap.decision(s, battle, reason, 'ammunition');
+      } catch (_) {}
+    }
+    return result;
   }
   root.SquadAI.extend('fireGate', 'ammunition', ready);
   root.SquadAI.extend('areaFireGate', 'ammunition', ready);

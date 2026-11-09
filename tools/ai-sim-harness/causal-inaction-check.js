@@ -492,3 +492,54 @@ assert.equal(
 console.log(
   'PASS temporal fire context: HOLD-to-OPEN, expired suppression, honest unknowns, shot reset and stale orders'
 );
+
+const executed = fixture('?probeIds=76', 'none');
+function decision(f, t, code) {
+  f.sim.time = t;
+  f.root.BattleCausalInaction.decision(f.soldier, f.sim, code, 'engagement', 'bound-1');
+}
+executed.sample(0);
+decision(executed, 1, 'micro-update');
+decision(executed, 1, 'preparation-held-fire');
+decision(executed, 2, 'micro-update');
+decision(executed, 2, 'firing-path-entered');
+decision(executed, 2, 'weapon-attempt');
+decision(executed, 3, 'micro-update'); // entered Micro, no traced terminal branch
+executed.sample(5);
+const traced = executed.probe.report(executed.sim).episodes[0];
+assert.equal(traced.code, 'executed-nonfiring-decision');
+assert.equal(traced.confidence, 'verified');
+assert.equal(traced.scope, 'decision-branch', 'only actual branch execution is verified');
+assert.equal(traced.evidence.decisions.coverage.updateTicks, 3);
+assert.equal(traced.evidence.decisions.coverage.blockedUpdateTicks, 1);
+assert.equal(traced.evidence.decisions.coverage.weaponAttemptTicks, 1);
+assert.equal(traced.evidence.decisions.coverage.otherUpdateTicks, 1);
+assert.equal(traced.evidence.roundsFired, 0, 'attempt is not a discharge');
+assert.equal(traced.evidence.decisions.events[0].actionId, 'bound-1');
+assert.equal(executed.stats().randoms, 0);
+assert.equal(executed.stats().mutations, 0);
+
+const oldTarget = fixture('?probeIds=76', 'none');
+decision(oldTarget, 0, 'suppression-held-fire');
+oldTarget.target.id = 100;
+for (let t = 1; t <= 6; t++) oldTarget.sample(t);
+assert.equal(
+  oldTarget.probe.report(oldTarget.sim).episodes[0].code,
+  'unexplained-fire-silence',
+  'a decision for a different target never explains a new interval'
+);
+const eventCap = fixture('?probeIds=76', 'none');
+for (let i = 0; i < 600; i++) decision(eventCap, i / 1000, i % 2 ? 'micro-update' : 'bound-await-adoption');
+eventCap.sample(1);
+eventCap.sample(6);
+const capped = eventCap.probe.report(eventCap.sim);
+assert.equal(capped.decisionEventsOmitted, 88);
+assert.equal(
+  capped.episodes[0].code,
+  'unexplained-fire-silence',
+  'old events before interval start excluded'
+);
+assert.equal(capped.episodes[0].evidence.decisions.omittedLifetime, 88);
+console.log(
+  'PASS executed decisions: partial tick coverage, attempts vs rounds, target isolation and explicit caps'
+);

@@ -23,6 +23,7 @@
   var MAX_EPISODES = 160,
     MAX_HISTORY = 10,
     MAX_DENIALS = 160,
+    MAX_DECISIONS = 512,
     MAX_COVER = 320,
     FIRE_SILENCE = 5,
     MOVE_STILL = 12;
@@ -59,6 +60,8 @@
         move: null,
         history: [],
         denials: [],
+        decisions: [],
+        decisionsOmitted: 0,
         coverEvents: [],
         coverLane: null
       };
@@ -253,6 +256,63 @@
         (state === 'hold' || (state === 'precision' && String(order.shooterId) !== String(s.id)))
     };
   }
+  var DECISIONS = [
+    'micro-update',
+    'firing-path-entered',
+    'weapon-attempt',
+    'preparation-held-fire',
+    'suppression-held-fire',
+    'bound-await-adoption',
+    'recognition-held-fire',
+    'weapon-missing',
+    'weapon-stoppage',
+    'weapon-reloading',
+    'weapon-empty',
+    'march-drill-no-fire-path',
+    'watch-drill-no-fire-path',
+    'station-en-route',
+    'station-no-sector-target',
+    'station-line-blocked'
+  ];
+  function decisionEvidence(s, sim, f, d) {
+    var events = d.decisions.filter(function (e) {
+        return e.t >= f.since && e.t <= sim.time && e.target === f.target;
+      }),
+      ticks = {},
+      counts = {};
+    events.forEach(function (e) {
+      bump(counts, e.code);
+      var tick = ticks[String(e.t)] || (ticks[String(e.t)] = {});
+      tick[e.code] = true;
+    });
+    var coverage = {
+      updateTicks: 0,
+      blockedUpdateTicks: 0,
+      firingPathTicks: 0,
+      weaponAttemptTicks: 0,
+      otherUpdateTicks: 0
+    };
+    Object.keys(ticks).forEach(function (t) {
+      var row = ticks[t],
+        blocked = DECISIONS.slice(3).some(function (code) {
+          return row[code];
+        });
+      if (row['firing-path-entered']) coverage.firingPathTicks++;
+      if (row['weapon-attempt']) coverage.weaponAttemptTicks++;
+      if (row['micro-update']) {
+        coverage.updateTicks++;
+        if (blocked) coverage.blockedUpdateTicks++;
+        else if (!row['firing-path-entered']) coverage.otherUpdateTicks++;
+      }
+    });
+    return {
+      counts: counts,
+      coverage: coverage,
+      events: events,
+      omittedLifetime: d.decisionsOmitted,
+      scope: 'executed-decisions-not-continuous-time-coverage'
+    };
+  }
   function fireClassification(s, sim, f, d) {
     var rejects = {
       los: Math.max(0, (+s._losBlockedFire || 0) - f.los),
@@ -273,6 +333,7 @@
       triggerRejectDeltas: rejects,
       directFireDenials: denials,
       roundsFired: 0,
+      decisions: decisionEvidence(s, sim, f, d),
       intervalContext: Object.assign({}, f.context, { orders: Object.assign({}, f.context.orders) }),
       coverDecisions: d.coverEvents
         .filter(function (e) {
@@ -311,6 +372,21 @@
           scope: 'shot-attempt',
           interpretation:
             'A real trigger-path rejection occurred during silence; this does not prove it explains the entire interval.'
+        }
+      };
+    if (
+      DECISIONS.slice(3).some(function (code) {
+        return evidence.decisions.counts[code] > 0;
+      })
+    )
+      return {
+        evidence: evidence,
+        result: {
+          code: 'executed-nonfiring-decision',
+          confidence: 'verified',
+          scope: 'decision-branch',
+          interpretation:
+            'A native owner executed a recorded nonfiring or inhibition branch during this interval. Verification applies to those decisions only; other updates and time between events remain unproven.'
         }
       };
     if (
@@ -541,7 +617,7 @@
     start: function (sim) {
       data = {
         schema: 'grasstex-causal-inaction-v1',
-        classificationVersion: 2,
+        classificationVersion: 3,
         config: options,
         counts: {},
         reasons: {},
@@ -549,6 +625,7 @@
         episodes: [],
         episodesOmitted: 0,
         directDenialsOmitted: 0,
+        decisionEventsOmitted: 0,
         coverDecisions: [],
         coverDecisionsOmitted: 0,
         coverDecisionCounts: {},
@@ -560,6 +637,29 @@
       units = new Map();
       /* Called only from the real Engagement rejection sites, never by sampling a gate. */
       root.BattleCausalInaction = {
+        decision: function (s, battle, code, owner, actionId) {
+          if (!chosen(s) || !battle || DECISIONS.indexOf(code) < 0) return;
+          var d = unit(s),
+            t = +battle.time || 0,
+            target = s.target && !s.target.dead ? String(s.target.id) : null,
+            last = d.decisions[d.decisions.length - 1];
+          if (last && last.t === t && last.code === code && last.target === target) return;
+          d.decisions.push({
+            t: t,
+            code: code,
+            owner: String(owner || ''),
+            target: target,
+            actionId: actionId == null ? null : String(actionId),
+            missionVersion: (s.squad._macroMission && s.squad._macroMission.version) || null,
+            fireEnvelope: fireContext(s, battle).envelopeId
+          });
+          while (d.decisions.length && d.decisions[0].t < t - 10) d.decisions.shift();
+          if (d.decisions.length > MAX_DECISIONS) {
+            d.decisions.shift();
+            d.decisionsOmitted++;
+            data.decisionEventsOmitted++;
+          }
+        },
         denied: function (s, battle, code) {
           if (!chosen(s) || !battle) return;
           var d = unit(s),

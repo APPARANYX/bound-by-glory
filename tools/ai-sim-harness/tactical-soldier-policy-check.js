@@ -198,6 +198,8 @@ test('U2 personal fire preserves HOLD, recognition, movement and reload guards',
 
 test('U2 allowed fire reaches the real ammunition/ballistics owner, with native discharge evidence', () => {
   const w = world();
+  const decisions = [];
+  w.r.BattleCausalInaction = { decision: (s, b, code) => decisions.push(code) };
   w.r.BattleAmmunition.initialize(w.s, w.b);
   ready(w);
   for (let i = 0; i < 40 && !w.r.BattleAmmunition.shotEvidence(w.s, w.b); i++) {
@@ -208,6 +210,8 @@ test('U2 allowed fire reaches the real ammunition/ballistics owner, with native 
   }
   const shot = w.r.BattleAmmunition.shotEvidence(w.s, w.b);
   assert.ok(shot && shot.shots > 0, 'selection alone cannot satisfy this check');
+  assert.ok(decisions.includes('firing-path-entered'));
+  assert.ok(decisions.includes('weapon-attempt'));
   assert.ok(w.s.weapon.ammo < w.s.weapon.stats.magazineSize || w.s.weapon.ammo < 8);
 });
 
@@ -393,3 +397,27 @@ test('pure choices are deterministic and cannot read actors, draw RNG, or write 
   );
 });
 console.log(count + ' soldier policy checks passed');
+
+test('native preparation and pinned branches report decisions without observer authority', () => {
+  const w = world();
+  const events = [];
+  w.r.BattleCausalInaction = { decision: (s, b, code) => events.push(code) };
+  w.q.fireControl = { state: 'hold' };
+  // The existing preparation effector is called directly, as by the native controller drill.
+  const prep = w.E.controllerCombat.start(w.s, w.b, 'prepare');
+  assert.ok(prep);
+  w.E.updateSoldier(w.s, w.b);
+  assert.ok(events.includes('preparation-held-fire'));
+  w.E.controllerCombat.end(w.s, w.b, prep);
+  w.q.fireControl = { state: 'open' };
+  w.s.suppressedUntil = w.b.time + 3;
+  const request = w.E.controllerCombat.start(w.s, w.b, 'pinned');
+  assert.ok(request);
+  w.E.updateSoldier(w.s, w.b);
+  assert.ok(events.includes('micro-update'));
+  assert.ok(events.includes('suppression-held-fire'));
+  w.r.BattleCausalInaction.decision = () => {
+    throw Error('observer failure');
+  };
+  assert.doesNotThrow(() => w.E.updateSoldier(w.s, w.b));
+});
