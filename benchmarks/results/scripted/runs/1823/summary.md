@@ -1,0 +1,72 @@
+# Benchmark run #1823 · 60 seeds from `pr797-micro-u-20261109` (ge-defend), windows `0+600`
+
+- **OFF** flags: `strategicInterception=0&controllerSoldierFire=0` · **ON** flags: `strategicInterception=0`
+- work/pin/pr797-5d7cc87 @ 5d7cc87 · [run](https://github.com/APPARANYX/grasstex/actions/runs/42566439447) · build v29-dev
+
+## Verdict
+
+**INERT: all 60 pairs identical in every field**
+
+
+## Paired comparison (off against on)
+
+- **60** pairs (unpaired: off 0, on 0) · identical in every field: **60** · runtime errors off 0 / on 0 · wall time on/off x1.01 (gate 1.25)
+- no record has a timeline or stress series that parts
+
+| counter | off | on | mean diff per pair | pairs changed | on more | on fewer | sign p |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `casualties` | 2178 | 2178 | 0 | 0 | 0 | 0 | 1 |
+| `usKills` | 947 | 947 | 0 | 0 | 0 | 0 | 1 |
+| `geKills` | 1231 | 1231 | 0 | 0 | 0 | 0 | 1 |
+| `fire.total` | 69163 | 69163 | 0 | 0 | 0 | 0 | 1 |
+| `fire.hits` | 4973 | 4973 | 0 | 0 | 0 | 0 | 1 |
+| `retreatSamples` | 125445 | 125445 | 0 | 0 | 0 | 0 | 1 |
+| `movementResolver.changes` | 320486 | 320486 | 0 | 0 | 0 | 0 | 1 |
+| `grenades.throws` | 56 | 56 | 0 | 0 | 0 | 0 | 1 |
+| `grenades.bursts` | 54 | 54 | 0 | 0 | 0 | 0 | 1 |
+| `grenades.wounded` | 21 | 21 | 0 | 0 | 0 | 0 | 1 |
+| `grenades.casualties` | 8 | 8 | 0 | 0 | 0 | 0 | 1 |
+| `grenades.suppressed` | 38 | 38 | 0 | 0 | 0 | 0 | 1 |
+| `grenades.friendlyWounded` | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
+| `grenades.friendlyCasualties` | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
+| `grenades.aborted` | 8 | 8 | 0 | 0 | 0 | 0 | 1 |
+| `movementStalls.length` | 1 | 1 | 0 | 0 | 0 | 0 | 1 |
+| `routeStalls.length` | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
+| `targetlessStalls.length` | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
+| `vacantObjectiveStalls.length` | 13 | 13 | 0 | 0 | 0 | 0 | 1 |
+| `loopAlerts.length` | 1747 | 1747 | 0 | 0 | 0 | 0 | 1 |
+| `writerConflicts` | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
+| `regroups.entries` | 343 | 343 | 0 | 0 | 0 | 0 | 1 |
+| `stallOutcomes.wakes` | 8 | 8 | 0 | 0 | 0 | 0 | 1 |
+| `stallOutcomes.repeats` | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
+| `timeline.stalledOnsets` | 1 | 1 | 0 | 0 | 0 | 0 | 1 |
+| `timeline.stalledSamples` | 10 | 10 | 0 | 0 | 0 | 0 | 1 |
+| `timeline.stalledOnsetsRepeated` | 1 | 1 | 0 | 0 | 0 | 0 | 1 |
+| `timeline.stalledSamplesRepeated` | 10 | 10 | 0 | 0 | 0 | 0 | 1 |
+| `recon.orders` | 3795 | 3795 | 0 | 0 | 0 | 0 | 1 |
+| `recon.contacts` | 806 | 806 | 0 | 0 | 0 | 0 | 1 |
+| `recon.noContact` | 820 | 820 | 0 | 0 | 0 | 0 | 1 |
+| `recon.timeouts` | 36 | 36 | 0 | 0 | 0 | 0 | 1 |
+| `recon.cancelled` | 2065 | 2065 | 0 | 0 | 0 | 0 | 1 |
+| `recon.reportsDelivered` | 2966 | 2966 | 0 | 0 | 0 | 0 | 1 |
+| `recon.retriggerBlocked` | 1080 | 1080 | 0 | 0 | 0 | 0 | 1 |
+| `squadPerformance.meanOverall` | 4837.500000000002 | 4837.500000000002 | 0 | 0 | 0 | 0 | 1 |
+| `squadPerformance.p10Overall` | 4469.500000000001 | 4469.500000000001 | 0 | 0 | 0 | 0 | 1 |
+| `squadPerformance.lowScoreSquads` | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
+| `squadPerformance.meanMission` | 3731.3999999999987 | 3731.3999999999987 | 0 | 0 | 0 | 0 | 1 |
+| `squadPerformance.meanMovement` | 5986.9000000000015 | 5986.9000000000015 | 0 | 0 | 0 | 0 | 1 |
+| `squadPerformance.meanControl` | 5581.900000000001 | 5581.900000000001 | 0 | 0 | 0 | 0 | 1 |
+| `squadPerformance.meanCohesion` | 5433.700000000001 | 5433.700000000001 | 0 | 0 | 0 | 0 | 1 |
+
+With this many counters a p of 0.05 is expected by chance in about one of twenty: read the size and the direction across counters, not one p.
+
+## The 8 seeds that part earliest (simulated seconds)
+
+pr797-micro-u-20261109-0001 (identical) · pr797-micro-u-20261109-0002 (identical) · pr797-micro-u-20261109-0003 (identical) · pr797-micro-u-20261109-0004 (identical) · pr797-micro-u-20261109-0005 (identical) · pr797-micro-u-20261109-0006 (identical) · pr797-micro-u-20261109-0007 (identical) · pr797-micro-u-20261109-0008 (identical)
+
+## Viewer
+
+[Open both arms in the 3D map](https://test.ivandpopov.com/grasstex/ai_flow_live.html?bench=1823&view=brain3d) · [the same on this branch's viewer](https://test.ivandpopov.com/grasstex/preview/pin-pr797-5d7cc87/ai_flow_live.html?bench=1823&view=brain3d) (it has the change before it reaches main)
+
+The viewer loads `off.json` and `on.json` from the `benchmark-results` branch (`?bench=1823`); it opens the seed that parts earliest, and the dropdowns choose another.
+
