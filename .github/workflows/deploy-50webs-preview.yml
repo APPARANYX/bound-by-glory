@@ -52,7 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
-      WEB_ROOT: ${{ vars.BATTLE_WEB_ROOT || 'grasstex' }}
+      WEB_ROOT: ${{ vars.BATTLE_WEB_ROOT || 'bound-by-glory' }}
     outputs:
       slug: ${{ steps.id.outputs.slug }}
     steps:
@@ -270,7 +270,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 16
     env:
-      WEB_ROOT: ${{ vars.BATTLE_WEB_ROOT || 'grasstex' }}
+      WEB_ROOT: ${{ vars.BATTLE_WEB_ROOT || 'bound-by-glory' }}
     permissions:
       contents: read
     steps:
