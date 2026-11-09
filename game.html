@@ -10,7 +10,7 @@ const REPO='https://raw.githubusercontent.com/APPARANYX/bound-by-glory/';
 const PINNED='237c02bc54ed48774d10207e602b08a2d31f2419';
 /* ?ref= can pin another branch for testing; normal play follows main. */
 const REF=new URLSearchParams(location.search).get('ref')||'main';
-const ASSETS='https://test.ivandpopov.com/grasstex/Assets/terrain/';
+const ASSETS='https://test.ivandpopov.com/bound-by-glory/Assets/terrain/';
 const BAKED=['tools/terrain-bake/tile.js','tools/terrain-bake/lod.js','tools/terrain-bake/stream.js','terrain-baked.js'];
 const OLD_TERRAIN="const terrain=await grab('"+REPO+"main/terrain-demo.js?ts='+Date.now());";
 try{
