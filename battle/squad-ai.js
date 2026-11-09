@@ -1599,7 +1599,13 @@
       /* Gates: any extension returning false vetoes the action. */
       pass: function (stage, a, b, c) {
         var fns = slots[stage];
-        for (var i = 0; i < fns.length; i++) if (fns[i] && fns[i](a, b, c) === false) return false;
+        for (var i = 0; i < fns.length; i++) {
+          if (fns[i] && fns[i](a, b, c) === false) {
+            // The extension has run once and refused; do not re-evaluate its gate.
+            if (stage === 'fireGate') traceFireDecision(a, b, 'weapon-gate-' + order[stage][i]);
+            return false;
+          }
+        }
         return true;
       },
       run: function (stage, a, b, c) {
@@ -1652,7 +1658,10 @@
   /* Fires the rounds of one trigger pull through fire(round, delay); stops early if the weapon
      runs dry or stops, or fire() returns false. Returns the rounds that left the weapon. */
   function discharge(shooter, battle, rounds, fire) {
-    if (root.PhaseCCombatLab && root.PhaseCCombatLab.blockShot(shooter, battle, 'discharge')) return 0;
+    if (root.PhaseCCombatLab && root.PhaseCCombatLab.blockShot(shooter, battle, 'discharge')) {
+      traceFireDecision(shooter, battle, 'weapon-lab-discharge-blocked');
+      return 0;
+    }
     var stats = shooter.weapon.stats,
       fired = 0;
     for (var i = 0; i < rounds; i++) {
@@ -2320,16 +2329,35 @@
     if (!(range > 0)) return cap;
     return cap > 0 ? Math.min(cap, range) : range;
   }
+  // Observe only already-taken branches; an observer never owns weapon state.
+  function traceFireDecision(soldier, battle, code) {
+    var tap = root.BattleCausalInaction;
+    if (tap && tap.decision) {
+      try {
+        tap.decision(soldier, battle, code, 'squad-ai');
+      } catch (_) {}
+    }
+  }
   function tryFire(soldier, battle) {
-    if (!soldier.weapon) return false;
-    if (root.PhaseCCombatLab && root.PhaseCCombatLab.blockShot(soldier, battle, 'aimed')) return false; // no weapon, no shot (he left it behind)
+    if (!soldier.weapon) {
+      traceFireDecision(soldier, battle, 'weapon-missing');
+      return false;
+    }
+    if (root.PhaseCCombatLab && root.PhaseCCombatLab.blockShot(soldier, battle, 'aimed')) {
+      traceFireDecision(soldier, battle, 'weapon-lab-aimed-blocked');
+      return false;
+    }
     if (!EXT.pass('fireGate', soldier, battle)) return false;
-    if (soldier.fireCooldown > 0) return false;
+    if (soldier.fireCooldown > 0) {
+      traceFireDecision(soldier, battle, 'weapon-cooldown');
+      return false;
+    }
     var stats = soldier.weapon.stats,
       target = soldier.target,
       playerTarget = !!(soldier.isPlayer && target && !target.dead && target.faction !== soldier.faction);
     /* AI obeys threat disposition; a possessed player may intentionally shoot any living enemy. */
     if (!playerTarget && !threatDisposition(target).combatThreat) {
+      traceFireDecision(soldier, battle, 'weapon-target-not-threat');
       clearTarget(soldier);
       return false;
     }
@@ -2337,8 +2365,10 @@
       d = dist2(p.x, p.z, target.root.position.x, target.root.position.z);
     /* The burst stays on the man it was laid on; once he is down the gunner lets go. */
     var rounds = discharge(soldier, battle, burstLength(stats, battle, d), function (round, delay) {
-      if (!(soldier.isPlayer && target && !target.dead) && !threatDisposition(target).combatThreat)
+      if (!(soldier.isPlayer && target && !target.dead) && !threatDisposition(target).combatThreat) {
+        traceFireDecision(soldier, battle, 'weapon-burst-target-not-threat');
         return false;
+      }
       shot(soldier, target, battle, round, delay);
     });
     setFireCooldown(soldier, triggerCooldown(stats, rounds, battle, 1, d));

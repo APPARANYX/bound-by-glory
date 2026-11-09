@@ -1264,12 +1264,14 @@
     /* Frozen by what he just saw (a friend down beside him, the leader falling): still and down on one
        knee for the moment it lasts. The hold is renewed each tick and lapses with the shock. */
     if (battle.time < shockUntil(s)) {
+      traceFireDecision(s, battle, 'advance-shock-hold');
       noteShock(s, 'advance');
       var here = posOf(s);
       move(s, battle, { x: here.x, z: here.z }, 'hold', 0.25);
       commitStance(s, battle, 'crouch', Math.max(0.5, shockUntil(s) - battle.time));
       return;
     }
+    traceFireDecision(s, battle, 'advance-no-target');
     marchPosture(s, battle);
     followOrders(s, battle, false);
   }
@@ -1904,6 +1906,7 @@
     } else followOrders(s, battle, true);
     if (s.target && dist(posOf(s).x, posOf(s).z, posOf(s.target).x, posOf(s.target).z) < 35)
       tryFire(s, battle);
+    else traceFireDecision(s, battle, 'withdraw-no-close-target');
   }
 
   /* A window is a firing port (`station.port`, built by Navigation from the opening's own metadata; the
@@ -2405,7 +2408,10 @@
   function controllerCombatTick(s, battle) {
     var task = controllerCombatTasks.get(s),
       e = state(s);
-    if (!task || task.battle !== battle) return;
+    if (!task || task.battle !== battle) {
+      traceFireDecision(s, battle, 'controller-no-combat-task');
+      return;
+    }
     if (task.drill === 'march' && fireControlPreparing(s, battle)) {
       task.reason = 'blocked:requires-contact-resource';
       traceFireDecision(s, battle, 'preparation-held-fire');

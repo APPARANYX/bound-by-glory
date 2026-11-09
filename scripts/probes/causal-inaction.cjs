@@ -272,7 +272,20 @@
     'watch-drill-no-fire-path',
     'station-en-route',
     'station-no-sector-target',
-    'station-line-blocked'
+    'station-line-blocked',
+    'controller-no-combat-task',
+    'withdraw-no-close-target',
+    'advance-shock-hold',
+    'advance-no-target',
+    'weapon-cooldown',
+    'weapon-lab-aimed-blocked',
+    'weapon-lab-discharge-blocked',
+    'weapon-target-not-threat',
+    'weapon-burst-target-not-threat',
+    'weapon-gate-ammunition',
+    'weapon-gate-ballistics',
+    'weapon-gate-direct-fire-los',
+    'weapon-gate-grenades'
   ];
   function decisionEvidence(s, sim, f, d) {
     var events = d.decisions.filter(function (e) {
