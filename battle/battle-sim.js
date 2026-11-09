@@ -242,7 +242,7 @@
     );
   }
   function buildWeaponAudio(scene, audioBase, policy) {
-    var SoundClass = root.BattleAudioBackend ? root.BattleAudioBackend.Sound : BABYLON.Sound;
+    var SoundClass = root.BattleAudioBackend.Sound;
     // Optional, bounded diagnostic override. Unset keeps the shipping 4-voice far floor.
     // prettier-ignore
     var farFloor =
@@ -343,9 +343,7 @@
       if (!voices) return;
       var counters = poolStats[k];
       counters.attempts++;
-      var ae = root.BattleAudioBackend
-        ? root.BattleAudioBackend.engine()
-        : BABYLON.Engine && BABYLON.Engine.audioEngine;
+      var ae = root.BattleAudioBackend.engine();
       /* Sound.play queues a delayed start while locked; such a request is not
          reflected by isPlaying yet and could accumulate behind the pool cap. */
       // Chromium/Babylon 9 can report a running WebAudio context while the
