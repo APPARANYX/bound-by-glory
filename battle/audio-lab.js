@@ -198,9 +198,9 @@
       ' · tab ' + entry.pageVisibility;
   }
   function tapOutput() {
-    var ae = root.BattleAudioBackend ? root.BattleAudioBackend.engine() : BABYLON.Engine && BABYLON.Engine.audioEngine;
+    var ae = root.BattleAudioBackend.engine();
     ctx = ae && ae.audioContext;
-    if (!ctx) throw new Error('Babylon Web Audio context missing');
+    if (!ctx) throw new Error('Howler Web Audio context missing');
     var master = ae.masterGain;
     if (!master || !ctx.createAnalyser) {
       event('meter-unavailable', { reason: 'no-master-gain-or-analyser' });
@@ -310,7 +310,8 @@
     if (analyser) try { analyser.disconnect(); } catch (_) {}
   }
   async function boot() {
-    if (root.BattleAudioBackend) await root.BattleAudioBackend.ready;
+    if (!root.BattleAudioBackend) throw new Error('Howler audio backend missing');
+    await root.BattleAudioBackend.ready;
     startTime = performance.now();
     root.BATTLE_AUDIO_BASE = audioBase;
     dom('status').textContent = 'Loading licensed sample manifest';
@@ -318,7 +319,7 @@
     if (!response.ok) throw new Error('audio manifest HTTP ' + response.status);
     root.BATTLE_AUDIO_MANIFEST = await response.json();
     var canvas = dom('scene');
-    engine = new BABYLON.Engine(canvas, false, { audioEngine: !(root.BattleAudioBackend && root.BattleAudioBackend.independent), stencil: false });
+    engine = new BABYLON.Engine(canvas, false, { audioEngine: false, stencil: false });
     scene = new BABYLON.Scene(engine);
     scene.clearColor = new BABYLON.Color4(.04,.06,.08,1);
     var camera = new BABYLON.FreeCamera('listener', new BABYLON.Vector3(0, 5, 0), scene);
@@ -330,7 +331,7 @@
     // Construct the real shipping pool before requesting its (sometimes lazy) Web Audio engine.
     setupShooters();
     audio = root.BattleSim.buildWeaponAudio(scene, audioBase, { farVoices: farVoices });
-    var ae = root.BattleAudioBackend ? root.BattleAudioBackend.engine() : BABYLON.Engine.audioEngine;
+    var ae = root.BattleAudioBackend.engine();
     if (ae && ae.unlock) await ae.unlock();
     if (ae && ae.audioContext && ae.audioContext.state === 'suspended') {
       try { await ae.audioContext.resume(); } catch (err) { event('unlock-error', { message: String(err) }); }
