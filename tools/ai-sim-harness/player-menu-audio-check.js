@@ -101,8 +101,9 @@ async function checkUnlock() {
       'window',
       'console',
       'enableLiveAudioMeter',
+      'observeAudioRenderErrors',
       unlockSource + '; return unlockAudio;'
-    )({ Engine: { audioEngine: engine } }, {}, { log() {}, warn() {}, error() {} }, () => {});
+    )({ Engine: { audioEngine: engine } }, {}, { log() {}, warn() {}, error() {} }, () => {}, () => {});
   const promise = getUnlock(ae)();
   assert.deepEqual(calls, ['resume', 'unlock'], 'both calls happen synchronously inside the gesture');
   ctx.state = 'running';
