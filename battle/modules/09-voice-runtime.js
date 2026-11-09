@@ -152,7 +152,8 @@
       entry.pending.push(req);
       return handle;
     }
-    var base = window.BATTLE_AUDIO_BASE || 'https://test.ivandpopov.com/grasstex/Assets/audio/',
+    var audioRoot = window.BATTLE_API_BASE || '/bound-by-glory/';
+    var base = window.BATTLE_AUDIO_BASE || audioRoot + 'Assets/audio/',
       url = window.BattleAudioFormat ? window.BattleAudioFormat.url(base + file) : base + file;
     entry = cache[file] = { file: file, sound: null, ready: false, pending: [req] };
     try {

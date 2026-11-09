@@ -6,7 +6,7 @@
      build id; see battle/battle_sim.html. */
   if (!root.BattleSim) return;
   var oldStart = root.BattleSim.start,
-    API_BASE = root.BATTLE_API_BASE || '/grasstex/';
+    API_BASE = root.BATTLE_API_BASE || '/bound-by-glory/';
   var TIME_LIMIT_REASON = 'time limit objective score',
     /* A defend battle at its time limit goes to the side holding the majority of points (commander-ai.js). */
     TIME_LIMIT_MAJORITY_REASON = 'time limit majority of points',

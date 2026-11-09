@@ -21,7 +21,7 @@
   var silentTap = null, ctx = null, monitor = null, simulationTimer = null;
   var startTime = 0, sampleAt = 0, simSeconds = 0, lastWall = 0, previousShotCount = 0;
   var longTasks = 0, longTaskMs = 0, shotCount = 0;
-  var audioBase = query.get('audioBase') || (location.origin + '/grasstex/Assets/audio/');
+  var audioBase = query.get('audioBase') || root.BATTLE_AUDIO_BASE || (location.origin + (root.BATTLE_API_BASE || '/bound-by-glory/') + 'Assets/audio/');
   var dom = function (id) { return document.getElementById(id); };
   function rand() {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
