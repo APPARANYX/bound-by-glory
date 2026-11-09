@@ -415,6 +415,37 @@ test('with the flag but no contract, the provider says so and legacy keeps the s
   assert.ok(warnings.some(m => /capability contract is not loaded/.test(m)));
 });
 
+/* us-defend #793 seed -0011: a defending squad whose centre hovered at the commit edge flipped
+   assault/defend for 0.45 s. Inside the objective's own radius a squad already in its inside phase keeps it. */
+function edgeOfObjective(search) {
+  const w = world(search);
+  w.systems['tactical-march-provider'].onBattleStart(w.b);
+  w.q._macroMission = Object.assign(w.q._macroMission, {
+    intent: 'defend',
+    objectiveId: 'a',
+    point: { x: 0, z: 80 }
+  });
+  w.q.routeIndex = LEGS.length - 1;
+  alive(w).forEach(s => place(s, { x: 0, z: 80 }));
+  w.b.time += 0.5;
+  tick(w);
+  assert.equal(w.q.commandPhase, 'defend', 'inside the commit radius the squad defends');
+  alive(w).forEach(s => place(s, { x: 0, z: 80 - 27 })); // 0.9 of the 30 m default radius
+  w.b.time += 0.5;
+  tick(w);
+  return w.q.commandPhase;
+}
+test('a defending squad at the commit edge keeps its phase inside the objective radius (?controllerPhaseBand=0)', () => {
+  assert.equal(edgeOfObjective(), 'defend');
+  assert.equal(
+    edgeOfObjective(
+      '?stressAct=0&commandRelay=0&scoutsForward=0&tacticalController=new&controllerPhaseBand=0'
+    ),
+    'assault',
+    'the old rule flips at the commit radius'
+  );
+});
+
 test('static: the provider adds no timer, RNG draw, movement writer or squad/soldier field', () => {
   const src = fs.readFileSync(path.join(H.REPO, 'battle/modules/13c-tactical-march-provider.js'), 'utf8');
   assert.doesNotMatch(src, /setTimeout|setInterval|requestAnimationFrame|Math\.random|\.random\(/);

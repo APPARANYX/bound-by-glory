@@ -24,6 +24,12 @@
        the one Squad Leader execution (15l) holds in sq.routeIndex; the march proposes the next leg through
        mission.execute and follows only what the owner recorded. */
     SINGLE = !/[?&]controllerSingleWriter=0(?:&|#|$)/i.test(SEARCH),
+    /* ?controllerPhaseBand=0: the objective phase flips again at the commit radius in both directions.
+       With it on, a squad already in the objective's inside phase (defend, capture) keeps it until it
+       leaves the objective's own radius, so a centroid hovering at the commit edge no longer flickers
+       assault/defend (us-defend #793 seed -0011: 0.45 s of defend handed the squad to the Squad
+       Leader's defense skill and back). The band is the objective's radius, not a tuned constant. */
+    PHASE_BAND = !/[?&]controllerPhaseBand=0(?:&|#|$)/i.test(SEARCH),
     ID = 'march';
   var squads = new WeakMap(),
     warned = false;
@@ -225,7 +231,15 @@
       if (m.action === 'hold' || m.action === 'regroup' || m.action === 'support') {
         phase = m.action === 'support' ? 'support-hold' : 'hold';
         objective = point(ex && ex.holdPoint) || here;
-      } else if (m.point) phase = M.objectivePhase(sim, sq, m, cfg, here);
+      } else if (m.point) {
+        phase = M.objectivePhase(sim, sq, m, cfg, here);
+        var inside = m.intent === 'defend' ? 'defend' : 'capture';
+        if (PHASE_BAND && phase === 'assault' && sq.commandPhase === inside) {
+          var O = root.BattleObjectiveSystem && root.BattleObjectiveSystem.get(sim, m.objectiveId),
+            radius = +(O && O.def && O.def.radius) || 30;
+          if (dist(here, m.point) <= radius) phase = inside;
+        }
+      }
     } else if (m && m.action === 'flank' && st.leg === (m.route || []).length - 1) phase = 'flank';
     if (sq.commandPhase === phase && sq.routeIndex === st.leg && dist(sq.objective, objective) < 1e-6) return;
     var res = ctx.request('mission.execute', null, { leg: st.leg, phase: phase, point: objective });
