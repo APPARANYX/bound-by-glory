@@ -223,6 +223,36 @@ Out of scope for Macro: scenario rules that are not General decisions (`21b` fro
 | S1 | **Squad Leader skills, combined S1b–S1f implementation.** The march provider selects defensive posts, regroup, recon, structure clearing and retreat. The native skill logic produces personal intents; every enabled skill moves its men through `movement.move`, never the retained fireteam publisher. Recon/regroup lease lifecycle, prepared-post claims, structure entry evidence, retreat anchors and rally recovery remain owner services. S1a phase band is merged (#796). S1b–S1f implementation has offline coverage; exact-head Muse/Kit lab and battle acceptance remain required before completion. | `13c` skill selection; `16` `controllerSkills` intent planning; native 15c/15h/15l/15m/15n skill logic | reuse `movement.move` with optional validated `skill`; no new capability or movement writer | S1a `?controllerPhaseBand=0`; S1b `?controllerDefensivePosts=0`; S1c `?controllerRegroup=0`; S1d `?controllerRecon=0`; S1e `?controllerStructureClearing=0`; S1f `?controllerRetreatSkill=0`. Each restores only its retained path. Existing `controllerRetreat=0` still disables retained retreat movement entirely. |
 | U4 | **Remaining drill states** (orient, alert, advance hand-back) and the contact/march flip read. | `engagement.js` `orient`, `alert`, `advance` for controlled squads | reuse `combat.contact` / `combat.march` | `?controllerDrill=0` |
 
+**U0–U4 single-PR implementation candidate (2026-11-08).** `13k-tactical-soldier-policy.js`
+provides the active provider's per-soldier policy slot. It chooses fighting/sight/march posture,
+eligible personal-cover ranking and incumbent retention, personal fire/suppression and empty-magazine
+reload, stress reactions, recognition and contact/march hand-back. Engagement projects detached facts
+and executes the chosen action through its existing stance, cover, reaction and combat effectors;
+46 retains ammunition, discharge and reload clocks, and the Movement Resolver retains destinations.
+The four off flags in the table are independent and pass through the preview launcher. Perception
+still supplies personal targets; no policy acquires enemy actors or transforms. U3 preserves existing
+stress dosage and suppression saturation: the suggested windowed cap is **not confirmed or enabled**.
+
+**Interface refinement for U:** `tactical-capability-contract.js` declares `soldierDecisions` for the
+synchronous `posture.set`, `cover.take`, `fire.personal`, `soldier.react` choices and reused
+`combat.contact`/`combat.march` decisions. `selectSoldier` runs inside the existing drill/resource
+owner; it does not acquire a competing posture/weapon/locomotion lease or create an extra timer.
+The provider receives frozen bounded data, and selected values are contract-validated before owner
+execution. `summary().soldierDecisions` retains the latest selection per living actor/slot, with
+mission, epoch, generation and simulation time. **`selected` is not physical success:** use native
+stance trails, cover claims, ammunition discharge/reload evidence, reaction transitions and combat
+arrival receipts to establish execution. A newly selected reaction interrupts that actor's controller
+actions before the native reaction runs; rage fire obeys the same adopted permission as other personal
+fire. Legacy/off paths remain available. No legacy decision code is retired.
+
+**Candidate evidence/status:** `tactical-soldier-policy-check.js` exercises the slot and real owner
+seams, including native discharge/reload, reaction interruption, bounded freeze, authority rejection,
+restart isolation and independent flags. This is controlled fixture evidence only. U0–U4 are
+**implemented for review, not natural-battle accepted or merged**. The contact/march flip retains its
+existing rule pending the natural causal read. Exact-head Skills Lab, 60–100 fresh paired seeds across
+meeting/US defense/GE defense, rollback identity, causal/probe packs and the section 8.2 wall-time gate
+remain required through Muse. S1b–S1f remain separate from this soldier-layer PR.
+
 **Phase E, legacy retirement.** Only after both layers pass and Ivan agrees the transition period is over: delete legacy decision paths and their off flags one layer at a time (Meso, Macro, Micro), each with a rollback ledger entry.
 
 ### 8.4 Open calls for Ivan (do not block M0/M1)

@@ -804,8 +804,16 @@
           rejected('behind-order-line');
           continue;
         }
-        var score = (1 - pt.quality) * 40 - moveD;
-        if (forward) score += ((pt.x - p.x) * forward.x + (pt.z - p.z) * forward.z) * 0.9;
+        var P = root.BattleTacticalSoldierPolicy,
+          controlled = P && P.enabled(s, battle, 'cover.score'),
+          projection = forward ? (pt.x - p.x) * forward.x + (pt.z - p.z) * forward.z : 0,
+          score = controlled
+            ? P.select(s, battle, 'cover.score', {
+                quality: pt.quality,
+                distance: moveD,
+                forward: projection
+              }).value
+            : (1 - pt.quality) * 40 - moveD + projection * 0.9;
         if (score <= bestScore) {
           rejected('lower-ranked-slot');
           continue;
@@ -834,11 +842,33 @@
         (!root.BattleMovementProgress || root.BattleMovementProgress.candidateAllowed(s, battle, incumbent))
       ) {
         var incumbentScore = (1 - incumbent.quality) * 40 - dist(p.x, p.z, incumbent.x, incumbent.z);
-        if (bestScore < incumbentScore + 4) {
+        var microPolicy = root.BattleTacticalSoldierPolicy,
+          keepIncumbent =
+            microPolicy && microPolicy.enabled(s, battle, 'cover.take')
+              ? microPolicy.select(s, battle, 'cover.take', {
+                  best: true,
+                  bestScore: bestScore,
+                  incumbent: true,
+                  incumbentScore: incumbentScore
+                }).value === 'incumbent'
+              : bestScore < incumbentScore + 4;
+        if (keepIncumbent) {
           observed('incumbent-preferred', incumbent);
           return incumbent;
         }
       }
+      var selectionPolicy = root.BattleTacticalSoldierPolicy;
+      if (
+        selectionPolicy &&
+        selectionPolicy.enabled(s, battle, 'cover.take') &&
+        selectionPolicy.select(s, battle, 'cover.take', {
+          best: !!best,
+          bestScore: bestScore,
+          incumbent: false,
+          incumbentScore: 0
+        }).value === 'none'
+      )
+        best = null;
       if (best && !reserveCover(s, battle, best.slot, 'engagement')) {
         observed('reservation-failed');
         return null;

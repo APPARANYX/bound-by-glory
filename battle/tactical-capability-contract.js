@@ -85,6 +85,48 @@
       parameters: parameters
     };
   }
+  /* Micro policy slots are synchronous choices, not additional resource leases. The active soldier
+     drill/station/reaction still owns execution. Only detached owner facts enter these selectors;
+     selected is not a claim that a stance, reservation, reload or discharge happened. */
+  var SOLDIER_DECISIONS = frozen({
+    'posture.fight': 'posture.set',
+    'posture.see': 'posture.set',
+    'posture.commit': 'posture.set',
+    'posture.march': 'posture.set',
+    'posture.watch': 'posture.set',
+    'cover.score': 'cover.take',
+    'cover.take': 'cover.take',
+    'fire.personal': 'fire.personal',
+    'fire.suppress': 'fire.personal',
+    'weapon.reload': 'fire.personal',
+    'stress.break': 'soldier.react',
+    'stress.react': 'soldier.react',
+    'drill.contact': 'combat.contact',
+    'drill.fire': 'combat.contact',
+    'drill.handoff': 'combat.march',
+    'drill.orient': 'combat.contact'
+  });
+  function validateSoldierDecision(slot, result) {
+    if (
+      !Object.hasOwn(SOLDIER_DECISIONS, slot) ||
+      !record(result, ['value', 'reason']) ||
+      !owns(result, ['value', 'reason']) ||
+      !text(result.reason)
+    )
+      return false;
+    var v = result.value;
+    if (slot === 'cover.score') return Number.isFinite(v);
+    if (slot === 'cover.take') return ['incumbent', 'best', 'none'].indexOf(v) >= 0;
+    if (slot === 'drill.fire') return ['lost', 'recognize', 'orient', 'engage'].indexOf(v) >= 0;
+    if (slot === 'posture.march' && v === 'keep') return true;
+    if (/^posture\./.test(slot)) return ['prone', 'crawl', 'crouch', 'stand'].indexOf(v) >= 0;
+    if (/^stress\./.test(slot)) return v === null || ['cower', 'freeze', 'flee', 'rage'].indexOf(v) >= 0;
+    if (slot === 'drill.contact')
+      return (
+        v === null || ['pinned', 'prepare', 'grenade', 'fire', 'suppress', 'watch', 'march'].indexOf(v) >= 0
+      );
+    return typeof v === 'boolean';
+  }
   var CAPABILITIES = frozen({
     'maneuver.cover': definition(
       'squad',
@@ -592,6 +634,8 @@
   }
   var API = frozen({
     capabilities: CAPABILITIES,
+    soldierDecisions: SOLDIER_DECISIONS,
+    validateSoldierDecision: validateSoldierDecision,
     reasons: REASONS,
     validateRequest: validateRequest,
     createReceipt: createReceipt,

@@ -22,18 +22,23 @@ const inputs = Array.from({ length: 32 }, (_, mask) =>
       .concat(skillFlags.map((name, bit) => [name, mask & (1 << bit) ? '1' : '0']))
   )
 );
-const queries = JSON.parse(
+const microNames = ['controllerStance', 'controllerSoldierFire', 'controllerReactions', 'controllerDrill'];
+const microInputs = Array.from({ length: 16 }, (_, mask) =>
+  Object.fromEntries(microNames.map((name, bit) => [name, mask & (1 << bit) ? '1' : '0']))
+);
+const allQueries = JSON.parse(
   execFileSync(
     'php',
     [
       '-r',
       'require $argv[1]; $out=array(); foreach(json_decode($argv[2],true) as $q) $out[]=http_build_query(grasstex_preview_options($q)); echo json_encode($out);',
       path.join(repo, 'runtime-contract.php'),
-      JSON.stringify(inputs)
+      JSON.stringify(inputs.concat(microInputs))
     ],
     { encoding: 'utf8' }
   )
 );
+const queries = allQueries.slice(0, inputs.length);
 for (const profile of ['strategic', 'legacy'])
   queries.forEach((query, index) => {
     const forwarded = new URLSearchParams(query);
@@ -100,3 +105,29 @@ for (const profile of ['strategic', 'legacy'])
     );
   });
 console.log('PASS 64 composed PHP-forwarding / strategic-runtime activation cases');
+
+allQueries.slice(inputs.length).forEach((query, index) => {
+  const flags = new URLSearchParams(query);
+  for (const name of microNames)
+    assert.equal(flags.get(name), microInputs[index][name], name + ' forwarded exactly');
+  const root = {
+    location: { search: '?' + query },
+    BattleTacticalController: { selectSoldier() {}, soldierPolicyAvailable: () => true }
+  };
+  loadModule(root, 'battle/modules/13k-tactical-soldier-policy.js', { location: root.location });
+  const s = { squad: {} };
+  for (const [slot, name] of [
+    ['posture.commit', 'controllerStance'],
+    ['cover.take', 'controllerStance'],
+    ['fire.personal', 'controllerSoldierFire'],
+    ['weapon.reload', 'controllerSoldierFire'],
+    ['stress.react', 'controllerReactions'],
+    ['drill.contact', 'controllerDrill']
+  ])
+    assert.equal(
+      root.BattleTacticalSoldierPolicy.enabled(s, {}, slot),
+      microInputs[index][name] !== '0',
+      slot
+    );
+});
+console.log('PASS 16 PHP-forwarding / independent Micro rollback combinations');

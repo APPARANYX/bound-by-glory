@@ -1102,14 +1102,23 @@
         SA().isMachineGun(s) &&
         controllerCombatTasks.has(s) &&
         controllerCombatTasks.get(s).drill === 'suppress');
-    if (
-      ALERT_LATCH &&
-      COMBAT_HANDOFF_ON &&
-      !e.engaged &&
-      !gunSuppressing &&
-      e.state === 'alert' &&
-      now >= e.until
-    ) {
+    var microPolicy = root.BattleTacticalSoldierPolicy,
+      handback =
+        microPolicy && microPolicy.enabled(s, battle, 'drill.handoff')
+          ? microPolicy.select(s, battle, 'drill.handoff', {
+              enabled: ALERT_LATCH && COMBAT_HANDOFF_ON,
+              engaged: !!e.engaged,
+              committed: !!gunSuppressing,
+              alert: e.state === 'alert',
+              expired: now >= e.until
+            }).value
+          : ALERT_LATCH &&
+            COMBAT_HANDOFF_ON &&
+            !e.engaged &&
+            !gunSuppressing &&
+            e.state === 'alert' &&
+            now >= e.until;
+    if (handback) {
       e.cover = null;
       e.threatSector = null;
       e.suppressOrder = false;
@@ -1125,7 +1134,14 @@
       if (e.threatSector != null && sectorDistance(e.threatSector, sector) > 1) {
         /* A threat from a materially different direction is a fresh problem: re-orient. */
         e.fireReadyAt = Math.max(e.fireReadyAt, now + AIM_SETTLE * statScale(s, 'settle'));
-        if (e.state === 'engage' || e.state === 'pinned') {
+        var orientNow =
+          microPolicy && microPolicy.enabled(s, battle, 'drill.orient')
+            ? microPolicy.select(s, battle, 'drill.orient', {
+                changed: true,
+                fighting: e.state === 'engage' || e.state === 'pinned'
+              }).value
+            : e.state === 'engage' || e.state === 'pinned';
+        if (orientNow) {
           var secs = recognition(s);
           noteRecognition(s, secs);
           transition(s, battle, 'orient', secs, 'new threat sector');
@@ -1260,12 +1276,32 @@
     var low = lowNow || (CONTACT_STANCE && battle.time < (+e.advanceLowUntil || 0));
     // An arrived rifleman already lies low. Prepare a crouched march once
     // movement actually has a leg to walk; a prone-hold is such a leg.
-    if (ARRIVED_PRONE_DOWN && low && e.stance === 'prone' && s._movementStopReason === 'arrived') return true;
+    var P = root.BattleTacticalSoldierPolicy,
+      selectedPosture =
+        P && P.enabled(s, battle, 'posture.march')
+          ? P.select(s, battle, 'posture.march', {
+              low: !!low,
+              arrivedProne: !!(
+                ARRIVED_PRONE_DOWN &&
+                e.stance === 'prone' &&
+                s._movementStopReason === 'arrived'
+              )
+            }).value
+          : null;
+    if (
+      selectedPosture === 'keep' ||
+      (!selectedPosture &&
+        ARRIVED_PRONE_DOWN &&
+        low &&
+        e.stance === 'prone' &&
+        s._movementStopReason === 'arrived')
+    )
+      return true;
     if (!holdStance(s, battle))
       transitStance(
         s,
         battle,
-        low ? 'crouch' : 'stand',
+        selectedPosture || (low ? 'crouch' : 'stand'),
         1.0,
         low ? (lowNow ? 'advance:contact-low' : 'advance:contact-hold') : 'advance:quiet'
       );
@@ -1748,7 +1784,18 @@
        deliberate clearing order is the one exception because it is a Squad Leader destination. */
     var aim = clearing ? s.squad.clearContact : knownThreat(s, battle);
     /* Hold the sector low; clearing moves crouched, otherwise open-ground riflemen go prone. */
-    var watch = !clearing && COVER_STANCE && PRONE_ROLES[s.role] && !inCover(s, battle) ? 'prone' : 'crouch';
+    var watchPolicy = root.BattleTacticalSoldierPolicy,
+      watch =
+        watchPolicy && watchPolicy.enabled(s, battle, 'posture.watch')
+          ? watchPolicy.select(s, battle, 'posture.watch', {
+              clearing: clearing,
+              coverStance: COVER_STANCE,
+              proneRole: !!PRONE_ROLES[s.role],
+              inCover: inCover(s, battle)
+            }).value
+          : !clearing && COVER_STANCE && PRONE_ROLES[s.role] && !inCover(s, battle)
+            ? 'prone'
+            : 'crouch';
     if (!holdStance(s, battle))
       commitStance(s, battle, seeingStance(s, battle, watch, aim && { root: { position: aim } }), 2.0);
     s._faceHint = aim && facingError(s, aim) > AIM_CONE ? aim : null;
@@ -2414,10 +2461,24 @@
       task.reason = 'preparing:personal-fire-order';
     } else if (drill === 'fire') {
       if (e.state === 'bound' && !e.urgentBound) transition(s, battle, 'alert', 0, 'controller:bound-ended');
-      if (s.target) {
-        if (e.state !== 'orient' && e.state !== 'engage')
+      var drillPolicy = root.BattleTacticalSoldierPolicy,
+        microFire = drillPolicy && drillPolicy.enabled(s, battle, 'drill.fire'),
+        firePhase = microFire
+          ? drillPolicy.select(s, battle, 'drill.fire', {
+              hasTarget: !!s.target,
+              recognizing: e.state === 'orient',
+              engaging: e.state === 'engage',
+              expired: battle.time >= e.until
+            }).value
+          : null;
+      if (microFire ? firePhase !== 'lost' : s.target) {
+        if (microFire ? firePhase === 'recognize' : e.state !== 'orient' && e.state !== 'engage')
           transition(s, battle, 'orient', reactTime(s, battle), 'controller:recognize');
-        if (e.state === 'orient' && battle.time < e.until) {
+        if (
+          microFire
+            ? firePhase === 'recognize' || firePhase === 'orient'
+            : e.state === 'orient' && battle.time < e.until
+        ) {
           orientExecution(s, battle);
           task.reason = 'recognizing';
         } else {

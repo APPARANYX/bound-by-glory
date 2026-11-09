@@ -80,6 +80,7 @@
         provider: null,
         epoch: 0,
         nextAction: 1,
+        soldierDecisions: new WeakMap(),
         actions: [],
         pending: [],
         rosterKey: null,
@@ -177,6 +178,7 @@
     providers[spec.id] = {
       id: spec.id,
       policies: Object.assign({}, spec.policies),
+      soldierPolicy: spec.soldierPolicy,
       adapters: Object.assign({}, spec.adapters),
       lifecycle: Object.assign({}, spec.lifecycle)
     };
@@ -520,6 +522,104 @@
     call(sim, rec.provider.policies[point], ctx);
     return true;
   }
+  /* U0: a synchronous policy slot inside the active soldier drill. This does not acquire another
+     posture/weapon/locomotion lease alongside its parent action. Owners ask at their existing decision
+     sites, apply the result synchronously, and retain all physical revalidation. No deferred context
+     or actor reference enters the pure policy. The receipt says selected, never fired/arrived. */
+  function detached(value, depth) {
+    if (
+      value === null ||
+      typeof value === 'boolean' ||
+      typeof value === 'number' ||
+      typeof value === 'string'
+    )
+      return value;
+    if (!value || depth > 3 || typeof value !== 'object') throw new Error('Invalid soldier facts');
+    var keys = Object.keys(value);
+    if (keys.length > 20 || (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype))
+      throw new Error('Soldier facts must be bounded detached data');
+    var out = Array.isArray(value) ? [] : {};
+    keys.forEach(function (key) {
+      var d = Object.getOwnPropertyDescriptor(value, key);
+      if (!d || !Object.hasOwn(d, 'value')) throw new Error('Soldier facts cannot contain accessors');
+      out[key] = detached(d.value, depth + 1);
+    });
+    return Object.freeze(out);
+  }
+  function soldierPolicyAvailable(sim, s) {
+    var sq = s && s.squad,
+      rec = record(sim, sq, false);
+    return !!(
+      rec &&
+      rec.mode === 'new' &&
+      !rec.cancelling &&
+      rec.provider &&
+      typeof rec.provider.soldierPolicy === 'function' &&
+      s &&
+      !s.dead &&
+      !s.isPlayer &&
+      members(sq).indexOf(s) >= 0 &&
+      !transportLocked(sq, s)
+    );
+  }
+  function selectSoldier(sim, s, slot, facts) {
+    var sq = s && s.squad,
+      rec = record(sim, sq, false),
+      C = contract();
+    if (
+      !rec ||
+      rec.mode !== 'new' ||
+      rec.cancelling ||
+      !s ||
+      s.dead ||
+      s.isPlayer ||
+      members(sq).indexOf(s) < 0 ||
+      transportLocked(sq, s)
+    )
+      throw new Error('Soldier policy has no authority');
+    if (
+      !C ||
+      !C.soldierDecisions ||
+      !C.soldierDecisions[slot] ||
+      typeof rec.provider.soldierPolicy !== 'function'
+    )
+      throw new Error('Soldier policy unavailable: ' + slot);
+    var mission = missionVersion(sq),
+      generation = battleState(sim).generation,
+      epoch = rec.epoch,
+      result;
+    rec.accepting++;
+    try {
+      result = rec.provider.soldierPolicy(slot, detached(facts, 0));
+    } finally {
+      rec.accepting--;
+    }
+    if (
+      record(sim, sq, false) !== rec ||
+      !soldierPolicyAvailable(sim, s) ||
+      missionVersion(sq) !== mission ||
+      battleState(sim).generation !== generation ||
+      rec.epoch !== epoch
+    )
+      throw new Error('Stale soldier decision: ' + slot);
+    if (!C.validateSoldierDecision(slot, result)) throw new Error('Invalid soldier decision: ' + slot);
+    result = Object.freeze({ value: result.value, reason: result.reason });
+    var rows = rec.soldierDecisions.get(s);
+    if (!rows) rec.soldierDecisions.set(s, (rows = {}));
+    rows[slot] = {
+      capability: C.soldierDecisions[slot],
+      slot: slot,
+      actorId: String(s.id),
+      stage: 'selected',
+      at: +sim.time || 0,
+      value: result.value,
+      reason: result.reason,
+      missionVersion: missionVersion(sq),
+      controllerEpoch: rec.epoch,
+      generation: battleState(sim).generation
+    };
+    return result;
+  }
   /* Emergency survival (module 44) interrupts one man's actions with a reason. Releasing is once only. */
   function interrupt(sim, sq, actorId, reason) {
     var rec = record(sim, sq, false);
@@ -607,6 +707,22 @@
           out.actions += rec.actions.length;
           out.pending += rec.pending.length;
           liveActions(a[i], rec, out);
+          if (rec.mode === 'new')
+            members(a[i]).forEach(function (s) {
+              var rows = rec.soldierDecisions.get(s);
+              if (!rows || s.dead || s.isPlayer) return;
+              Object.keys(rows).forEach(function (slot) {
+                var row = rows[slot];
+                if (
+                  row.missionVersion === missionVersion(a[i]) &&
+                  row.controllerEpoch === rec.epoch &&
+                  row.generation === b.generation
+                )
+                  (out.soldierDecisions = out.soldierDecisions || []).push(
+                    Object.assign({ squad: a[i].id }, row)
+                  );
+              });
+            });
           if (rec.refused)
             (out.refused = out.refused || []).push({
               squad: a[i].id,
@@ -646,6 +762,8 @@
     mode: mode,
     controls: controls,
     dispatch: dispatch,
+    selectSoldier: selectSoldier,
+    soldierPolicyAvailable: soldierPolicyAvailable,
     interrupt: interrupt,
     beforeRestart: beforeRestart,
     summary: summary
