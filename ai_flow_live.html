@@ -98,7 +98,7 @@ svg text{user-select:none}.laneLabel{font-size:13px;font-weight:800;fill:#8ea0b8
 (() => {
 'use strict';
 const RAW='https://raw.githubusercontent.com/APPARANYX/bound-by-glory/main/battle/';
-const PRODUCTION_HOST=location.hostname==='test.ivandpopov.com'&&/^\/grasstex\//.test(location.pathname||'');
+const PRODUCTION_HOST=location.hostname==='test.ivandpopov.com'&&/^\/(?:grasstex|bound-by-glory)\//.test(location.pathname||'');
 const IN_BATTLE=/\/battle\/[^/]+\.html$/.test(location.pathname||'');
 const LOCAL_BASE=IN_BATTLE?'./':'./battle/';
 const PATHS={sim:'battle-sim.js',commander:'commander-ai.js',squad:'squad-ai.js',engagement:'engagement.js',resolver:'movement-resolver.js',meso:'modules/16-squad-plan-stability.js',route:'modules/52-survival-tactical-route.js',mind:'modules/17-soldier-mind.js',events:'modules/08-soldier-events.js'};
@@ -292,7 +292,7 @@ async function importRuntimeUrl(slot,url,pick){
 }
 function runtimeQuery(){
   const q=new URLSearchParams(location.search);let a=q.get('a'),b=q.get('b');const bench=q.get('bench');
-  if(bench){const base='https://raw.githubusercontent.com/'+(q.get('repo')||'apparanyx/grasstex')+'/benchmark-results/benchmarks/results/scripted/runs/'+encodeURIComponent(bench)+'/';a=a||base+'off.json';b=b||base+'on.json'}
+  if(bench){const base='https://raw.githubusercontent.com/'+(q.get('repo')||'APPARANYX/bound-by-glory')+'/benchmark-results/benchmarks/results/scripted/runs/'+encodeURIComponent(bench)+'/';a=a||base+'off.json';b=b||base+'on.json'}
   return {a,b,pick:q.get('pick')||'',view:q.get('view')||''};
 }
 async function autoLoadRuntimeFromQuery(){
