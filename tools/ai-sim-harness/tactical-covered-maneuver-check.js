@@ -750,17 +750,24 @@ test('real undeliverable bound waits for retry before terminal cancellation and 
   w.E.updateSoldier(man, w.b);
   assert.equal(man._movementResolver?.combat?.kind, 'hold', 'native hold remains owned until cleanup');
   tick(w);
-  assert.equal(live(w, 'combat.bound').some(a => a.actionId === action.actionId), false);
+  assert.equal(
+    live(w, 'combat.bound').some(a => a.actionId === action.actionId),
+    false
+  );
   assert.equal(w.r.BattleCoverPositions.current(man, w.b), null, 'failed actor released cover');
   assert.ok(w.M.summary(w.q).history.some(h => h.reason.includes('bound-command-unreachable')));
   assert.ok(CR.telemetry(w.b).unreachable >= 1);
   clean(w);
 });
-test('real Command Reception retry clears unreachable failure before commander cleanup', () => {
+test('real Command Reception retry preserves a still-pending bound inside delivery grace', () => {
   const { w, action, man, leader, CR, meta, beforeX } = publishedBoundWithLostLink();
-  w.b.time += 8.1;
+  w.b.time += 3;
   w.E.updateSoldier(man, w.b);
-  assert.equal(live(w, 'combat.bound').find(a => a.actionId === action.actionId).stage, 'cancelled');
+  assert.equal(
+    live(w, 'combat.bound').find(a => a.actionId === action.actionId).stage,
+    'published',
+    'the still-unreachable receipt is pending, not terminal, during delivery grace'
+  );
   leader.root.position.x = beforeX;
   CR.publish(w.q, w.b, 'movement', [man], meta);
   const rec = CR.peek(man, w.b, 'movement', meta.scope);
@@ -768,11 +775,7 @@ test('real Command Reception retry clears unreachable failure before commander c
   assert.ok(rec.adoptedAt > w.b.time, 'receipt gets a fresh actual adoption clock');
   w.E.updateSoldier(man, w.b);
   const current = live(w, 'combat.bound').find(a => a.actionId === action.actionId);
-  assert.equal(
-    current.stage,
-    'published',
-    'pending owner failure must clear on retry: ' + JSON.stringify(current)
-  );
+  assert.equal(current.stage, 'published', 'recovered command stays live until its adoption');
   assert.equal(CR.telemetry(w.b).recovered >= 1, true);
   clean(w);
 });
