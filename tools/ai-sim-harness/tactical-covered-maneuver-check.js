@@ -640,7 +640,10 @@ test('an unreachable personal bound is cancelled, its mover released and the squ
   assert.equal(refused.stage, 'cancelled');
   assert.equal(refused.reason, 'bound-command-unreachable');
   tick(w);
-  assert.equal(live(w, 'combat.bound').some(a => a.actionId === action.actionId), false);
+  assert.equal(
+    live(w, 'combat.bound').some(a => a.actionId === action.actionId),
+    false
+  );
   assert.ok(
     w.M.summary(w.q).history.some(h => h.reason.includes('bound-command-unreachable:' + action.actorId)),
     'the Squad Leader observes the exact failure and interrupts this mover'
