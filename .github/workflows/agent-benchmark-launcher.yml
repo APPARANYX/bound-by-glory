@@ -52,7 +52,7 @@ jobs:
           if kind == 'matrix-full' and req.get('confirm_full_matrix') is not True:
               raise SystemExit('Full 300-battle matrix needs confirm_full_matrix: true')
           allowed = {
-              'standard': ('seed', 'seeds', 'query_off', 'query_on', 'battle_type', 'windows', 'sim_seconds', 'origin_agent', 'correlation_id', 'purpose'),
+              'standard': ('seed', 'seeds', 'query_off', 'query_on', 'battle_type', 'windows', 'sim_seconds', 'origin_agent', 'correlation_id', 'purpose', 'runner_pool'),
               'causal': ('exact_seed', 'seeds', 'seconds', 'side', 'role', 'ids', 'squads', 'query', 'geometry', 'lifecycle', 'navtrace', 'route_trace'),
               'targeted-fire': ('seeds', 'seconds', 'side', 'role', 'ids', 'squads'),
               'timescale': ('seed', 'seconds'),
@@ -63,6 +63,10 @@ jobs:
           extras = set(req) - set(allowed) - {'benchmark', 'ref', 'confirm_full_matrix'}
           if extras:
               raise SystemExit('Unsupported parameters for ' + kind + ': ' + ', '.join(sorted(extras)))
+          if kind == 'standard' and req.get('runner_pool', 'github') not in ('github', 'mac'):
+              raise SystemExit('Invalid runner_pool; choose github or mac')
+          if kind == 'standard' and req.get('runner_pool') == 'mac' and ref != 'main':
+              raise SystemExit('Mac pool launcher accepts trusted main only; do not run unreviewed source on personal hardware')
           if 'battle_type' in req and req['battle_type'] not in ('meeting', 'us-defend', 'ge-defend'):
               raise SystemExit('Invalid battle_type')
           if kind == 'probe-pack' and req.get('map', 'tactical') not in ('tactical', 'strategic'):

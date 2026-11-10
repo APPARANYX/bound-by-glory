@@ -60,6 +60,11 @@ on:
         description: Short description of the question this benchmark is intended to answer
         required: false
         default: ''
+      runner_pool:
+        description: 'Execution target for battle jobs (Mac is trusted dispatch only).'
+        type: choice
+        options: [github, mac]
+        default: github
 
 permissions:
   contents: read
@@ -82,7 +87,7 @@ jobs:
   single:
     name: Scripted scenario, off vs on
     if: ${{ (github.event.inputs.seeds || '1') == '1' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON((inputs.runner_pool == 'mac' && github.ref == 'refs/heads/main' && '["self-hosted","macOS","ARM64","bbg-mac-bench"]') || '["ubuntu-latest"]') }}
     timeout-minutes: ${{ fromJSON(github.event.inputs.sim_seconds || '600') > 600 && 75 || 30 }}
     permissions:
       contents: write
@@ -102,6 +107,15 @@ jobs:
       QUERY_ON: ${{ github.event.inputs.query_on || '' }}
 
     steps:
+      - name: Require trusted main for Mac pool
+        if: ${{ inputs.runner_pool == 'mac' }}
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF" != 'refs/heads/main' ]; then
+            echo "::error::Mac pool may execute only vetted main. Refusing: $GITHUB_REF" >&2
+            exit 2
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -120,21 +134,54 @@ jobs:
       - name: Install browser harness
         run: |
           npm install --no-save --no-package-lock playwright@1.55.0
-          npx playwright install --with-deps chromium
+          if [ "$RUNNER_OS" = 'macOS' ]; then
+            npx playwright install chromium
+          else
+            npx playwright install --with-deps chromium
+          fi
 
       - name: Start local battle server
+        shell: bash
         run: |
+          set -euo pipefail
+          if ! command -v php >/dev/null 2>&1; then
+            echo "::error::PHP CLI is missing on $RUNNER_NAME; install PHP on the runner." >&2
+            exit 2
+          fi
           php -v
-          rm -rf /tmp/battle-www
-          mkdir -p /tmp/battle-www
-          ln -s "$GITHUB_WORKSPACE" /tmp/battle-www/grasstex
-          PHP_CLI_SERVER_WORKERS=4 php -S 127.0.0.1:8765 -t /tmp/battle-www >/tmp/battle-php.log 2>&1 &
-          echo $! > /tmp/battle-php.pid
+          if [ "$RUNNER_OS" = 'macOS' ]; then
+            # Four pool runners share one Mac, so fixed port 8765 would collide.
+            case "$RUNNER_NAME" in
+              bbg-ivans-air-01) port=18761 ;;
+              bbg-ivans-air-02) port=18762 ;;
+              bbg-ivans-air-03) port=18763 ;;
+              bbg-ivans-air-04) port=18764 ;;
+              *) echo "::error::Unexpected Mac pool runner: $RUNNER_NAME" >&2; exit 2 ;;
+            esac
+          else
+            port=8765
+          fi
+          site_root="$(mktemp -d "$RUNNER_TEMP/bbg-battle.XXXXXXXX")"
+          ln -s "$GITHUB_WORKSPACE" "$site_root/grasstex"
+          server_log="$site_root/battle-php.log"
+          server_pidfile="$site_root/battle-php.pid"
+          printf 'BBG_BATTLE_BASE_URL=http://127.0.0.1:%s/grasstex/battle_sim_local.php\n' "$port" >> "$GITHUB_ENV"
+          printf 'BBG_BATTLE_LOG=%s\n' "$server_log" >> "$GITHUB_ENV"
+          printf 'BBG_BATTLE_PIDFILE=%s\n' "$server_pidfile" >> "$GITHUB_ENV"
+          echo "Runner $RUNNER_NAME on $RUNNER_OS: isolated PHP port $port"
+          PHP_CLI_SERVER_WORKERS=4 php -S "127.0.0.1:$port" -t "$site_root" >"$server_log" 2>&1 &
+          server_pid=$!
+          echo "$server_pid" > "$server_pidfile"
           for i in $(seq 1 30); do
-            if curl -fsS "http://127.0.0.1:8765/grasstex/battle_sim_local.php?seed=healthcheck" >/dev/null; then exit 0; fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo "::error::PHP server exited unexpectedly; port may be in use." >&2
+              cat "$server_log"
+              exit 1
+            fi
+            if curl -fsS "http://127.0.0.1:$port/grasstex/battle_sim_local.php?seed=healthcheck" >/dev/null; then exit 0; fi
             sleep 1
           done
-          cat /tmp/battle-php.log
+          cat "$server_log"
           exit 1
 
       - name: Run both arms
@@ -151,7 +198,7 @@ jobs:
             extra="${extra#[?&]}"
             query="$defender_query"
             if [ -n "$extra" ]; then if [ -n "$query" ]; then query="${query}&${extra}"; else query="$extra"; fi; fi
-            export BATTLE_BENCHMARK_URL="http://127.0.0.1:8765/grasstex/battle_sim_local.php${query:+?$query}"
+            export BATTLE_BENCHMARK_URL="${BBG_BATTLE_BASE_URL}${query:+?$query}"
             export BATTLE_BENCHMARK_OUTPUT="reports/$arm"
             echo "::group::arm ${arm} (${query:-no flags}), seed ${BATTLE_BENCHMARK_SEED}, windows ${BATTLE_BENCHMARK_WINDOWS}"
             node scripts/run_battle_benchmark.mjs
@@ -247,9 +294,17 @@ jobs:
           rc="$(cat reports/compare.rc 2>/dev/null || echo 2)"
           if [ "$rc" != 0 ]; then echo "compare_benchmark_arms.cjs exited ${rc}" >&2; exit 1; fi
 
+      - name: Stop isolated battle server
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${BBG_BATTLE_PIDFILE:-}" ] && [ -f "$BBG_BATTLE_PIDFILE" ]; then
+            kill "$(cat "$BBG_BATTLE_PIDFILE")" 2>/dev/null || true
+          fi
+
       - name: Show server log on failure
         if: failure()
-        run: tail -n 300 /tmp/battle-php.log || true
+        run: tail -n 300 "${BBG_BATTLE_LOG:-/dev/null}" || true
 
   # ---- several seeds: a paired run across shards ------------------------------------------------------------------------------
   plan:
@@ -287,10 +342,11 @@ jobs:
   shards:
     name: Shard ${{ matrix.shard }}
     needs: plan
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON((inputs.runner_pool == 'mac' && github.ref == 'refs/heads/main' && '["self-hosted","macOS","ARM64","bbg-mac-bench"]') || '["ubuntu-latest"]') }}
     timeout-minutes: ${{ fromJSON(github.event.inputs.sim_seconds || '600') > 600 && 75 || 30 }}
     strategy:
       fail-fast: false
+      max-parallel: ${{ inputs.runner_pool == 'mac' && 4 || 20 }}
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       BATTLE_BENCHMARK_SOURCE_SHA: ${{ github.sha }}
@@ -305,6 +361,15 @@ jobs:
       QUERY_ON: ${{ github.event.inputs.query_on || '' }}
 
     steps:
+      - name: Require trusted main for Mac pool
+        if: ${{ inputs.runner_pool == 'mac' }}
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF" != 'refs/heads/main' ]; then
+            echo "::error::Mac pool may execute only vetted main. Refusing: $GITHUB_REF" >&2
+            exit 2
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -316,20 +381,54 @@ jobs:
       - name: Install browser harness
         run: |
           npm install --no-save --no-package-lock playwright@1.55.0
-          npx playwright install --with-deps chromium
+          if [ "$RUNNER_OS" = 'macOS' ]; then
+            npx playwright install chromium
+          else
+            npx playwright install --with-deps chromium
+          fi
 
       - name: Start local battle server
+        shell: bash
         run: |
-          rm -rf /tmp/battle-www
-          mkdir -p /tmp/battle-www
-          ln -s "$GITHUB_WORKSPACE" /tmp/battle-www/grasstex
-          PHP_CLI_SERVER_WORKERS=4 php -S 127.0.0.1:8765 -t /tmp/battle-www >/tmp/battle-php.log 2>&1 &
-          echo $! > /tmp/battle-php.pid
+          set -euo pipefail
+          if ! command -v php >/dev/null 2>&1; then
+            echo "::error::PHP CLI is missing on $RUNNER_NAME; install PHP on the runner." >&2
+            exit 2
+          fi
+          php -v
+          if [ "$RUNNER_OS" = 'macOS' ]; then
+            # Four pool runners share one Mac, so fixed port 8765 would collide.
+            case "$RUNNER_NAME" in
+              bbg-ivans-air-01) port=18761 ;;
+              bbg-ivans-air-02) port=18762 ;;
+              bbg-ivans-air-03) port=18763 ;;
+              bbg-ivans-air-04) port=18764 ;;
+              *) echo "::error::Unexpected Mac pool runner: $RUNNER_NAME" >&2; exit 2 ;;
+            esac
+          else
+            port=8765
+          fi
+          site_root="$(mktemp -d "$RUNNER_TEMP/bbg-battle.XXXXXXXX")"
+          ln -s "$GITHUB_WORKSPACE" "$site_root/grasstex"
+          server_log="$site_root/battle-php.log"
+          server_pidfile="$site_root/battle-php.pid"
+          printf 'BBG_BATTLE_BASE_URL=http://127.0.0.1:%s/grasstex/battle_sim_local.php\n' "$port" >> "$GITHUB_ENV"
+          printf 'BBG_BATTLE_LOG=%s\n' "$server_log" >> "$GITHUB_ENV"
+          printf 'BBG_BATTLE_PIDFILE=%s\n' "$server_pidfile" >> "$GITHUB_ENV"
+          echo "Runner $RUNNER_NAME on $RUNNER_OS: isolated PHP port $port"
+          PHP_CLI_SERVER_WORKERS=4 php -S "127.0.0.1:$port" -t "$site_root" >"$server_log" 2>&1 &
+          server_pid=$!
+          echo "$server_pid" > "$server_pidfile"
           for i in $(seq 1 30); do
-            if curl -fsS "http://127.0.0.1:8765/grasstex/battle_sim_local.php?seed=healthcheck" >/dev/null; then exit 0; fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo "::error::PHP server exited unexpectedly; port may be in use." >&2
+              cat "$server_log"
+              exit 1
+            fi
+            if curl -fsS "http://127.0.0.1:$port/grasstex/battle_sim_local.php?seed=healthcheck" >/dev/null; then exit 0; fi
             sleep 1
           done
-          cat /tmp/battle-php.log
+          cat "$server_log"
           exit 1
 
       - name: Run both arms on this shard's seeds
@@ -346,7 +445,7 @@ jobs:
             extra="${extra#[?&]}"
             query="$defender_query"
             if [ -n "$extra" ]; then if [ -n "$query" ]; then query="${query}&${extra}"; else query="$extra"; fi; fi
-            export BATTLE_BENCHMARK_URL="http://127.0.0.1:8765/grasstex/battle_sim_local.php${query:+?$query}"
+            export BATTLE_BENCHMARK_URL="${BBG_BATTLE_BASE_URL}${query:+?$query}"
             export BATTLE_BENCHMARK_OUTPUT="reports/$arm"
             echo "::group::shard ${{ matrix.shard }}, arm ${arm} (${query:-no flags}), seeds ${BATTLE_BENCHMARK_SEED}-NNNN from index ${BATTLE_BENCHMARK_FIRST} x ${BATTLE_BENCHMARK_COUNT}, windows ${BATTLE_BENCHMARK_WINDOWS}"
             node scripts/run_battle_benchmark.mjs
@@ -362,9 +461,17 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+      - name: Stop isolated battle server
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${BBG_BATTLE_PIDFILE:-}" ] && [ -f "$BBG_BATTLE_PIDFILE" ]; then
+            kill "$(cat "$BBG_BATTLE_PIDFILE")" 2>/dev/null || true
+          fi
+
       - name: Show server log on failure
         if: failure()
-        run: tail -n 300 /tmp/battle-php.log || true
+        run: tail -n 300 "${BBG_BATTLE_LOG:-/dev/null}" || true
 
   compare:
     name: Pool the shards and compare
