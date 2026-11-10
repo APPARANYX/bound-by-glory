@@ -332,8 +332,7 @@
      remains authoritative and may still fail if the link changes afterward. */
   function canDeliverMovement(sq, battle, soldier) {
     if (!ON || !MOVEMENT_ON) return true;
-    if (!sq || !battle || !soldier || soldier.dead || soldier.isPlayer || soldier.squad !== sq)
-      return false;
+    if (!sq || !battle || !soldier || soldier.dead || soldier.isPlayer || soldier.squad !== sq) return false;
     var sender = senderFor(sq, {}),
       probe = {
         id: 'controller-bound-route-preflight',
