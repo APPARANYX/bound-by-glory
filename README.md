@@ -1,3 +1,5 @@
+<img width="1920" height="699" alt="Operation Riverside War Room Map" src="https://github.com/user-attachments/assets/6bd74bc0-acba-4525-934c-ad17bc966f88" />
+
 # Bound by Glory
 
 WW2 squad-AI Battle Sim lab (Babylon.js), plus the original grass/terrain rendering prototype
