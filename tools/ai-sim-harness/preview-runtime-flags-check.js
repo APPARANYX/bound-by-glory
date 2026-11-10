@@ -180,3 +180,24 @@ macroQueries.slice(macroInputs.length).forEach((query, index) => {
   assert.equal(forwarded.has('notInPreviewAllowlist'), false);
 });
 console.log('PASS 2 explicit audio-spatial / ground-stop / intelligence preview forwarding cases');
+
+/* Temporary CI formatter diagnosis; removed before merge. */
+if (process.env.GITHUB_ACTIONS === 'true') {
+  try {
+    const fs = require('node:fs');
+    const os = require('node:os');
+    const prettified = execFileSync('npx', ['--yes', 'prettier@3.3.3', '--stdin-filepath', __filename], {
+      input: fs.readFileSync(__filename, 'utf8'),
+      encoding: 'utf8'
+    });
+    const formattedPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'prettier-diff-')), 'target.js');
+    fs.writeFileSync(formattedPath, prettified);
+    try {
+      execFileSync('diff', ['-u', __filename, formattedPath], { encoding: 'utf8' });
+    } catch (err) {
+      console.log('PRETTIER_DIAGNOSTIC_DIFF_BEGIN\n' + err.stdout + '\nPRETTIER_DIAGNOSTIC_DIFF_END');
+    }
+  } catch (err) {
+    console.log('PRETTIER_DIAGNOSTIC_ERROR ' + String(err));
+  }
+}
