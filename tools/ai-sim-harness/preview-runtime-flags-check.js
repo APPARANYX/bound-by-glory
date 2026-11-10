@@ -31,6 +31,19 @@ const microNames = ['controllerStance', 'controllerSoldierFire', 'controllerReac
 const microInputs = Array.from({ length: 16 }, (_, mask) =>
   Object.fromEntries(microNames.map((name, bit) => [name, mask & (1 << bit) ? '1' : '0']))
 );
+const macroNames = [
+  'controllerReconstitution',
+  'controllerRecovery',
+  'controllerBriefs',
+  'controllerTransport'
+];
+const macroInputs = Array.from({ length: 16 }, (_, mask) =>
+  Object.fromEntries(macroNames.map((name, bit) => [name, mask & (1 << bit) ? '1' : '0']))
+);
+const extraInputs = [
+  { audioSpatialWrite: 'automation', groundSteps: '48', generalIntel: '0' },
+  { audioSpatialWrite: 'direct', groundSteps: '24', generalIntel: '1' }
+];
 const allQueries = JSON.parse(
   execFileSync(
     'php',
@@ -38,7 +51,7 @@ const allQueries = JSON.parse(
       '-r',
       'require $argv[1]; $out=array(); foreach(json_decode($argv[2],true) as $q) $out[]=http_build_query(grasstex_preview_options($q)); echo json_encode($out);',
       path.join(repo, 'runtime-contract.php'),
-      JSON.stringify(inputs.concat(microInputs))
+      JSON.stringify(inputs.concat(microInputs, macroInputs, extraInputs))
     ],
     { encoding: 'utf8' }
   )
@@ -114,7 +127,7 @@ for (const profile of ['strategic', 'legacy'])
   });
 console.log('PASS 64 composed PHP-forwarding / strategic-runtime activation cases');
 
-allQueries.slice(inputs.length).forEach((query, index) => {
+allQueries.slice(inputs.length, inputs.length + microInputs.length).forEach((query, index) => {
   const flags = new URLSearchParams(query);
   for (const name of microNames)
     assert.equal(flags.get(name), microInputs[index][name], name + ' forwarded exactly');
@@ -139,3 +152,34 @@ allQueries.slice(inputs.length).forEach((query, index) => {
     );
 });
 console.log('PASS 16 PHP-forwarding / independent Micro rollback combinations');
+
+const macroQueries = allQueries.slice(inputs.length + microInputs.length);
+macroQueries.slice(0, macroInputs.length).forEach((query, index) => {
+  const forwarded = new URLSearchParams(query);
+  const wanted = macroInputs[index];
+  for (const name of macroNames)
+    assert.equal(forwarded.get(name), wanted[name], 'Macro rollback forwarded exactly: ' + name);
+  const root = { location: { search: '?' + query } };
+  loadModule(root, 'battle/modules/13j-tactical-general.js', { location: root.location });
+  const general = root.BattleTacticalGeneral;
+  for (const [flag, name] of [
+    ['reconstitution', 'controllerReconstitution'],
+    ['recovery', 'controllerRecovery'],
+    ['briefs', 'controllerBriefs'],
+    ['transport', 'controllerTransport']
+  ])
+    assert.equal(general[flag], wanted[name] !== '0', 'actual Macro policy flag: ' + name);
+  assert.equal(
+    general.on,
+    macroNames.some(name => wanted[name] !== '0')
+  );
+});
+console.log('PASS 16 PHP-forwarding / independent Macro rollback combinations');
+
+macroQueries.slice(macroInputs.length).forEach((query, index) => {
+  const forwarded = new URLSearchParams(query);
+  for (const [name, value] of Object.entries(extraInputs[index]))
+    assert.equal(forwarded.get(name), value, 'diagnostic query forwarded exactly: ' + name);
+  assert.equal(forwarded.has('notInPreviewAllowlist'), false);
+});
+console.log('PASS 2 explicit audio-spatial / ground-stop / intelligence preview forwarding cases');
