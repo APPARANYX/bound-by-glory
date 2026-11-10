@@ -1,0 +1,23 @@
+{
+  "branch": "work/benchmark-launch/pr793-brief900-main-us-defend",
+  "launch_parent_sha": "e86cda4f9db8afa882ecd26f590620acb97ed5d0",
+  "launch_sha": "486569ce14d439c762a891c5ea434230d7857c2b",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "battle_type": "us-defend",
+    "benchmark": "standard",
+    "origin_agent": "human",
+    "purpose": "#793 M3 briefs 900s control on e86cda4: main no-param vs explicit legacy, us-defend, 48 seeds",
+    "query_off": "strategicInterception=0&tacticalController=legacy",
+    "query_on": "strategicInterception=0",
+    "ref": "work/pin/pr793-main-e86cda4",
+    "seed": "pr793-brief900-20261108",
+    "seeds": "48",
+    "sim_seconds": "900",
+    "windows": "0+900"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/pr793-main-e86cda4",
+  "source_sha_at_archive": "e86cda4f9db8afa882ecd26f590620acb97ed5d0"
+}
