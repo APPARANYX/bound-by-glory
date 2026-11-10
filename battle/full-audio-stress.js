@@ -141,7 +141,7 @@
       }
       if (item.ready) return play();
       if (item.sound || item.failed) return;
-      item.sound = new (root.BattleAudioBackend ? root.BattleAudioBackend.Sound : BABYLON.Sound)(
+      item.sound = new root.BattleAudioBackend.Sound(
         'audio-lab-catalog-' + item.category + '-' + item.action,
         root.BattleAudioFormat ? root.BattleAudioFormat.url(base + item.file) : base + item.file,
         scene,

@@ -1,7 +1,7 @@
 /* Local-listener game-audio mix. Presentation only; no soldier or simulation state.
    Source clips retain their calibrated masters and one-shot transients. We apply
-   category compensation once, before Babylon spatial attenuation, and route
-   the main SoundTrack through a mild output compressor where Web Audio permits.
+   category compensation once, before Howler spatial attenuation.
+   The Howler WebAudio graph owns output; no Babylon soundtrack routing.
    User sliders represent percentages of this new, louder balanced mix.
    ?audioMix=legacy is an exact unboosted comparison and does not erase settings. */
 (function (root) {
@@ -20,18 +20,10 @@
   };
   var search = typeof location !== 'undefined' ? location.search || '' : '';
   var legacy = /(?:^|[?&])audioMix=legacy(?:&|$)/.test(search);
-  /* Main keeps its established soundtrack. Dense new-controller fire can
-     sum many otherwise safe one-shots into a clipped bus. Keep an exact
-     ?audioMix=main comparison; ?audioMix=legacy bypasses routing entirely. */
-  var independent = !!(root.BattleAudioBackend && root.BattleAudioBackend.independent);
-  var tacticalSafety =
-    !independent &&
-    (/(?:^|[?&])tacticalController=new(?:&|$)/.test(search) || /(?:^|[?&])fullMix=1(?:&|$)/.test(search)) &&
-    !/(?:^|[?&])audioMix=(?:legacy|main)(?:&|$)/.test(search);
+  // Howler owns the sole output graph. Babylon SoundTrack compressors were retired.
   var defaults = { master: 100, weapons: 100, voices: 100, effects: 100 };
   var settings = {};
-  var sceneLimiter = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
-  var pending = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+  // Retained empty for older read-only mix diagnostics; no graph rerouting occurs.
   var stats = { routed: 0, unavailable: 0, limited: 0 };
   function bounded(v) {
     v = Number(v);
@@ -73,80 +65,13 @@
     save();
     return snapshot();
   }
-  function gain(kind, raw, scene) {
-    if (scene) ensureLimiter(scene);
+  function gain(kind, raw) {
     var base = Number(raw);
     if (!Number.isFinite(base) || base <= 0) return 0;
     if (legacy) return base;
     var category = CATEGORIES[kind] || 'effects';
     var single = (((base * (MIX[kind] || 1) * settings.master) / 100) * settings[category]) / 100;
-    return Math.min(1, tacticalSafety ? single * 0.78 : single);
-  }
-  /* The SoundTrack bus already has a direct connection to masterGain in
-     Babylon 9. Disconnect only that connection and reinsert one compressor
-     into the same route; leave each spatial Sound's graph intact. */
-  function install(scene) {
-    if (!scene || !sceneLimiter || legacy || independent) return false;
-    if (sceneLimiter.has(scene)) return true;
-    try {
-      var ae = root.BABYLON && root.BABYLON.Engine && root.BABYLON.Engine.audioEngine,
-        ctx = ae && ae.audioContext,
-        master = ae && ae.masterGain,
-        track = scene.mainSoundTrack && scene.mainSoundTrack._outputAudioNode;
-      if (
-        !ctx ||
-        !master ||
-        !track ||
-        typeof track.disconnect !== 'function' ||
-        !ctx.createDynamicsCompressor
-      )
-        return false;
-      var compressor = ctx.createDynamicsCompressor();
-      compressor.threshold.value = tacticalSafety ? -22 : -16;
-      compressor.knee.value = tacticalSafety ? 6 : 12;
-      compressor.ratio.value = tacticalSafety ? 9 : 2.5;
-      compressor.attack.value = tacticalSafety ? 0.003 : 0.006;
-      compressor.release.value = tacticalSafety ? 0.12 : 0.18;
-      compressor.connect(master);
-      try {
-        track.disconnect(master);
-        track.connect(compressor);
-      } catch (err) {
-        try {
-          track.connect(master);
-        } catch (_) {}
-        try {
-          compressor.disconnect();
-        } catch (_) {}
-        throw err;
-      }
-      sceneLimiter.set(scene, compressor);
-      stats.routed++;
-      return true;
-    } catch (_) {
-      stats.unavailable++;
-      return false;
-    }
-  }
-  function ensureLimiter(scene) {
-    if (!scene || !sceneLimiter || legacy || independent || sceneLimiter.has(scene) || pending.has(scene))
-      return;
-    if (install(scene)) return;
-    if (typeof setTimeout !== 'function') return;
-    var attempts = 0;
-    pending.set(scene, true);
-    function retry() {
-      if (
-        install(scene) ||
-        ++attempts >= 20 ||
-        (typeof scene.isDisposed === 'function' && scene.isDisposed())
-      ) {
-        pending.delete(scene);
-        return;
-      }
-      setTimeout(retry, 250);
-    }
-    setTimeout(retry, 250);
+    return Math.min(1, single);
   }
 
   load();
@@ -155,10 +80,9 @@
     get: snapshot,
     set: set,
     reset: reset,
-    ensureLimiter: ensureLimiter,
     stats: stats,
     legacy: !!legacy,
-    tacticalSafety: !!tacticalSafety,
+    tacticalSafety: false,
     presets: MIX
   };
 })(typeof window !== 'undefined' ? window : globalThis);

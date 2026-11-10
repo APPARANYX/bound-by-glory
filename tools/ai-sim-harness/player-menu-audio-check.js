@@ -97,18 +97,18 @@ async function checkUnlock() {
   };
   const getUnlock = engine =>
     new Function(
-      'BABYLON',
+      'BattleAudioBackend',
       'window',
       'console',
       'enableLiveAudioMeter',
       unlockSource + '; return unlockAudio;'
-    )({ Engine: { audioEngine: engine } }, {}, { log() {}, warn() {}, error() {} }, () => {});
+    )({ engine: () => engine }, {}, { log() {}, warn() {}, error() {} }, () => {});
   const promise = getUnlock(ae)();
   assert.deepEqual(calls, ['resume', 'unlock'], 'both calls happen synchronously inside the gesture');
   ctx.state = 'running';
   resolveResume();
   assert.equal(await promise, true);
-  assert.equal(ae.unlocked, true, 'Babylon flag synchronized after native resume');
+  assert.equal(ae.unlocked, true, 'backend flag synchronized after native resume');
   assert.equal(await getUnlock({ unlock() {} })(), false, 'missing context is not successful audio startup');
   assert.equal(
     await getUnlock({ audioContext: { state: 'suspended', resume: async () => {} }, unlock() {} })(),
