@@ -5,8 +5,7 @@
   'use strict';
 
   var SEARCH =
-    (root.location && root.location.search) ||
-    (typeof location !== 'undefined' ? location.search || '' : '');
+    (root.location && root.location.search) || (typeof location !== 'undefined' ? location.search || '' : '');
   var ENABLED =
     /[?&]tacticalController=new(?:&|#|$)/i.test(SEARCH) &&
     !/[?&]controllerGeometryCache=0(?:&|#|$)/i.test(SEARCH);
@@ -27,7 +26,7 @@
     var nav = root.BattleNavigation ? root.BattleNavigation.version : 0;
     var phys = obstacles && obstacles.__physicalVersion ? obstacles.__physicalVersion : 0;
     var dyn = obstacles && obstacles.__dynamicFootprints;
-  var dynStamp = '0';
+    var dynStamp = '0';
     if (dyn && dyn.length) {
       var parts = [];
       for (var i = 0; i < dyn.length; i++) {

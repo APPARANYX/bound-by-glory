@@ -988,8 +988,7 @@
     while (this._aiAccum >= AI_TICK && !this.winner) {
       this._aiAccum -= AI_TICK;
       this._geometryStep = (this._geometryStep || 0) + 1;
-      if (root.BattleGeometryStepCache)
-        root.BattleGeometryStepCache.beginStep(this, this._geometryStep);
+      if (root.BattleGeometryStepCache) root.BattleGeometryStepCache.beginStep(this, this._geometryStep);
       if (root.BattleAIPolicy && root.BattleAIPolicy.pinTickPolicies)
         root.BattleAIPolicy.pinTickPolicies(this);
       var f = this.factions,

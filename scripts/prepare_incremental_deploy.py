@@ -35,7 +35,7 @@ STATIC_FILES += [(path, path) for path in MANAGED_LAB]
 # The diagnostic audio lab is staged by preview.php only. Never publish its
 # lab-named files over protected production paths.
 BATTLE_FILES = [
-    "battle_sim.html","core-runtime.js","soldier.js","weapons.js","obstacle-field.js","terrain-features.js",
+    "battle_sim.html","core-runtime.js","soldier.js","weapons.js","geometry-step-cache.js","obstacle-field.js","terrain-features.js",
     "squad-ai.js","movement-resolver.js","engagement.js","battle-sim.js","camera-controls.js","acoustics.js",
     "scenario-generator.js","battle-navigation.js","town-objectives.js","module-registry.js",
     "ai-policy.js","objective-system.js","battle-telemetry.js","commander-doctrine.js",

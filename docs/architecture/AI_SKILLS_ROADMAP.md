@@ -350,7 +350,7 @@ Cross-walk of the §9.1 inventory and `specs/001-geometry-query-reduction` again
 | ID / track | In #817? | Notes |
 | --- | --- | --- |
 | **US1 — per-step geometry cache** (`specs/001`) | **Yes** | `battle/geometry-step-cache.js`; `?controllerGeometryCache=0` off switch; harness `geometry-step-cache-check.js`. |
-| **D5 — route LOS / dynamic vehicles** | **Partial** | Shared per-step cache keys include dynamic footprint stamp; `13g` `geometryEpoch` no longer drops all sight-store reuse when trucks are present—cross-plan reuse only when `dynamicsAffectSegment` is false (`?controllerRouteDynIsolate=0` restores conservative behavior). Complements, does not replace, per-step memo. |
+| **D5 — route LOS / dynamic vehicles** | **Partial** | Shared per-step cache keys include dynamic footprint stamp; `13g` cross-plan reuse when trucks are off the sampled line is **opt-in** (`?controllerRouteDynIsolate=1`). Default behavior matches the existing `controller-route-reuse-check` contract. Complements per-step memo. |
 | **D8 — Macro/policy timing** | **Partial** | `BattleAIPolicy.pinTickPolicies` per 0.15 s AI tick (client coherence with `battle_policy.php` revision reads); not a full decision-wake redesign. |
 | **D4 — cover geometry** | **No change** | Existing `?controllerCoverCache=` path unchanged; directional bins still open (P2 item 4). |
 | **D1, D2, D3, D6, D7** | **No** | Instrumentation / bounded experiments per P0–P2 remain follow-up PRs. |

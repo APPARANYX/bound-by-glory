@@ -52,11 +52,9 @@
        reports), so the bound costs little: on two 600 s meeting battles an unbounded store grew to
        84k-166k answers (+15-27 MB of heap), and this bound kept 97-99% of its reuse. */
     STORE_LIMIT = 25000,
-    /* D5 (#794): keep cross-plan LOS reuse when trucks are off the sampled segment; off
-       with ?controllerRouteDynIsolate=0 (any footprint disables the sight store). */
-    DYN_ISOLATE =
-      /[?&]tacticalController=new(?:&|#|$)/i.test(SEARCH) &&
-      !/[?&]controllerRouteDynIsolate=0(?:&|#|$)/i.test(SEARCH),
+    /* D5 (#794): opt-in — keep cross-plan LOS reuse when trucks are off the sampled segment.
+       Default remains conservative (any footprint disables the sight store). */
+    DYN_ISOLATE = /[?&]controllerRouteDynIsolate=1(?:&|#|$)/i.test(SEARCH),
     DYN_PAD = 14,
     epoch = null,
     sightStore = { epoch: null, lines: null, size: 0 };
@@ -141,9 +139,7 @@
       lines = sightRow(sim, at, stance);
     for (var k = 0; k < reports.length; k++) {
       var p = reports[k],
-        dynNear =
-          DYN_ISOLATE &&
-          dynamicsAffectSegment(sim.obstacles, at.x, at.z, p.x, p.z),
+        dynNear = DYN_ISOLATE && dynamicsAffectSegment(sim.obstacles, at.x, at.z, p.x, p.z),
         toX = lines && !dynNear ? lines.get(p.x) : null,
         stored = toX ? toX.get(p.z) : undefined;
       if (stored === undefined) {

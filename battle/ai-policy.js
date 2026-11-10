@@ -441,8 +441,7 @@
     return clone(result);
   }
   function genomeFor(sim, faction) {
-    if (sim && sim._policyTickPin && sim._policyTickPin[faction])
-      return sim._policyTickPin[faction];
+    if (sim && sim._policyTickPin && sim._policyTickPin[faction]) return sim._policyTickPin[faction];
     if (!STASHED && sim && sim.aiGenomes && sim.aiGenomes[faction]) return sim.aiGenomes[faction];
     var sc = sim && sim.scene && sim.scene.metadata && sim.scene.metadata.battleScenario;
     return adaptedForScenario(sc).genome;
