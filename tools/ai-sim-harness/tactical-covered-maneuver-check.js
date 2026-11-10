@@ -598,6 +598,62 @@ test('a movement publication cannot execute before the mover personally adopts i
   until(w, () => live(w, 'combat.bound').some(a => a.stage === 'executing'));
   clean(w);
 });
+test('an unreachable personal bound is cancelled, its mover released and the squad re-decides', () => {
+  const w = world();
+  until(w, () => w.M.summary(w.q)?.phase === 'moving' && live(w, 'combat.bound').some(a => a.stage === 'published'));
+  const action = live(w, 'combat.bound').find(a => a.stage === 'published');
+  const man = w.q.members.find(s => String(s.id) === action.actorId);
+  const CR = w.r.BattleCommandReception;
+  const realPeek = CR.peek;
+  CR.peek = function (s, sim, category, scope) {
+    if (s === man && category === 'movement' && scope === 'soldier:' + String(man.id))
+      return { data: { publishKey: 'controller:' + action.actionId }, unreachable: true, adoptedAt: null };
+    return realPeek.apply(this, arguments);
+  };
+  w.E.updateSoldier(man, w.b);
+  const refused = live(w, 'combat.bound').find(a => a.actionId === action.actionId);
+  assert.equal(refused.stage, 'cancelled');
+  assert.equal(refused.reason, 'bound-command-unreachable');
+  tick(w);
+  assert.equal(live(w, 'combat.bound').some(a => a.actionId === action.actionId), false);
+  assert.ok(
+    w.M.summary(w.q).history.some(h => h.reason.includes('bound-command-unreachable:' + action.actorId)),
+    'the Squad Leader observes the exact failure and interrupts this mover'
+  );
+  assert.ok(w.M.summary(w.q).personalOrdersInterrupted >= 1);
+  CR.peek = realPeek;
+  clean(w);
+});
+test('a pending bound has an adoption deadline, but a physically adopted bound has no elapsed-time deadline', () => {
+  const w = world();
+  until(w, () => w.M.summary(w.q)?.phase === 'moving' && live(w, 'combat.bound').some(a => a.stage === 'published'));
+  const action = live(w, 'combat.bound').find(a => a.stage === 'published');
+  const man = w.q.members.find(s => String(s.id) === action.actorId);
+  const CR = w.r.BattleCommandReception;
+  const realPeek = CR.peek;
+  let adoptedAt = w.b.time + 20;
+  CR.peek = function (s, sim, category, scope) {
+    if (s === man && category === 'movement' && scope === 'soldier:' + String(man.id))
+      return {
+        data: { publishKey: 'controller:' + action.actionId },
+        unreachable: false,
+        adoptedAt
+      };
+    return realPeek.apply(this, arguments);
+  };
+  const now = w.b.time;
+  w.b.time = now + 9;
+  w.E.updateSoldier(man, w.b);
+  assert.equal(live(w, 'combat.bound').find(a => a.actionId === action.actionId).stage, 'published',
+    'a future scheduled reception must not be mistaken for a missed deadline');
+  adoptedAt = now + 1;
+  w.E.updateSoldier(man, w.b);
+  const failed = live(w, 'combat.bound').find(a => a.actionId === action.actionId);
+  assert.equal(failed.stage, 'cancelled');
+  assert.equal(failed.reason, 'bound-adoption-overdue');
+  CR.peek = realPeek;
+  clean(w);
+});
 test('covering is event-driven: multiple personal moves and no lease expiry while moving', () => {
   const w = world();
   until(w, () => w.M.summary(w.q)?.phase === 'moving');
