@@ -2325,11 +2325,10 @@
         CR.executionCurrent(s, battle, 'movement', 'soldier:' + String(s.id), s._fireteamAdoptedEnvelope))
     );
   }
-  /* Command Reception, not the mover's proximity to the leader, owns deliverability.
-     Read only the envelope for THIS controller action: an older or unrelated personal
-     command must not be mistaken for its receipt. No transport re-evaluation or new
-     movement writer is introduced here. Meso may retry the same undeliverable envelope
-     before this read; a later reachable receipt is respected. */
+  /* The actual personal envelope owns delivery. A transient unreachable receipt is not
+     terminal: Meso may reissue that same envelope and Command Reception can retry it
+     after the leader/relay comes back into range. Only a delivery wait exceeding the
+     grace window may end a still-unheard bound. Never time out an adopted physical hop. */
   function controllerBoundDeliveryFailure(s, battle, task) {
     var CR = root.BattleCommandReception;
     if (
@@ -2342,7 +2341,9 @@
       return null;
     var rec = CR.peek && CR.peek(s, battle, 'movement', 'soldier:' + String(s.id)),
       same = !!(rec && rec.data && String(rec.data.publishKey || '') === task.order.key);
-    if (same && rec.unreachable) return 'bound-command-unreachable';
+    if (same && rec.unreachable) {
+      return battle.time >= task.since + BOUND_DELIVERY_WAIT ? 'bound-command-unreachable' : null;
+    }
     /* Receipt, processing and orientation are legitimate delays. This deadline is
        ONLY for adoption, and never interrupts an adopted B→C physical hop. */
     var expected = same && Number.isFinite(rec.adoptedAt) ? rec.adoptedAt + 2 : 0;
@@ -2407,7 +2408,14 @@
     if (task.drill === 'bound') {
       if (controllerBoundRole(s, battle) !== 'move')
         return { stage: 'cancelled', reason: 'bound-window-ended', at: battle.time };
-      if (task.failed) return { stage: 'cancelled', reason: task.failed, at: task.at };
+      if (task.failed) {
+        /* Recheck the live receipt before reporting a terminal stage: the same
+           command may have become reachable between soldier and commander ticks. */
+        var outstanding = controllerBoundDeliveryFailure(s, battle, task);
+        if (outstanding) return { stage: 'cancelled', reason: outstanding, at: task.at };
+        task.failed = null;
+        task.reason = 'published:await-personal-adoption';
+      }
       return {
         stage: task.arrived
           ? 'arrived'
@@ -2439,18 +2447,23 @@
     e.suppressOrder = drill === 'suppress';
     if (drill === 'bound') {
       if (controllerBoundRole(s, battle) !== 'move') return;
-      if (task.failed) return;
+      if (task.failed) {
+        if (controllerBoundDeliveryFailure(s, battle, task)) {
+          /* Keep the native hold live until the commander acknowledges the
+             cancelled stage or the owner releases the action. */
+          holdPosition(s, battle);
+          return;
+        }
+        task.failed = null;
+      }
       if (!controllerBoundAdopted(s, battle, task)) {
         var failure = controllerBoundDeliveryFailure(s, battle, task);
         if (failure) {
-          /* The commander learns a failed personal action through its native stage.
-             Covered Maneuver then interrupts this mover, frees the claim and the Meso
-             lease role, and selects another cover hop or keeps the man fighting here.
-             The existing movement-progress owner excludes this failed destination. */
+          /* Command loss is not impassable terrain. Report failure through the
+             native stage; Covered Maneuver releases just this personal action.
+             Do not poison the navigation owner's failed-cover memory. */
           task.failed = task.reason = failure;
           task.at = battle.time;
-          if (root.BattleMovementProgress && root.BattleMovementProgress.noteFailure)
-            root.BattleMovementProgress.noteFailure(s, battle, e.cover || task.point, failure);
           holdPosition(s, battle);
         } else {
           holdPosition(s, battle);
