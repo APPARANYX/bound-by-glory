@@ -2432,7 +2432,9 @@
       task.at = battle.time;
       return;
     }
-    var drill = fireControlPreparing(s, battle) ? 'prepare' : task.drill,
+    /* A bound already authorized by the controller must finish or report a failure;
+       a fresh HOLD/PRECISION preparation cannot hide its delivery state. */
+    var drill = task.drill === 'bound' ? 'bound' : fireControlPreparing(s, battle) ? 'prepare' : task.drill,
       before = s._movementResolver && s._movementResolver.combat;
     e.suppressOrder = drill === 'suppress';
     if (drill === 'bound') {
