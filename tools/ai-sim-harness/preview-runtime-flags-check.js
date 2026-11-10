@@ -153,28 +153,27 @@ allQueries.slice(inputs.length, inputs.length + microInputs.length).forEach((que
 });
 console.log('PASS 16 PHP-forwarding / independent Micro rollback combinations');
 
-allQueries
-  .slice(inputs.length + microInputs.length, inputs.length + microInputs.length + macroInputs.length)
-  .forEach((query, index) => {
-    const forwarded = new URLSearchParams(query);
-    const wanted = macroInputs[index];
-    for (const name of macroNames)
-      assert.equal(forwarded.get(name), wanted[name], 'Macro rollback forwarded exactly: ' + name);
-    const root = { location: { search: '?' + query } };
-    loadModule(root, 'battle/modules/13j-tactical-general.js', { location: root.location });
-    const general = root.BattleTacticalGeneral;
-    for (const [flag, name] of [
-      ['reconstitution', 'controllerReconstitution'],
-      ['recovery', 'controllerRecovery'],
-      ['briefs', 'controllerBriefs'],
-      ['transport', 'controllerTransport']
-    ])
-      assert.equal(general[flag], wanted[name] !== '0', 'actual Macro policy flag: ' + name);
-    assert.equal(general.on, macroNames.some(name => wanted[name] !== '0'));
+const macroQueries = allQueries.slice(inputs.length + microInputs.length);
+macroQueries.slice(0, macroInputs.length).forEach((query, index) => {
+  const forwarded = new URLSearchParams(query);
+  const wanted = macroInputs[index];
+  for (const name of macroNames)
+    assert.equal(forwarded.get(name), wanted[name], 'Macro rollback forwarded exactly: ' + name);
+  const root = { location: { search: '?' + query } };
+  loadModule(root, 'battle/modules/13j-tactical-general.js', { location: root.location });
+  const general = root.BattleTacticalGeneral;
+  for (const [flag, name] of [
+    ['reconstitution', 'controllerReconstitution'],
+    ['recovery', 'controllerRecovery'],
+    ['briefs', 'controllerBriefs'],
+    ['transport', 'controllerTransport']
+  ])
+    assert.equal(general[flag], wanted[name] !== '0', 'actual Macro policy flag: ' + name);
+  assert.equal(general.on, macroNames.some(name => wanted[name] !== '0'));
   });
 console.log('PASS 16 PHP-forwarding / independent Macro rollback combinations');
 
-allQueries.slice(inputs.length + microInputs.length + macroInputs.length).forEach((query, index) => {
+macroQueries.slice(macroInputs.length).forEach((query, index) => {
   const forwarded = new URLSearchParams(query);
   for (const [name, value] of Object.entries(extraInputs[index]))
     assert.equal(forwarded.get(name), value, 'diagnostic query forwarded exactly: ' + name);
