@@ -1,0 +1,23 @@
+{
+  "branch": "work/benchmark-launch/pr795-head-flagoff-std-meeting",
+  "launch_parent_sha": "504f69e3a71ae21706b04e17c5d07fdcde900b4b",
+  "launch_sha": "ad3689829a3854c32fe0278f78d58f1bde1d4b47",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/504f69e3a71ae21706b04e17c5d07fdcde900b4b",
+  "request": {
+    "battle_type": "meeting",
+    "benchmark": "standard",
+    "origin_agent": "human",
+    "purpose": "#795 M4 gate on 504f69e3: head no-param vs controllerTransport=0, meeting, 60 seeds",
+    "query_off": "strategicInterception=0&controllerTransport=0",
+    "query_on": "strategicInterception=0",
+    "ref": "work/pin/pr795-504f69e3",
+    "seed": "pr795-m4-20261108",
+    "seeds": "60",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/pr795-504f69e3",
+  "source_sha_at_archive": "504f69e3a71ae21706b04e17c5d07fdcde900b4b"
+}
