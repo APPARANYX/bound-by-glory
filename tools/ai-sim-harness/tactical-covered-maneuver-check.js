@@ -709,8 +709,8 @@ function publishedBoundWithLostLink() {
   );
   assert.ok(action, 'an independent published personal mover is available');
   const man = w.q.members.find(s => String(s.id) === action.actorId);
-  const beforeX = man.root.position.x;
-  man.root.position.x += 220;
+  const beforeX = leader.root.position.x;
+  leader.root.position.x += 220;
   const CR = w.r.BattleCommandReception;
   assert.equal(CR.canDeliverMovement(w.q, w.b, man), false, 'link is now physically unreachable');
   const meta = {
@@ -725,7 +725,7 @@ function publishedBoundWithLostLink() {
   const rec = CR.peek(man, w.b, 'movement', meta.scope);
   assert.equal(rec.unreachable, true, 'real transport rejected the envelope');
   assert.equal(rec.data.publishKey, meta.data.publishKey);
-  return { w, action, man, CR, meta, beforeX };
+  return { w, action, man, leader, CR, meta, beforeX };
 }
 test('real undeliverable bound waits for retry before terminal cancellation and releases its cover claim', () => {
   const { w, action, man, CR } = publishedBoundWithLostLink();
@@ -757,18 +757,22 @@ test('real undeliverable bound waits for retry before terminal cancellation and 
   clean(w);
 });
 test('real Command Reception retry clears unreachable failure before commander cleanup', () => {
-  const { w, action, man, CR, meta, beforeX } = publishedBoundWithLostLink();
+  const { w, action, man, leader, CR, meta, beforeX } = publishedBoundWithLostLink();
   w.b.time += 8.1;
   w.E.updateSoldier(man, w.b);
   assert.equal(live(w, 'combat.bound').find(a => a.actionId === action.actionId).stage, 'cancelled');
-  man.root.position.x = beforeX;
+  leader.root.position.x = beforeX;
   CR.publish(w.q, w.b, 'movement', [man], meta);
   const rec = CR.peek(man, w.b, 'movement', meta.scope);
   assert.equal(rec.unreachable, false, 'native retry found the returning link');
   assert.ok(rec.adoptedAt > w.b.time, 'receipt gets a fresh actual adoption clock');
   w.E.updateSoldier(man, w.b);
   const current = live(w, 'combat.bound').find(a => a.actionId === action.actionId);
-  assert.equal(current.stage, 'published', 'pending owner failure must clear on retry');
+  assert.equal(
+    current.stage,
+    'published',
+    'pending owner failure must clear on retry: ' + JSON.stringify(current)
+  );
   assert.equal(CR.telemetry(w.b).recovered >= 1, true);
   clean(w);
 });
