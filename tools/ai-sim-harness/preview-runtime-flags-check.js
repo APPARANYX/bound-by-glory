@@ -31,7 +31,12 @@ const microNames = ['controllerStance', 'controllerSoldierFire', 'controllerReac
 const microInputs = Array.from({ length: 16 }, (_, mask) =>
   Object.fromEntries(microNames.map((name, bit) => [name, mask & (1 << bit) ? '1' : '0']))
 );
-const macroNames = ['controllerReconstitution', 'controllerRecovery', 'controllerBriefs', 'controllerTransport'];
+const macroNames = [
+  'controllerReconstitution',
+  'controllerRecovery',
+  'controllerBriefs',
+  'controllerTransport'
+];
 const macroInputs = Array.from({ length: 16 }, (_, mask) =>
   Object.fromEntries(macroNames.map((name, bit) => [name, mask & (1 << bit) ? '1' : '0']))
 );
