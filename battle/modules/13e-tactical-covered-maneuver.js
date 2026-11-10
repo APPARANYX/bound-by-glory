@@ -526,8 +526,17 @@
         audit.teams.push({
           team: team,
           moverId: String(s.id),
+          eligibleMovers: 1,
+          eligibleSupporters: ready.length - 1,
           candidates: 0,
+          directionalCandidates: 0,
           admittedRoutes: 0,
+          prunedEdges: 0,
+          graphNodes: 0,
+          routeLength: 0,
+          terminal: 'none',
+          reused: false,
+          moverFailures: [],
           routeRejections: {},
           result: 'command-link-unreachable'
         });
