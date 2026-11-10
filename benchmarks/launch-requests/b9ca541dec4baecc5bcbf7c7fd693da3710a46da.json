@@ -1,0 +1,21 @@
+{
+  "branch": "work/benchmark-launch/pr793-probe-head",
+  "launch_parent_sha": "156811c194d6b89f19a7c2fed50353690936bb80",
+  "launch_sha": "b9ca541dec4baecc5bcbf7c7fd693da3710a46da",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/156811c194d6b89f19a7c2fed50353690936bb80",
+  "request": {
+    "benchmark": "probe-pack",
+    "map": "tactical",
+    "origin_agent": "human",
+    "purpose": "#793 M3 gate on 156811c: probe pack no-param vs controllerBriefs=0",
+    "query_off": "strategicInterception=0&controllerBriefs=0",
+    "query_on": "strategicInterception=0",
+    "ref": "work/pin/pr793-156811c",
+    "seed": "pack-793",
+    "seeds": "40"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/pr793-156811c",
+  "source_sha_at_archive": "156811c194d6b89f19a7c2fed50353690936bb80"
+}
