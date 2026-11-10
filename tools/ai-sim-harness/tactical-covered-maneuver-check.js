@@ -294,6 +294,30 @@ test('diagnostics preserve the UI contract for movers with no personal contact',
   assert.equal(t.candidates, 0);
   clean(w);
 });
+test('command-delivery preflight prunes disconnected movers before expensive route selection', () => {
+  const w = world();
+  const Q = w.r.BattleSquadStability;
+  const A = w.r.SquadAI;
+  const man = w.q.members.find(s =>
+    ['alpha', 'bravo', 'charlie'].includes(Q.teamKeyFor(s)) && !A.isMachineGun(s)
+  );
+  const CR = w.r.BattleCommandReception;
+  const real = CR.canDeliverMovement;
+  const asked = [];
+  CR.canDeliverMovement = function (sq, sim, s) {
+    asked.push(s);
+    return s !== man;
+  };
+  squad(w);
+  assert.ok(asked.includes(man), 'delivery preflight consulted authoritative command service');
+  const audit = w.M.summary(w.q).diagnostic;
+  assert.equal(
+    audit.teams.find(t => t.moverId === String(man.id))?.result,
+    'command-link-unreachable'
+  );
+  CR.canDeliverMovement = real;
+  clean(w);
+});
 test('one or two mandatory covering shooters are not routed before candidate ranking', () => {
   for (const numberOfShooters of [1, 2, 3]) {
     const w = world();
