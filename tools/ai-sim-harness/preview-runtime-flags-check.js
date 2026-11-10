@@ -170,7 +170,7 @@ macroQueries.slice(0, macroInputs.length).forEach((query, index) => {
   ])
     assert.equal(general[flag], wanted[name] !== '0', 'actual Macro policy flag: ' + name);
   assert.equal(general.on, macroNames.some(name => wanted[name] !== '0'));
-  });
+});
 console.log('PASS 16 PHP-forwarding / independent Macro rollback combinations');
 
 macroQueries.slice(macroInputs.length).forEach((query, index) => {
