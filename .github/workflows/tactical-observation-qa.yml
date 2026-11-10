@@ -53,26 +53,26 @@ jobs:
       - name: Probe current-head preview
         env:
           TACTICAL_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          TACTICAL_PREVIEW: https://test.ivandpopov.com/grasstex/preview.php?ref=${{ github.head_ref || github.ref_name }}
+          TACTICAL_PREVIEW: https://test.ivandpopov.com/bound-by-glory/preview.php?ref=${{ github.head_ref || github.ref_name }}
         run: node scripts/probes/probe_tactical_observation.cjs
         # preview.php resolves branches, then the probe checks the staged head SHA.
 
       - name: Staged autonomous building execution
         env:
           TACTICAL_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          TACTICAL_PREVIEW: https://test.ivandpopov.com/grasstex/preview.php?ref=${{ github.head_ref || github.ref_name }}
+          TACTICAL_PREVIEW: https://test.ivandpopov.com/bound-by-glory/preview.php?ref=${{ github.head_ref || github.ref_name }}
         run: node scripts/probes/probe_structure_execution.cjs
 
       - name: Staged concealed ambush execution
         env:
           TACTICAL_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          TACTICAL_PREVIEW: https://test.ivandpopov.com/grasstex/preview.php?ref=${{ github.head_ref || github.ref_name }}
+          TACTICAL_PREVIEW: https://test.ivandpopov.com/bound-by-glory/preview.php?ref=${{ github.head_ref || github.ref_name }}
         run: node scripts/probes/probe_tactical_postures.cjs
 
       - name: C3 effective firing and queued voice eligibility
         env:
           TACTICAL_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          TACTICAL_PREVIEW: https://test.ivandpopov.com/grasstex/preview.php?ref=${{ github.head_ref || github.ref_name }}
+          TACTICAL_PREVIEW: https://test.ivandpopov.com/bound-by-glory/preview.php?ref=${{ github.head_ref || github.ref_name }}
         run: node scripts/probes/probe_effective_fire.cjs
 
       - uses: actions/upload-artifact@v4
@@ -94,7 +94,7 @@ jobs:
       - name: Real-map covered-bound physical evidence
         env:
           TACTICAL_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          TACTICAL_PREVIEW: https://test.ivandpopov.com/grasstex/preview.php?ref=${{ github.head_ref || github.ref_name }}
+          TACTICAL_PREVIEW: https://test.ivandpopov.com/bound-by-glory/preview.php?ref=${{ github.head_ref || github.ref_name }}
         run: node scripts/probes/probe_covered_maneuver.cjs
       - uses: actions/upload-artifact@v4
         if: always()
@@ -124,9 +124,9 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Flag-on natural census and native contact execution
         env:
-          TACTICAL_DIRECT_PREVIEW: https://test.ivandpopov.com/grasstex/preview/${{ needs.contact-preview.outputs.preview_slug }}/battle_sim.php
+          TACTICAL_DIRECT_PREVIEW: https://test.ivandpopov.com/bound-by-glory/preview/${{ needs.contact-preview.outputs.preview_slug }}/battle_sim.php
           TACTICAL_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          TACTICAL_PREVIEW: https://test.ivandpopov.com/grasstex/preview.php?ref=${{ github.head_ref || github.ref_name }}
+          TACTICAL_PREVIEW: https://test.ivandpopov.com/bound-by-glory/preview.php?ref=${{ github.head_ref || github.ref_name }}
         run: node scripts/probes/probe_tactical_contact.cjs
       - uses: actions/upload-artifact@v4
         if: always()

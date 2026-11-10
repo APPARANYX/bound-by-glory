@@ -188,6 +188,10 @@ const { requestPreview } = require('./preview_request.cjs');
       q.commandPhase = 'retreat';
       TC.dispatch(b, q, 'fireAndMovement', { underFire: 1 });
       TC.dispatch(b, q, 'squadCommand');
+      /* The real soldier loop dispatches Engagement for each actor, which releases
+         existing contact drills on retreat. An isolated Meso dispatch alone does not
+         exercise that owner; keep the zero-actions acceptance assertion below. */
+      q.members.forEach(s => E.updateSoldier(s, b));
       const after = TC.summary(b),
         retreatActions = (after.live || []).filter(a => a.squad === q.id).length;
       const screen = { shots, lane, samples, before, owned, retreatActions, fireAfterRetreat: q.fireControl };
