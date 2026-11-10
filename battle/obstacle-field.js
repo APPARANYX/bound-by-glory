@@ -300,7 +300,7 @@
     return dx * dx + dz * dz <= r * r;
   }
 
-  function sightBlocker(obstacles, a, b) {
+  function sightBlockerUncached(obstacles, a, b) {
     var field = fieldFor(obstacles);
     var dynamic = obstacles && obstacles.__dynamicFootprints,
       candidates = field ? gatherSegment(field, a.x, a.z, b.x, b.z) : [],
@@ -322,8 +322,17 @@
     }
     return best || false;
   }
+  function sightBlocker(obstacles, a, b) {
+    var C = root.BattleGeometryStepCache;
+    if (!C || !C.enabled) return sightBlockerUncached(obstacles, a, b);
+    var ver = C.navVersion(obstacles);
+    var key = C.keyEndpoints(a, b, ver);
+    return C.memo('sightBlocker', key, function () {
+      return sightBlockerUncached(obstacles, a, b);
+    });
+  }
   /* Blocked or not needs any hit, not the nearest one: stop at the first. */
-  function sightBlocked(obstacles, a, b, options) {
+  function sightBlockedUncached(obstacles, a, b, options) {
     var field = fieldFor(obstacles);
     var dynamic = obstacles && obstacles.__dynamicFootprints,
       candidates = field ? gatherCrossed(field, a.x, a.z, b.x, b.z) : [];
@@ -336,6 +345,16 @@
       return true;
     }
     return false;
+  }
+  function sightBlocked(obstacles, a, b, options) {
+    var C = root.BattleGeometryStepCache;
+    if (!C || !C.enabled) return sightBlockedUncached(obstacles, a, b, options);
+    var ver = C.navVersion(obstacles);
+    var ignore = options && options.ignoreDynamicId != null ? ':' + options.ignoreDynamicId : '';
+    var key = C.keyEndpoints(a, b, ver) + ignore;
+    return C.memo('sightBlocked', key, function () {
+      return sightBlockedUncached(obstacles, a, b, options);
+    });
   }
 
   function coverAt(obstacles, x, z, stance) {

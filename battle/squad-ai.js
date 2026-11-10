@@ -282,7 +282,7 @@
     return F ? F.coverPotentialAt(obstacles, x, z) : coverMultiplierAt(x, z, obstacles, 'prone');
   }
 
-  function hasLineOfSight(a, b, heightAt, obstacles) {
+  function hasLineOfSightUncached(a, b, heightAt, obstacles) {
     var ax = a.root.position.x,
       az = a.root.position.z,
       ay = heightAt(ax, az) + eyeHeight(a);
@@ -312,6 +312,15 @@
       if (groundY > lineY - 0.15) return false;
     }
     return true;
+  }
+  function hasLineOfSight(a, b, heightAt, obstacles) {
+    var C = root.BattleGeometryStepCache;
+    if (!C || !C.enabled) return hasLineOfSightUncached(a, b, heightAt, obstacles);
+    var ver = C.navVersion(obstacles);
+    var key = C.keySoldierPair(a, b, ver);
+    return C.memo('hasLineOfSight', key, function () {
+      return hasLineOfSightUncached(a, b, heightAt, obstacles);
+    });
   }
 
   /* Effective spotting range against one particular man in one particular stance. */

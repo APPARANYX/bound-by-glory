@@ -171,7 +171,17 @@
       if(isFinite(h))camera.position.y=h+EYE;
     });
 
+    /* Coarse splat proxy: fine tiles mark the baked road corridor; grass blades skip those cells
+       so LOD streaming stays aligned with rendered terrain (LOS/cover use heightfield, not blades). */
+    function surfaceAllowsGrass(x,z){
+      var u=bx(x),v=by(z);
+      var ti=Math.floor(u/T.TILE),tj=Math.floor(v/T.TILE);
+      if(ti<0||tj<0||ti>=T.nT||tj>=T.nT)return false;
+      return !T.fine.has(tj*T.nT+ti);
+    }
+
     window.GrassTerrainBaked={tiles:T,manifest:man,sampleAt:sampleAt,heightAt:heightAt,
+      surfaceAllowsGrass:surfaceAllowsGrass,
       stream:st,meshes:meshes,material:mat,size:W,eyeHeight:EYE,
       stats:function(){var v=0;st.chunks.forEach(function(c){if(c.g)v+=(c.n+1)*(c.n+1);});
         return {chunks:st.chunks.size,vertices:v,queued:st.dirty.size};}};

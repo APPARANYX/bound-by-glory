@@ -8,6 +8,8 @@
   if(typeof nearTypes==='undefined'||typeof medTypes==='undefined'||typeof farTypes==='undefined'||typeof nearPatch==='undefined')return;
 
   var BUDGET_MS=2.0,COMMITS_PER_FRAME=1,PAD=CHUNK*2.0,HYST=CHUNK*.4;
+  var FRUST_PAD=CHUNK*0.75,LOD_FRUST_NEAR=(typeof NEAR_END!=='undefined'?NEAR_END:30)+PAD;
+  var streamGen=0,frustumPlanes=null;
   var NEAR_D=(typeof NEAR_END!=='undefined'?NEAR_END:30)+PAD;
   var MED_D=(typeof MED_END!=='undefined'?MED_END:165)+PAD;
   var FAR_LO=Math.max(0,(typeof FAR_START!=='undefined'?FAR_START:150)-PAD);
@@ -20,12 +22,38 @@
   function fit(list,i,need){var a=list[i];if(!a||a.length<need)list[i]=new Float32Array(Math.ceil(need*1.25)+16);return list[i];}
   function push(mesh,kind,data,stride,instances){var b=bound.get(mesh);if(!b){b={};bound.set(mesh,b);}if(b[kind]!==data){mesh.thinInstanceSetBuffer(kind,data,stride,false);b[kind]=data;}else mesh.thinInstanceBufferUpdated(kind);if(instances>=0)mesh.thinInstanceCount=instances;}
 
+  function refreshFrustum(){
+    if(!scene||!camera)return null;
+    var m=BABYLON.Matrix.Identity();
+    scene.getViewMatrix().multiplyToRef(scene.getProjectionMatrix(),m);
+    frustumPlanes=BABYLON.Frustum.GetPlanes(m);
+    return frustumPlanes;
+  }
+  function chunkVisible(wx,wz,d){
+    if(d>LOD_FRUST_NEAR)return true;
+    var planes=frustumPlanes||refreshFrustum();
+    if(!planes)return true;
+    var p=new BABYLON.Vector3(wx,camera.position.y,wz);
+    if(!BABYLON.Frustum.IsPointInFrustum(p,planes))return false;
+    if(d<NEAR_D)return true;
+    var fwd=camera.getForwardRay().direction;
+    var dx=wx-camera.position.x,dz=wz-camera.position.z;
+  return dx*fwd.x+dz*fwd.z>=-FRUST_PAD;
+  }
+  function surfaceAllowsGrass(x,z){
+    var baked=window.GrassTerrainBaked;
+    if(!baked||typeof baked.surfaceAllowsGrass!=='function')return true;
+    return baked.surfaceAllowsGrass(x,z);
+  }
+
   function startJob(den){
     var count=perChunkCount(),ox=camera.position.x,oz=camera.position.z,range=Math.ceil(RING/CHUNK)+1;
     var cx=Math.floor(ox/CHUNK),cz=Math.floor(oz/CHUNK),list=[],nearC=0,medFullC=0,medHalfC=0,farC=0;
     for(var z=cz-range;z<=cz+range;z++)for(var x=cx-range;x<=cx+range;x++){
       var dx=(x+.5)*CHUNK-ox,dz=(z+.5)*CHUNK-oz,d=Math.sqrt(dx*dx+dz*dz);if(d>RING)continue;
       var wn=d<=NEAR_D,wm=d<=MED_D,wf=d>=FAR_LO&&d<=FAR_HI;if(!wn&&!wm&&!wf)continue;
+      var wx=(x+.5)*CHUNK,wz=(z+.5)*CHUNK;
+      if(!chunkVisible(wx,wz,d))continue;
       if(wn)nearC++;if(wm){if(wn)medFullC++;else medHalfC++;}if(wf)farC++;list.push({x:x,z:z,d:d,n:wn,m:wm,f:wf});
     }
     list.sort(function(a,b){return a.d-b.d;});
@@ -36,7 +64,9 @@
       nearN[t]=seedN[t]=medN[t]=farN[t]=0;
     }
     var pNeed=nearC*count*16;if(!patchM||patchM.length<pNeed)patchM=new Float32Array(Math.ceil(pNeed*1.25)+16);patchN=0;
-    job={list:list,i:0,count:count,commit:0};builtX=ox;builtZ=oz;builtDen=den;
+    streamGen=(streamGen+1)|0;refreshFrustum();
+    job={list:list,i:0,count:count,commit:0,gen:streamGen};builtX=ox;builtZ=oz;builtDen=den;
+    window.__grassStreamGen=streamGen;
     if(typeof status!=='undefined'&&status)status.textContent='Streaming terrain grass…';
   }
 
@@ -45,6 +75,7 @@
     for(var i=0;i<count;i++){
       var x=ox+r()*CHUNK,z=oz+r()*CHUNK,yaw=r()*Math.PI*2,s=.70+r()*.48,h=.82+r()*.30,seed=r();
       var ctx={chunkX:cx,chunkZ:cz,index:i,seed:seed};
+      if(!surfaceAllowsGrass(x,z))continue;
       if(window.GrassAPI&&typeof window.GrassAPI.isAllowed==='function'&&!window.GrassAPI.isAllowed(x,z,ctx))continue;
       var terrain={height:0,normal:{x:0,y:1,z:0},slope:0};
       if(window.GrassAPI&&typeof window.GrassAPI.sampleTerrain==='function')terrain=window.GrassAPI.sampleTerrain(x,z,ctx)||terrain;
@@ -83,7 +114,7 @@
         writePatch(patchM,q,yaw,ps,gx,gy,gz,terrain.normal);patchN=q+16;
       }
       if(wm&&(wn||(Math.floor(i/6)&1)===0)){a=medM[v];o=medN[v];writeUpright(a,o,c,sn,s,sy,gx,gy,gz);medN[v]=o+16;}
-      if(wf&&i%7===0){a=farM[v];o=farN[v];writeUpright(a,o,c,sn,s,sy,gx,gy,gz);farN[v]=o+16;}
+      if(wf&&i%7===0&&e.d<=FAR_HI-PAD*0.5){a=farM[v];o=farN[v];writeUpright(a,o,c,sn,s,sy,gx,gy,gz);farN[v]=o+16;}
     });
   }
 
@@ -107,5 +138,5 @@
     if(force||den!==builtDen)startJob(den);else if(!job&&moved>HYST)startJob(den);
     if(job){window.__grassStreamBusy=true;step(jump);window.__grassStreamBusy=!!job;}
   };
-  window.GrassStream={visitChunk:visitChunk,get busy(){return!!job;},setBudget:function(ms){BUDGET_MS=Math.max(.5,+ms||2);},stats:function(){return{chunks:job?job.list.length:0,progress:job?job.i/job.list.length:1};}};
+  window.GrassStream={visitChunk:visitChunk,get busy(){return!!job;},get generation(){return streamGen;},setBudget:function(ms){BUDGET_MS=Math.max(.5,+ms||2);},stats:function(){return{chunks:job?job.list.length:0,progress:job?job.i/job.list.length:1,generation:streamGen};}};
 })();

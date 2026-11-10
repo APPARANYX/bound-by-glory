@@ -441,12 +441,27 @@
     return clone(result);
   }
   function genomeFor(sim, faction) {
+    if (sim && sim._policyTickPin && sim._policyTickPin[faction])
+      return sim._policyTickPin[faction];
     if (!STASHED && sim && sim.aiGenomes && sim.aiGenomes[faction]) return sim.aiGenomes[faction];
     var sc = sim && sim.scene && sim.scene.metadata && sim.scene.metadata.battleScenario;
     return adaptedForScenario(sc).genome;
   }
   function policyFor(sim, faction) {
     return genomeFor(sim, faction).parameters;
+  }
+  function pinTickPolicies(sim) {
+    if (!sim) return;
+    function factionGenome(faction) {
+      if (!STASHED && sim.aiGenomes && sim.aiGenomes[faction]) return sim.aiGenomes[faction];
+      var sc = sim.scene && sim.scene.metadata && sim.scene.metadata.battleScenario;
+      return adaptedForScenario(sc).genome;
+    }
+    sim._policyTickPin = {
+      us: clone(factionGenome('us')),
+      ge: clone(factionGenome('ge')),
+      revision: revision
+    };
   }
   function setMatchPolicies(sim, us, ge) {
     if (STASHED) return null;
@@ -551,6 +566,7 @@
     set: set,
     genomeFor: genomeFor,
     policyFor: policyFor,
+    pinTickPolicies: pinTickPolicies,
     setMatchPolicies: setMatchPolicies,
     clearMatchPolicies: clearMatchPolicies,
     mutate: mutate,
