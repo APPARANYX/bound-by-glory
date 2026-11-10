@@ -639,6 +639,13 @@ test('an unreachable personal bound is cancelled, its mover released and the squ
     return realPeek.apply(this, arguments);
   };
   w.E.updateSoldier(man, w.b);
+  assert.equal(
+    live(w, 'combat.bound').find(a => a.actionId === action.actionId).stage,
+    'published',
+    'fresh unreachable receipts get a delivery retry window'
+  );
+  w.b.time += 8.1;
+  w.E.updateSoldier(man, w.b);
   const refused = live(w, 'combat.bound').find(a => a.actionId === action.actionId);
   assert.equal(refused.stage, 'cancelled');
   assert.equal(refused.reason, 'bound-command-unreachable');
