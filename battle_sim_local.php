@@ -19,7 +19,9 @@ require_once $root . '/runtime-contract.php';
    assets/policy/memory, and the page makes no telemetry, policy or learning writes. */
 $preview=null;$previewPath=$root.'/preview.json';
 if(is_file($previewPath)&&is_readable($previewPath)){$d=json_decode(@file_get_contents($previewPath),true);if(is_array($d))$preview=$d;}
-$runtimeBase=$preview?rtrim(str_replace('\\','/',dirname($_SERVER['SCRIPT_NAME'])),'/').'/':'/grasstex/';
+$scriptName=isset($_SERVER['SCRIPT_NAME'])?$_SERVER['SCRIPT_NAME']:'/grasstex/battle_sim.php';
+$runtimeBase=rtrim(str_replace('\\','/',dirname($scriptName)),'/').'/';
+$apiBase=$preview?rtrim(str_replace('\\','/',dirname(dirname(dirname($scriptName)))),'/').'/':$runtimeBase;
 $stateRoot=$preview?dirname(dirname($root)):$root;
 /* Build identity.
    The deploy workflow owns the build number: it reads the highest build-v<N> git tag, stamps N+1
@@ -56,7 +58,7 @@ $activeModuleFiles = grasstex_runtime_modules($moduleFiles, $_GET);
 
 $deployId=0;foreach($runtimeFiles as $rel){$p=$root.'/'.$rel;if(is_file($p))$deployId=max($deployId,intval(@filemtime($p)));}if($deployId<=0)$deployId=time();
 $body=@file_get_contents($pagePath);if($body===false||stripos($body,'<html')===false){http_response_code(503);echo '<!doctype html><html><body><h1>Battle sim unavailable</h1><p>Local battle page could not be read.</p></body></html>';exit;}
-$apiBase='/grasstex/';
+/* Site URL root follows the PHP entrypoint, including renamed hosting directories. */
 /* Assets are served from this page's own origin. Pointing them at the public host meant the
    headless benchmark, which serves this file from 127.0.0.1, failed every texture, acoustics
    and weapon-audio fetch on CORS - ~1,700 console errors per 100-battle run, which is what the

@@ -251,9 +251,7 @@
     } catch (_) {}
   }
   function playAt(entry, req) {
-    var ae = root.BattleAudioBackend
-        ? root.BattleAudioBackend.engine()
-        : root.BABYLON && root.BABYLON.Engine && root.BABYLON.Engine.audioEngine,
+    var ae = root.BattleAudioBackend.engine(),
       ctx = ae && ae.audioContext,
       scene = req.soldier && req.soldier.root && req.soldier.root.getScene && req.soldier.root.getScene();
     if (
@@ -395,7 +393,8 @@
       voiceLog('[VOICE] waiting ' + file);
       return handle;
     }
-    var base = window.BATTLE_AUDIO_BASE || 'https://test.ivandpopov.com/grasstex/Assets/audio/',
+    var audioRoot = window.BATTLE_API_BASE || '/bound-by-glory/';
+    var base = window.BATTLE_AUDIO_BASE || audioRoot + 'Assets/audio/',
       url = window.BattleAudioFormat ? window.BattleAudioFormat.url(base + file) : base + file;
     voiceLog('[VOICE] request ' + url + ' profile=' + (profile.id || 'neutral'));
     entry = cache[file] = {
@@ -411,7 +410,7 @@
     };
     try {
       var scene = soldier.root.getScene();
-      entry.sound = new (root.BattleAudioBackend ? root.BattleAudioBackend.Sound : BABYLON.Sound)(
+      entry.sound = new root.BattleAudioBackend.Sound(
         'voice-' + file,
         url,
         scene,

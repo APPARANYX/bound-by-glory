@@ -101,10 +101,9 @@ const { requestPreview } = require('./preview_request.cjs');
       E.updateSoldier(rifle, b);
       b.onFire = onFire;
       // Sound-ready seam proves the actual shipping scheduler rechecks state.
-      // The backend captures Babylon.Sound during bootstrap, so intercept both constructors.
+      // Intercept the sole playback constructor at the backend seam.
       // Otherwise this synthetic filename escapes into real network audio loading (404).
-      const NativeSound = BABYLON.Sound,
-        backend = window.BattleAudioBackend,
+      const backend = window.BattleAudioBackend,
         NativeBackendSound = backend && backend.Sound,
         readyCallbacks = [];
       let played = 0;
@@ -121,7 +120,6 @@ const { requestPreview } = require('./preview_request.cjs');
           played++;
         }
       }
-      BABYLON.Sound = FixtureSound;
       if (backend) backend.Sound = FixtureSound;
       const ev = BATTLE_AUDIO_MANIFEST.callouts.ge.events;
       const oldFiles = ev.engage;
@@ -144,7 +142,6 @@ const { requestPreview } = require('./preview_request.cjs');
       } finally {
         ev.engage = oldFiles;
         if (backend) backend.Sound = NativeBackendSound;
-        BABYLON.Sound = NativeSound;
       }
       b.restart();
       b.pause();

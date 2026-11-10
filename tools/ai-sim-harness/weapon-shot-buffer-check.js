@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 /* Regression contract: shared shot buffers must retain negotiated audio format and
-   wait until format probing finishes before constructing Babylon sounds. */
+   wait until format probing finishes before constructing playback sounds. */
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -77,7 +77,8 @@ function poolFixture(policy) {
     },
     BattleWeapons: { PROFILES: { us: { rifle: { model: 'm1-garand' } } } }
   };
-  const ctx = { root, BABYLON: { Sound, Engine: { audioEngine: engine } } };
+  root.BattleAudioBackend = { Sound, engine: () => engine };
+  const ctx = { root };
   vm.createContext(ctx);
   vm.runInContext(
     source.slice(source.indexOf('var POOL_SIZE ='), source.indexOf('function makeFaction')),

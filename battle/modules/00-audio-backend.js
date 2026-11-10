@@ -1,22 +1,23 @@
-/* Experimental independent playback: ?audioBackend=howler. Default stays Babylon.
+/* Production game audio: Howler 2.2.4 is the sole playback engine.
+   Babylon.js remains the 3D renderer, with its audio engine disabled.
    Owners retain event timing, propagation, clip selection and bounded voice pools.
    A wrapper owns one playback ID; Howls and decoded data are shared by clip URL.
-   Howler owns playback and optional bounded acoustic chains. No Babylon SoundTrack
-   is touched; acoustics=off retains the validated dry path. */
+   Howler owns playback and optional bounded acoustic chains. */
 (function (root) {
   'use strict';
   if (root.BattleAudioBackend) return;
-  var enabled = /(?:^|[?&])audioBackend=howler(?:&|$)/.test((root.location && root.location.search) || '');
-  var flatSpatial =
-    enabled && /(?:^|[?&])audioSpatial=flat(?:&|$)/.test((root.location && root.location.search) || '');
+  // Legacy ?audioBackend=babylon cannot select a second audio engine.
+  if (/(?:^|[?&])audioBackend=babylon(?:&|$)/.test((root.location && root.location.search) || ''))
+    console.warn('[AUDIO] Babylon playback was retired; using Howler.');
+  var flatSpatial = /(?:^|[?&])audioSpatial=flat(?:&|$)/.test((root.location && root.location.search) || '');
   // Howler's pos()/orientation() write PannerNode and listener AudioParams with
   // setTargetAtTime/setValueAtTime every call. Per-frame calls keep Chrome's
   // panners on per-sample processing (~13x cost per 3D voice), slowing the audio
   // clock under load. Direct writes skip unchanged values and never use the
   // timeline. ?audioSpatialWrite=automation restores Howler's per-frame path.
-  var spatialAutomation =
-    enabled &&
-    /(?:^|[?&])audioSpatialWrite=automation(?:&|$)/.test((root.location && root.location.search) || '');
+  var spatialAutomation = /(?:^|[?&])audioSpatialWrite=automation(?:&|$)/.test(
+    (root.location && root.location.search) || ''
+  );
   var listenerState = null;
   var scenes = new WeakMap(),
     clips = new Map(),
@@ -49,33 +50,29 @@
   function init() {
     root.Howler.autoSuspend = false;
     root.Howler.volume(); // Public API initializes the one Web Audio context.
-    if (!root.Howler.usingWebAudio || !root.Howler.ctx)
-      throw new Error('Howler experiment requires Web Audio');
+    if (!root.Howler.usingWebAudio || !root.Howler.ctx) throw new Error('Howler playback requires Web Audio');
   }
-  var ready = !enabled
-    ? Promise.resolve()
-    : new Promise(function (resolve, reject) {
-        function loaded() {
-          try {
-            init();
-            resolve();
-          } catch (e) {
-            reject(e);
-          }
-        }
-        if (root.Howl && root.Howler) return loaded();
-        var script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/howler@2.2.4/dist/howler.min.js';
-        script.onload = loaded;
-        script.onerror = function () {
-          reject(new Error('Could not load Howler 2.2.4'));
-        };
-        document.head.appendChild(script);
-      });
+  var ready = new Promise(function (resolve, reject) {
+    function loaded() {
+      try {
+        init();
+        resolve();
+      } catch (e) {
+        reject(e);
+      }
+    }
+    if (root.Howl && root.Howler) return loaded();
+    var script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/howler@2.2.4/dist/howler.min.js';
+    script.onload = loaded;
+    script.onerror = function () {
+      reject(new Error('Could not load Howler 2.2.4'));
+    };
+    document.head.appendChild(script);
+  });
   // The page bootstrap awaits and surfaces this rejection; avoid an early unhandled event.
   ready.catch(function () {});
   function engine() {
-    if (!enabled) return root.BABYLON && root.BABYLON.Engine && root.BABYLON.Engine.audioEngine;
     return {
       audioContext: root.Howler && root.Howler.ctx,
       masterGain: root.Howler && root.Howler.masterGain,
@@ -129,7 +126,7 @@
       );
   }
   function bindScene(scene) {
-    if (!enabled || !scene || scenes.has(scene)) return;
+    if (!scene || scenes.has(scene)) return;
     var sounds = new Set();
     scenes.set(scene, sounds);
     var tick = function () {
@@ -538,20 +535,20 @@
     }
   };
   root.BattleAudioBackend = {
-    name: enabled ? 'howler' : 'babylon',
-    independent: enabled,
+    name: 'howler',
+    independent: true,
     ready: ready,
-    Sound: enabled ? Sound : root.BABYLON && root.BABYLON.Sound,
+    Sound: Sound,
     engine: engine,
     bindScene: bindScene,
     summary: function () {
       return Object.assign(
         {
-          name: enabled ? 'howler' : 'babylon',
-          version: enabled ? '2.2.4' : null,
+          name: 'howler',
+          version: '2.2.4',
           spatialMode: flatSpatial ? 'flat' : '3d',
           spatialWrite: flatSpatial ? 'none' : spatialAutomation ? 'automation' : 'direct',
-          dry: enabled && !(root.BattleListenerAcoustics && root.BattleListenerAcoustics.quality !== 'off'),
+          dry: !(root.BattleListenerAcoustics && root.BattleListenerAcoustics.quality !== 'off'),
           acousticChains: acousticChains.length,
           acousticActive: acousticChains.filter(function (chain) {
             return !!chain.owner;

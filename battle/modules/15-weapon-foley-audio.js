@@ -140,7 +140,7 @@
           pools[model + '.' + action] = c[action].map(function (file, i) {
             return {
               endsAt: 0,
-              sound: new (root.BattleAudioBackend ? root.BattleAudioBackend.Sound : BABYLON.Sound)(
+              sound: new root.BattleAudioBackend.Sound(
                 'foley-' + model + '-' + action + i,
                 root.BattleAudioFormat ? root.BattleAudioFormat.url(base + file) : base + file,
                 scene,
@@ -219,9 +219,7 @@
       if (d > (tail ? TAIL_RANGE : FOLEY_RANGE)) return;
       var gain = tail ? tailGain(d) : foleyGain(d);
       later((d / SPEED_OF_SOUND) * 1000, function () {
-        var ae = root.BattleAudioBackend
-            ? root.BattleAudioBackend.engine()
-            : root.BABYLON && root.BABYLON.Engine && root.BABYLON.Engine.audioEngine,
+        var ae = root.BattleAudioBackend.engine(),
           ctx = ae && ae.audioContext;
         if (
           (scene && scene.audioEnabled === false) ||

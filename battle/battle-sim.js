@@ -106,7 +106,8 @@
     applyGroundHeights(currentGround);
     var mat = new BABYLON.StandardMaterial('battleFieldMat', scene);
     mat.specularColor = BABYLON.Color3.Black();
-    var base = root.BATTLE_ASSET_BASE || 'https://test.ivandpopov.com/grasstex/Assets/';
+    var assetRoot = root.BATTLE_API_BASE || '/bound-by-glory/';
+    var base = root.BATTLE_ASSET_BASE || assetRoot + 'Assets/';
     var dirt = new BABYLON.Texture(
       base + 'dirttex.png',
       scene,
@@ -149,7 +150,8 @@
     );
     mat.backFaceCulling = false;
     mat.disableDepthWrite = true;
-    var base = root.BATTLE_ASSET_BASE || 'https://test.ivandpopov.com/grasstex/Assets/';
+    var assetRoot = root.BATTLE_API_BASE || '/bound-by-glory/';
+    var base = root.BATTLE_ASSET_BASE || assetRoot + 'Assets/';
     mat.setTexture(
       'skyTexture',
       new BABYLON.Texture(base + 'skytex.png', scene, false, false, BABYLON.Texture.BILINEAR_SAMPLINGMODE)
@@ -240,7 +242,7 @@
     );
   }
   function buildWeaponAudio(scene, audioBase, policy) {
-    var SoundClass = root.BattleAudioBackend ? root.BattleAudioBackend.Sound : BABYLON.Sound;
+    var SoundClass = root.BattleAudioBackend.Sound;
     // Optional, bounded diagnostic override. Unset keeps the shipping 4-voice far floor.
     // prettier-ignore
     var farFloor =
@@ -341,9 +343,7 @@
       if (!voices) return;
       var counters = poolStats[k];
       counters.attempts++;
-      var ae = root.BattleAudioBackend
-        ? root.BattleAudioBackend.engine()
-        : BABYLON.Engine && BABYLON.Engine.audioEngine;
+      var ae = root.BattleAudioBackend.engine();
       /* Sound.play queues a delayed start while locked; such a request is not
          reflected by isPlaying yet and could accumulate behind the pool cap. */
       // Chromium/Babylon 9 can report a running WebAudio context while the

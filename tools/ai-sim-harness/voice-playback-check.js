@@ -70,7 +70,9 @@ function runModule(rel, invalidate, suspended = false) {
     }
   }
 
-  ctx.BABYLON = { Sound, Engine: { audioEngine: { unlocked: true, audioContext: { state: 'running' } } } };
+  const audioContext = { state: 'running' };
+  ctx.BABYLON = {};
+  ctx.BattleAudioBackend = { Sound, engine: () => ({ audioContext }) };
   ctx.window = ctx;
   ctx.globalThis = ctx;
   vm.createContext(ctx);
@@ -106,12 +108,12 @@ function runModule(rel, invalidate, suspended = false) {
     return;
   }
   if (suspended) {
-    ctx.BABYLON.Engine.audioEngine.audioContext.state = 'suspended';
+    audioContext.state = 'suspended';
     ready[0]();
     assert.equal(handle.started, false, 'no voice starts while context is suspended');
     assert.equal(handle.ended, true, 'unavailable voice handle completes');
     assert.equal(sounds[0].played, 0);
-    ctx.BABYLON.Engine.audioEngine.audioContext.state = 'running';
+    audioContext.state = 'running';
     ctx.performance.now = () => 6000;
     const next = ctx.BattleVoiceScheduler.enqueue(soldier, 'engage', null, { priority: 'tactical' });
     assert.equal(next.started, true, 'new voice starts after resume');
@@ -121,7 +123,7 @@ function runModule(rel, invalidate, suspended = false) {
   ready[0]();
 
   assert.equal(handle.started, true, rel + ': playback handle starts after ready');
-  assert.equal(sounds[0].played, 1, rel + ': Babylon Sound.play called');
+  assert.equal(sounds[0].played, 1, rel + ': Howler adapter Sound.play called');
   assert.equal(sounds[0].attached, mesh, rel + ': sound follows the soldier mesh');
   if (rel.includes('11-voice-variation')) {
     ctx.performance.now = () => 6000;
@@ -137,7 +139,7 @@ function runModule(rel, invalidate, suspended = false) {
     assert.ok(resumed && resumed.started, 'speaker can reuse the clip after actual completion');
     assert.equal(sounds[0].played, 2);
     assert.equal(ctx.BattleVoiceScheduler.summary().active, 1);
-    // A missing Babylon end event must not silence all subsequent voices.
+    // A missing Howler end event must not silence all subsequent voices.
     sounds[0].isPlaying = false;
     ctx.performance.now = () => 8000;
     const repaired = ctx.BattleVoiceScheduler.enqueue(soldier, 'engage', null, { priority: 'tactical' });

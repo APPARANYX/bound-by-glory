@@ -1,13 +1,11 @@
 /* Listener-only battlefield acoustics.
    Presentation only: never touches BattleSim.random, soldier intent or command reception.
-   One camera listener per client; each playing Babylon Sound is processed at most 5Hz.
+   One camera listener per client; active Howler sources are sampled at most 5Hz.
    ?acoustics=off|standard|high (standard is the shipping default).
-   The WebAudio BiquadFilter is inserted between the legacy Babylon Sound's spatial
-   panner and gain node only when that graph is available. Otherwise attenuation is
-   still applied and sound playback never depends on private Babylon internals. */
+   Howler owns the filter, gain and reverb chains; no Babylon audio routing. */
 (function (root) {
   'use strict';
-  if (typeof window === 'undefined' || typeof BABYLON === 'undefined' || root.BattleListenerAcoustics) return;
+  if (typeof window === 'undefined' || root.BattleListenerAcoustics) return;
 
   var match = /(?:^|[?&])acoustics=(off|standard|high)(?:&|$)/.exec(
     typeof location !== 'undefined' ? location.search || '' : ''
@@ -138,93 +136,13 @@
       convolver.buffer = impulse;
       output.gain.value = 0.23;
       convolver.connect(output);
-      var ae = root.BattleAudioBackend
-        ? root.BattleAudioBackend.engine()
-        : BABYLON.Engine && BABYLON.Engine.audioEngine;
+      var ae = root.BattleAudioBackend.engine();
       output.connect(trackNode || (ae && ae.masterGain) || ctx.destination);
       wet = { ctx: ctx, input: convolver };
     } catch (_) {
       wet = null;
     }
     return wet;
-  }
-  function filterFor(e) {
-    if (e.filter || e.failedFilter || quality === 'off') return;
-    var s = e.sound,
-      gain = null;
-    try {
-      gain = s && (typeof s.getSoundGain === 'function' ? s.getSoundGain() : s._soundGain);
-    } catch (_) {}
-    var panner = s && s._soundPanner,
-      ctx = gain && gain.context;
-    // Babylon 9.27 Sound adapts AudioV2: its output is the gain node returned
-    // by getSoundGain(), and the original destination is its SoundTrack bus.
-    var scene = s && s._scene,
-      track =
-        scene &&
-        (s.soundTrackId >= 0 && scene.soundTracks ? scene.soundTracks[s.soundTrackId] : scene.mainSoundTrack),
-      trackNode = track && track._outputAudioNode,
-      v2 = !!(s && s._soundV2 && trackNode && typeof s.connectToSoundTrackAudioNode === 'function');
-    // A pooled Sound survives battle restarts. Reuse the existing nodes rather
-    // than inserting another filter every time its acoustic record is recreated.
-    if (s && s._battleAcousticFilter) {
-      e.filter = s._battleAcousticFilter;
-      e.send = s._battleAcousticSend || null;
-      return;
-    }
-    if (!ctx || !ctx.createBiquadFilter) return;
-    if (!v2 && (!panner || typeof panner.disconnect !== 'function')) {
-      e.failedFilter = true;
-      stats.degraded++;
-      return;
-    }
-    var filter = null,
-      switched = false;
-    try {
-      filter = ctx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.value = 20000;
-      if (v2) {
-        // Public rerouting API keeps Babylon's bookkeeping intact. The filter
-        // returns to exactly the same SoundTrack bus used before it was inserted.
-        filter.connect(trackNode);
-        s.connectToSoundTrackAudioNode(filter);
-      } else {
-        // Legacy graph, if present: source -> spatial panner -> gain.
-        panner.disconnect(gain);
-        panner.connect(filter);
-        filter.connect(gain);
-      }
-      switched = true;
-      e.filter = filter;
-      s._battleAcousticFilter = filter;
-      var bus = makeWet(ctx, v2 ? trackNode : null);
-      if (bus && ctx.createGain) {
-        e.send = ctx.createGain();
-        e.send.gain.value = 0;
-        filter.connect(e.send);
-        e.send.connect(bus.input);
-        s._battleAcousticSend = e.send;
-      }
-      stats.filtered++;
-    } catch (_) {
-      try {
-        if (switched && v2) s.connectToSoundTrackAudioNode(trackNode);
-        else if (switched) {
-          panner.disconnect(filter);
-          panner.connect(gain);
-        }
-      } catch (_) {}
-      try {
-        if (filter) filter.disconnect();
-      } catch (_) {}
-      s._battleAcousticFilter = null;
-      s._battleAcousticSend = null;
-      e.filter = null;
-      e.send = null;
-      e.failedFilter = true;
-      stats.degraded++;
-    }
   }
   function sample(e) {
     if (!e || !e.sound || !e.scene) return;
@@ -244,44 +162,27 @@
     var gain = e.gain * (1 - (isVoice ? 0.62 : 0.47) * obstructionAmount);
     stats.sampled++;
     if (obstructionAmount > 0) stats.occluded++;
-    if (e.sound.setAcousticProfile) {
-      var ae = root.BattleAudioBackend.engine(),
-        bus = makeWet(ae.audioContext, ae.masterGain),
-        indoor = nearBuilding(p) || nearBuilding(L),
-        amount = indoor
-          ? quality === 'high'
-            ? 0.28
-            : 0.12
-          : isTail
-            ? 0.045
-            : quality === 'high'
-              ? 0.065
-              : 0.025;
-      var hadChain = !!e.sound._acoustics;
-      e.sound.setVolume(gain);
-      if (e.sound.setAcousticProfile(hz, amount, bus && bus.input, MAX_ACTIVE)) {
-        if (!hadChain) stats.filtered++;
-      } else stats.degraded++;
+    if (typeof e.sound.setAcousticProfile !== 'function') {
+      stats.degraded++;
       return;
     }
-    filterFor(e);
-    try {
-      if (e.sound.setVolume) e.sound.setVolume(gain);
-      if (e.filter) e.filter.frequency.setTargetAtTime(hz, e.filter.context.currentTime, 0.045);
-      if (e.send) {
-        var indoor = nearBuilding(p) || nearBuilding(L);
-        var amount = indoor
-          ? quality === 'high'
-            ? 0.28
-            : 0.12
-          : isTail
-            ? 0.045
-            : quality === 'high'
-              ? 0.065
-              : 0.025;
-        e.send.gain.setTargetAtTime(amount, e.send.context.currentTime, 0.06);
-      }
-    } catch (_) {}
+    var ae = root.BattleAudioBackend.engine(),
+      bus = makeWet(ae.audioContext, ae.masterGain),
+      indoor = nearBuilding(p) || nearBuilding(L),
+      amount = indoor
+        ? quality === 'high'
+          ? 0.28
+          : 0.12
+        : isTail
+          ? 0.045
+          : quality === 'high'
+            ? 0.065
+            : 0.025;
+    var hadChain = !!e.sound._acoustics;
+    e.sound.setVolume(gain);
+    if (e.sound.setAcousticProfile(hz, amount, bus && bus.input, MAX_ACTIVE)) {
+      if (!hadChain) stats.filtered++;
+    } else stats.degraded++;
   }
   function tick() {
     running = false;
@@ -289,14 +190,9 @@
       remain = [];
     for (var i = 0; i < entries.length; i++) {
       var e = entries[i];
-      if (e.sound && e.sound.setAcousticProfile && e.sound.isPlaying === false) continue;
+      if (e.sound && e.sound.isPlaying === false) continue;
       if (e.until <= t) {
-        if (e.sound && e.sound.neutralizeAcoustics) e.sound.neutralizeAcoustics();
-        if (e.send) {
-          try {
-            e.send.gain.value = 0;
-          } catch (_) {}
-        }
+        neutralize(e);
         continue;
       }
       if (e.sound && e.sound.isPlaying === true) stats.trackedPlayingOnTick++;
@@ -328,30 +224,8 @@
     var weight = kind === 'voice' ? 5 : kind === 'gun' ? 3 : kind === 'gunDistant' ? 1 : 0.6;
     return (weight * Math.max(0, finite(gain, 0))) / (1 + distance(p, L) / 140);
   }
-  // prettier-ignore
-  function neutralize(e, rampWet) {
-    if (!e || !e.sound) return;
-    if (e.sound.neutralizeAcoustics) { e.sound.neutralizeAcoustics(); return; }
-    var f = e.sound._battleAcousticFilter || e.filter,
-      send = e.sound._battleAcousticSend || e.send;
-    try {
-      // Do not detach the active source or retarget an occupied Babylon Sound.
-      if (f) f.frequency.setTargetAtTime(20000, f.context.currentTime, 0.025);
-      if (send) {
-        var param = send.gain;
-        if (rampWet && param && typeof param.linearRampToValueAtTime === 'function') {
-          var t = send.context && send.context.currentTime;
-          if (typeof t === 'number' && isFinite(t)) {
-            if (typeof param.cancelScheduledValues === 'function') param.cancelScheduledValues(t);
-            if (typeof param.setValueAtTime === 'function') param.setValueAtTime(param.value, t);
-            param.linearRampToValueAtTime(0, t + 0.008);
-            stats.wetSendRamps++;
-          } else param.value = 0;
-        } else if (param) param.value = 0;
-      }
-    } catch (_) {
-      try { if (send) send.gain.value = 0; } catch (_) {}
-    }
+  function neutralize(e) {
+    if (e && e.sound && e.sound.neutralizeAcoustics) e.sound.neutralizeAcoustics();
   }
   // prettier-ignore
   function prepare(sound, source, kind, baseGain, scene) {
@@ -386,7 +260,7 @@
           // Preserve the existing 20% hysteresis, adding a minimum residence
           // only for acousticHoldMs A/B. The hold does not suppress playback.
           if (victim >= 0 && newRank > lowest * 1.2) {
-            neutralize(entries[victim], true);
+            neutralize(entries[victim]);
             entries.splice(victim, 1);
             stats.replacedCapacity++;
           } else if (held) stats.deniedHold++;
@@ -416,21 +290,8 @@
     sim = battle || null;
   }
   function reset() {
-    // An already queued presentation must not carry a previous battle's acoustic source.
-    for (var i = 0; i < entries.length; i++) {
-      var e = entries[i];
-      if (e.sound && e.sound.neutralizeAcoustics) e.sound.neutralizeAcoustics();
-      if (e.send) {
-        try {
-          e.send.gain.value = 0;
-        } catch (_) {}
-      }
-      if (e.filter) {
-        try {
-          e.filter.frequency.value = 20000;
-        } catch (_) {}
-      }
-    }
+    // Release Howler acoustic ownership across battles, never an old soundtrack.
+    entries.forEach(neutralize);
     entries = [];
   }
   if (root.BattleModules && root.BattleModules.registerSystem) {
