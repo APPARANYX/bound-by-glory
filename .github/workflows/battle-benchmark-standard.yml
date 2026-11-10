@@ -87,7 +87,7 @@ jobs:
   single:
     name: Scripted scenario, off vs on
     if: ${{ (github.event.inputs.seeds || '1') == '1' }}
-    runs-on: ${{ fromJSON((inputs.runner_pool == 'mac' && '["self-hosted","macOS","ARM64","bbg-mac-bench"]') || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON((inputs.runner_pool == 'mac' && github.ref == 'refs/heads/main' && '["self-hosted","macOS","ARM64","bbg-mac-bench"]') || '["ubuntu-latest"]') }}
     timeout-minutes: ${{ fromJSON(github.event.inputs.sim_seconds || '600') > 600 && 75 || 30 }}
     permissions:
       contents: write
@@ -107,6 +107,15 @@ jobs:
       QUERY_ON: ${{ github.event.inputs.query_on || '' }}
 
     steps:
+      - name: Require trusted main for Mac pool
+        if: ${{ inputs.runner_pool == 'mac' }}
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF" != 'refs/heads/main' ]; then
+            echo "::error::Mac pool may execute only vetted main. Refusing: $GITHUB_REF" >&2
+            exit 2
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -333,7 +342,7 @@ jobs:
   shards:
     name: Shard ${{ matrix.shard }}
     needs: plan
-    runs-on: ${{ fromJSON((inputs.runner_pool == 'mac' && '["self-hosted","macOS","ARM64","bbg-mac-bench"]') || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON((inputs.runner_pool == 'mac' && github.ref == 'refs/heads/main' && '["self-hosted","macOS","ARM64","bbg-mac-bench"]') || '["ubuntu-latest"]') }}
     timeout-minutes: ${{ fromJSON(github.event.inputs.sim_seconds || '600') > 600 && 75 || 30 }}
     strategy:
       fail-fast: false
@@ -352,6 +361,15 @@ jobs:
       QUERY_ON: ${{ github.event.inputs.query_on || '' }}
 
     steps:
+      - name: Require trusted main for Mac pool
+        if: ${{ inputs.runner_pool == 'mac' }}
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF" != 'refs/heads/main' ]; then
+            echo "::error::Mac pool may execute only vetted main. Refusing: $GITHUB_REF" >&2
+            exit 2
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
