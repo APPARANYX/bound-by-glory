@@ -1,0 +1,23 @@
+{
+  "branch": "work/benchmark-launch/pr795-main-std-us-defend",
+  "launch_parent_sha": "b91ceacdd91f226ad1a49dfdf95a9e000f3b14bb",
+  "launch_sha": "af6e3f611c2b1091208f01df368470187778626e",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "battle_type": "us-defend",
+    "benchmark": "standard",
+    "origin_agent": "human",
+    "purpose": "#795 M4 gate control on b91ceacd: main no-param vs explicit legacy, us-defend, 60 seeds",
+    "query_off": "strategicInterception=0&tacticalController=legacy",
+    "query_on": "strategicInterception=0",
+    "ref": "work/pin/pr795-main-b91ceacd",
+    "seed": "pr795-m4-20261108",
+    "seeds": "60",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/pr795-main-b91ceacd",
+  "source_sha_at_archive": "b91ceacdd91f226ad1a49dfdf95a9e000f3b14bb"
+}
