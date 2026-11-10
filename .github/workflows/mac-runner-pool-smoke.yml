@@ -1,0 +1,92 @@
+# One-time infrastructure smoke test. No repository checkout or gameplay code runs on the Mac.
+name: Mac ARM64 Runner Pool Smoke
+
+on:
+  push:
+    branches:
+      - ci/mac-runner-pool-smoke-20261110
+    paths:
+      - .github/workflows/mac-runner-pool-smoke.yml
+
+permissions: {}
+
+jobs:
+  mac-workers:
+    name: Mac worker ${{ matrix.slot }}
+    runs-on: [self-hosted, macOS, ARM64, bbg-mac-bench]
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        slot: [1, 2, 3, 4]
+    steps:
+      - name: Inspect runner and briefly overlap jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_OS" = 'macOS'
+          test "$RUNNER_ARCH" = 'ARM64'
+          case "$RUNNER_NAME" in
+            bbg-ivans-air-0[1-4]) ;;
+            *) echo "Unexpected runner: $RUNNER_NAME" >&2; exit 1 ;;
+          esac
+          test -d "$RUNNER_TEMP"
+          report="$RUNNER_TEMP/bbg-pool-smoke-${{ matrix.slot }}.txt"
+          {
+            printf 'runner=%s\n' "$RUNNER_NAME"
+            printf 'slot=%s\n' '${{ matrix.slot }}'
+            printf 'os=%s\n' "$RUNNER_OS"
+            printf 'arch=%s\n' "$RUNNER_ARCH"
+            printf 'started=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          } > "$report"
+          echo "Runner $RUNNER_NAME accepted slot ${{ matrix.slot }}"
+          sleep 15
+          printf 'finished=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$report"
+          cat "$report"
+      - name: Upload worker evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-pool-worker-${{ matrix.slot }}
+          path: ${{ runner.temp }}/bbg-pool-smoke-${{ matrix.slot }}.txt
+          if-no-files-found: error
+          retention-days: 1
+      - name: Remove temporary evidence
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/bbg-pool-smoke-${{ matrix.slot }}.txt"
+
+  verify-four-distinct-runners:
+    name: Verify four distinct Mac runners
+    needs: mac-workers
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download worker evidence
+        uses: actions/download-artifact@v4
+        with:
+          pattern: mac-pool-worker-*
+          path: evidence
+          merge-multiple: true
+      - name: Require all four unique workers
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(evidence/bbg-pool-smoke-*.txt)
+          test "${#files[@]}" -eq 4
+          for file in "${files[@]}"; do
+            grep -q '^runner=bbg-ivans-air-0[1-4]$' "$file"
+            grep -q '^os=macOS$' "$file"
+            grep -q '^arch=ARM64$' "$file"
+          done
+          distinct="$(grep '^runner=' "${files[@]}" | sed 's/^[^:]*://' | sort -u | wc -l | tr -d ' ')"
+          test "$distinct" -eq 4
+          printf 'PASS: %s distinct Mac runners completed jobs\n' "$distinct"
+          printf '### Mac runner pool smoke: PASS\n\n' >> "$GITHUB_STEP_SUMMARY"
+          printf 'Four distinct ARM64 Mac runners completed one job each.\n\n' >> "$GITHUB_STEP_SUMMARY"
+          for file in "${files[@]}"; do
+            cat "$file"
+            cat "$file" >> "$GITHUB_STEP_SUMMARY"
+            printf '\n' >> "$GITHUB_STEP_SUMMARY"
+          done
