@@ -23,6 +23,7 @@
   var MAX_EPISODES = 160,
     MAX_HISTORY = 10,
     MAX_DENIALS = 160,
+    MAX_DECISIONS = 512,
     MAX_COVER = 320,
     FIRE_SILENCE = 5,
     MOVE_STILL = 12;
@@ -59,6 +60,8 @@
         move: null,
         history: [],
         denials: [],
+        decisions: [],
+        decisionsOmitted: 0,
         coverEvents: [],
         coverLane: null
       };
@@ -92,7 +95,81 @@
       carrierPosition: position(t.position)
     };
   }
-  function sampleRow(s, o, sim) {
+  /* Peek projects timing without settling commands. The canonical adopted slot is read
+     directly: adoptedView/snapshot would advance command reception while observing it. */
+  function receipt(rec) {
+    if (!rec) return null;
+    var out = {};
+    [
+      'envelopeId',
+      'signature',
+      'sourceId',
+      'relayId',
+      'channel',
+      'phase',
+      'issuedAt',
+      'receivedAt',
+      'processedAt',
+      'adoptedAt',
+      'unreachable'
+    ].forEach(function (k) {
+      if (rec[k] == null || ['string', 'number', 'boolean'].indexOf(typeof rec[k]) >= 0)
+        out[k] = rec[k] == null ? null : rec[k];
+    });
+    var d = rec.data || {};
+    out.publishKey = d.publishKey == null ? null : String(d.publishKey);
+    out.missionVersion = d.missionVersion == null ? null : d.missionVersion;
+    out.fireState = d.state || null;
+    out.point = position(rec.point);
+    return out;
+  }
+  function commandWitness(s, sim, category, scope) {
+    var st = sim._commandReception,
+      id = String(s.id),
+      slot = category + '|' + scope,
+      latest = st && st.bySoldier && st.bySoldier[id] && st.bySoldier[id][slot],
+      adopted = st && st.adoptedBySoldier && st.adoptedBySoldier[id] && st.adoptedBySoldier[id][slot],
+      CR = root.BattleCommandReception,
+      projected = CR && CR.peek ? CR.peek(s, sim, category, scope) : null;
+    return {
+      latest: receipt(latest),
+      projectedPhase: projected ? projected.phase : null,
+      adopted: receipt(adopted),
+      adoptedIsLatest: latest && adopted ? latest.envelopeId === adopted.envelopeId : null,
+      appliedEnvelope: category === 'movement' ? s._fireteamAdoptedEnvelope || null : null,
+      appliedPublishKey: category === 'movement' ? s._fireteamPublishKey || null : null
+    };
+  }
+  function controllerWitness(s, summary) {
+    function own(row) {
+      return String(row.actorId) === String(s.id) && row.squad === s.squad.id;
+    }
+    var actions = (summary.live || []).filter(own),
+      selections = (summary.soldierDecisions || []).filter(own);
+    return {
+      actionsOmitted: Math.max(0, actions.length - 4),
+      selectionsOmitted: Math.max(0, selections.length - 12),
+      actions: actions.slice(0, 4).map(function (r) {
+        return Object.assign({}, r);
+      }),
+      /* Selection is context, never evidence of discharge, arrival or grenade release. */
+      selections: selections.slice(0, 12).map(function (r) {
+        return Object.assign({}, r);
+      })
+    };
+  }
+  function grenadeWitness(s, sim) {
+    var G = root.BattleGrenades,
+      plan = G && G.pendingOf ? G.pendingOf(s, sim) : null;
+    return {
+      carried: G && G.count ? G.count(s) : null,
+      cooldownLeft: G && G.cooldownLeft ? G.cooldownLeft(s, sim) : null,
+      pending: plan
+        ? { decidedAt: plan.decidedAt, releaseAt: plan.releaseAt, source: plan.source || null }
+        : null
+    };
+  }
+  function sampleRow(s, o, sim, summary) {
     var resolver = s._movementResolver && s._movementResolver.last;
     return {
       t: round(sim.time),
@@ -111,6 +188,21 @@
       stop: s._movementStopReason || null,
       speed: round(s.moveSpeed),
       transport: transportEvidence(s, sim),
+      commands: {
+        movement: commandWitness(s, sim, 'movement', 'soldier:' + String(s.id)),
+        fire: commandWitness(s, sim, 'posture-fire', 'squad')
+      },
+      controller: controllerWitness(s, summary),
+      fireContext: {
+        stateSince: s.eng && Number.isFinite(s.eng.since) ? s.eng.since : null,
+        stateUntil: s.eng && Number.isFinite(s.eng.until) ? s.eng.until : null,
+        fireReadyAt: s.eng && Number.isFinite(s.eng.fireReadyAt) ? s.eng.fireReadyAt : null,
+        suppressedUntil: Number.isFinite(s.suppressedUntil) ? s.suppressedUntil : null,
+        reloading: !!s.reloading,
+        ammo: s.weapon && Number.isFinite(s.weapon.ammo) ? s.weapon.ammo : null,
+        reserve: s.weapon && Number.isFinite(s.weapon.reserveAmmo) ? s.weapon.reserveAmmo : null
+      },
+      grenade: grenadeWitness(s, sim),
       losRejects: +s._losBlockedFire || 0,
       crestRejects: +s._crestBlockedFire || 0,
       terrainRejects: +s._terrainBlockedSuppressiveFire || 0
@@ -141,15 +233,94 @@
       history: history.slice(-MAX_HISTORY)
     });
   }
+  // Read canonical adoption directly: calling the native getter would settle reception.
+  function fireContext(s, sim) {
+    var CR = root.BattleCommandReception,
+      st = sim._commandReception,
+      by = st && st.adoptedBySoldier && st.adoptedBySoldier[String(s.id)],
+      rec = by && by['posture-fire|squad'],
+      native = !(CR && CR.postureEnabled && CR.postureEnabled()),
+      order = native ? s.squad.fireControl : rec && rec.data,
+      state = (order && order.state) || null,
+      suppressed = (+s.suppressedUntil || 0) > sim.time;
+    if (!native && rec && s.eng && s.eng.retreatEndedAt != null && !(rec.adoptedAt > s.eng.retreatEndedAt))
+      state = null;
+    return {
+      order: state,
+      shooterId: order && order.shooterId,
+      envelopeId: native ? null : (rec && rec.envelopeId) || null,
+      suppressed: suppressed,
+      // Incoming fire may override a HOLD. This is context, not an evaluated gate.
+      preparing:
+        !suppressed &&
+        (state === 'hold' || (state === 'precision' && String(order.shooterId) !== String(s.id)))
+    };
+  }
+  var DECISIONS = [
+    'micro-update',
+    'firing-path-entered',
+    'weapon-attempt',
+    'preparation-held-fire',
+    'suppression-held-fire',
+    'bound-await-adoption',
+    'recognition-held-fire',
+    'weapon-missing',
+    'weapon-stoppage',
+    'weapon-reloading',
+    'weapon-empty',
+    'march-drill-no-fire-path',
+    'watch-drill-no-fire-path',
+    'station-en-route',
+    'station-no-sector-target',
+    'station-line-blocked'
+  ];
+  function decisionEvidence(s, sim, f, d) {
+    var events = d.decisions.filter(function (e) {
+        return e.t >= f.since && e.t <= sim.time && e.target === f.target;
+      }),
+      ticks = {},
+      counts = {};
+    events.forEach(function (e) {
+      bump(counts, e.code);
+      var tick = ticks[String(e.t)] || (ticks[String(e.t)] = {});
+      tick[e.code] = true;
+    });
+    var coverage = {
+      updateTicks: 0,
+      blockedUpdateTicks: 0,
+      firingPathTicks: 0,
+      weaponAttemptTicks: 0,
+      otherUpdateTicks: 0
+    };
+    Object.keys(ticks).forEach(function (t) {
+      var row = ticks[t],
+        blocked = DECISIONS.slice(3).some(function (code) {
+          return row[code];
+        });
+      if (row['firing-path-entered']) coverage.firingPathTicks++;
+      if (row['weapon-attempt']) coverage.weaponAttemptTicks++;
+      if (row['micro-update']) {
+        coverage.updateTicks++;
+        if (blocked) coverage.blockedUpdateTicks++;
+        else if (!row['firing-path-entered']) coverage.otherUpdateTicks++;
+      }
+    });
+    return {
+      counts: counts,
+      coverage: coverage,
+      events: events,
+      omittedLifetime: d.decisionsOmitted,
+      scope: 'executed-decisions-not-continuous-time-coverage'
+    };
+  }
   function fireClassification(s, sim, f, d) {
     var rejects = {
       los: Math.max(0, (+s._losBlockedFire || 0) - f.los),
       crest: Math.max(0, (+s._crestBlockedFire || 0) - f.crest),
       terrain: Math.max(0, (+s._terrainBlockedSuppressiveFire || 0) - f.terrain)
     };
-    var recs = sim._commandReception && sim._commandReception.adoptedBySoldier,
-      rec = recs && recs[String(s.id)] && recs[String(s.id)]['posture-fire|squad'],
-      order = (rec && rec.data && rec.data.state) || null,
+    var activeContext = fireContext(s, sim),
+      order = activeContext.order,
       state = (s.eng && s.eng.state) || null;
     var denials = {};
     d.denials.forEach(function (e) {
@@ -162,6 +333,8 @@
       triggerRejectDeltas: rejects,
       directFireDenials: denials,
       roundsFired: 0,
+      decisions: decisionEvidence(s, sim, f, d),
+      intervalContext: Object.assign({}, f.context, { orders: Object.assign({}, f.context.orders) }),
       coverDecisions: d.coverEvents
         .filter(function (e) {
           return e.t >= f.since && e.t <= sim.time;
@@ -202,10 +375,25 @@
         }
       };
     if (
+      DECISIONS.slice(3).some(function (code) {
+        return evidence.decisions.counts[code] > 0;
+      })
+    )
+      return {
+        evidence: evidence,
+        result: {
+          code: 'executed-nonfiring-decision',
+          confidence: 'verified',
+          scope: 'decision-branch',
+          interpretation:
+            'A native owner executed a recorded nonfiring or inhibition branch during this interval. Verification applies to those decisions only; other updates and time between events remain unproven.'
+        }
+      };
+    if (
       order === 'hold' ||
       order === 'reposition' ||
       order === 'suppress' ||
-      (order === 'precision' && !(rec && rec.data && String(rec.data.shooterId) === String(s.id)))
+      (order === 'precision' && String(activeContext.shooterId) !== String(s.id))
     )
       return {
         evidence: evidence,
@@ -214,6 +402,28 @@
           confidence: 'likely',
           scope: 'state-correlation',
           interpretation: 'A restrictive order was observed, but no firing decision gate was directly traced.'
+        }
+      };
+    if (f.context.preparationSamples > 0)
+      return {
+        evidence: evidence,
+        result: {
+          code: 'preparation-observed-during-silence',
+          confidence: 'likely',
+          scope: 'sampled-interval-context',
+          interpretation:
+            'A personally adopted preparation order was observed within this silent interval. It may explain part of the interval; no decisive firing gate or continuous coverage is proved.'
+        }
+      };
+    if (f.context.suppressedSamples > 0)
+      return {
+        evidence: evidence,
+        result: {
+          code: 'suppression-observed-during-silence',
+          confidence: 'likely',
+          scope: 'sampled-interval-context',
+          interpretation:
+            'The native suppression timer was active during this interval. This is inhibition context, not proof that suppression prevented every possible shot.'
         }
       };
     if (state === 'cower' || state === 'freeze' || state === 'flee' || state === 'pinned')
@@ -304,10 +514,32 @@
         los: +s._losBlockedFire || 0,
         crest: +s._crestBlockedFire || 0,
         terrain: +s._terrainBlockedSuppressiveFire || 0,
-        reported: false
+        reported: false,
+        context: {
+          samples: 0,
+          preparationSamples: 0,
+          suppressedSamples: 0,
+          orders: {},
+          firstAt: sim.time,
+          lastAt: sim.time
+        }
       };
     }
     var f = d.fire;
+    if (!f.reported) {
+      var context = fireContext(s, sim);
+      f.context.samples++;
+      f.context.lastAt = sim.time;
+      if (context.preparing) f.context.preparationSamples++;
+      if (context.suppressed) f.context.suppressedSamples++;
+      var orderKey =
+        ['hold', 'precision', 'open', 'clear', 'suppress', 'reposition'].indexOf(context.order) >= 0
+          ? context.order
+          : context.order == null
+            ? 'absent'
+            : 'other';
+      bump(f.context.orders, orderKey);
+    }
     if (!f.reported && sim.time - f.since >= FIRE_SILENCE) {
       var c = fireClassification(s, sim, f, d);
       emit('fire-silence', s, f.since, sim.time, c.result, c.evidence, d.history);
@@ -385,6 +617,7 @@
     start: function (sim) {
       data = {
         schema: 'grasstex-causal-inaction-v1',
+        classificationVersion: 3,
         config: options,
         counts: {},
         reasons: {},
@@ -392,6 +625,7 @@
         episodes: [],
         episodesOmitted: 0,
         directDenialsOmitted: 0,
+        decisionEventsOmitted: 0,
         coverDecisions: [],
         coverDecisionsOmitted: 0,
         coverDecisionCounts: {},
@@ -403,6 +637,29 @@
       units = new Map();
       /* Called only from the real Engagement rejection sites, never by sampling a gate. */
       root.BattleCausalInaction = {
+        decision: function (s, battle, code, owner, actionId) {
+          if (!chosen(s) || !battle || DECISIONS.indexOf(code) < 0) return;
+          var d = unit(s),
+            t = +battle.time || 0,
+            target = s.target && !s.target.dead ? String(s.target.id) : null,
+            last = d.decisions[d.decisions.length - 1];
+          if (last && last.t === t && last.code === code && last.target === target) return;
+          d.decisions.push({
+            t: t,
+            code: code,
+            owner: String(owner || ''),
+            target: target,
+            actionId: actionId == null ? null : String(actionId),
+            missionVersion: (s.squad._macroMission && s.squad._macroMission.version) || null,
+            fireEnvelope: fireContext(s, battle).envelopeId
+          });
+          while (d.decisions.length && d.decisions[0].t < t - 10) d.decisions.shift();
+          if (d.decisions.length > MAX_DECISIONS) {
+            d.decisions.shift();
+            d.decisionsOmitted++;
+            data.decisionEventsOmitted++;
+          }
+        },
         denied: function (s, battle, code) {
           if (!chosen(s) || !battle) return;
           var d = unit(s),
@@ -480,6 +737,8 @@
     },
     sample: function (sim) {
       var all = root.BattleModules.unitsFor(sim),
+        T = root.BattleTacticalController,
+        summary = T && T.summary ? T.summary(sim) : {},
         selected = 0;
       for (var i = 0; i < all.length; i++) {
         var s = all[i];
@@ -513,7 +772,7 @@
           d.coverLane.arrivedAt = round(sim.time);
           d.coverLane.status = 'physically-arrived';
         }
-        d.history.push(sampleRow(s, o, sim));
+        d.history.push(sampleRow(s, o, sim, summary));
         if (d.history.length > MAX_HISTORY) d.history.shift();
         recordFire(s, sim, d);
         recordMovement(s, sim, d, o);
@@ -521,6 +780,14 @@
       data.actorsObserved = Math.max(data.actorsObserved, selected);
     },
     report: function () {
+      /* Keep the terminal window even if the first episode was emitted 100 seconds ago,
+         or the resolver holds at the actor's feet (no distant destination to flag). */
+      data.actorTails = [];
+      data.actorTailsOmitted = Math.max(0, units.size - MAX_EPISODES);
+      units.forEach(function (d, actor) {
+        if (data.actorTails.length < MAX_EPISODES)
+          data.actorTails.push({ actor: actor, history: d.history.slice() });
+      });
       return data;
     }
   };

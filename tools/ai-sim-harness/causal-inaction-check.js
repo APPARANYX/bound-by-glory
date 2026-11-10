@@ -59,6 +59,7 @@ function fixture(search, outcomeState) {
       }
     },
     BattleCommandReception: {
+      postureEnabled: () => true,
       adopted: () => {
         mutations++;
         throw Error('command settled');
@@ -305,3 +306,240 @@ for (const phase of ['boarding', 'embarked', 'disembarking']) {
   assert.equal(infantry.evidence.transport, null);
 }
 console.log('PASS transport ownership classification retains boarding evidence and dismount failures');
+
+// Scheduled timing, canonical adoption and controller selection are distinct witnesses.
+// Any settling/planning API is deliberately poisoned; sampling may only observe.
+const witness = fixture('?probeIds=76', 'none');
+const latest = {
+  envelopeId: 'env-new',
+  signature: 'move:new',
+  sourceId: 'leader-1',
+  relayId: 'relay-2',
+  channel: 'mixed-relay',
+  phase: 'received',
+  issuedAt: 80,
+  receivedAt: 81,
+  processedAt: 82,
+  adoptedAt: 83,
+  data: { publishKey: 'new-key', missionVersion: 2 },
+  point: { x: 4, z: 20 }
+};
+const old = {
+  ...latest,
+  envelopeId: 'env-old',
+  phase: 'adopted',
+  data: { publishKey: 'old-key', missionVersion: 1 }
+};
+witness.sim._commandReception.bySoldier = { 76: { 'movement|soldier:76': latest } };
+witness.sim._commandReception.adoptedBySoldier[76]['movement|soldier:76'] = old;
+let peeks = 0;
+witness.root.BattleCommandReception.peek = () => {
+  peeks++;
+  return { ...latest, phase: 'adopted' };
+};
+witness.root.BattleCommandReception.adoptedView = () => {
+  throw Error('settling read');
+};
+witness.root.BattleCommandReception.snapshot = () => {
+  throw Error('settling snapshot');
+};
+const action = {
+  squad: 'ge-2',
+  actorId: '76',
+  actionId: 'bound-9',
+  capability: 'combat.bound',
+  stage: 'accepted',
+  reason: 'published:await-personal-adoption',
+  since: 89.4
+};
+const selection = {
+  squad: 'ge-2',
+  actorId: '76',
+  slot: 'fire.personal',
+  stage: 'selected',
+  value: false,
+  reason: 'movement',
+  at: 90
+};
+witness.root.BattleTacticalController = {
+  summary: () => ({ live: [action], soldierDecisions: [selection] })
+};
+witness.soldier._fireteamAdoptedEnvelope = 'env-old';
+witness.soldier._fireteamPublishKey = 'old-key';
+witness.soldier.weapon = { ammo: 0, reserveAmmo: 16 };
+witness.soldier.eng.fireReadyAt = 200;
+witness.soldier.destination = { x: 0, z: 0 }; // at-feet hold must still retain the terminal witness
+witness.root.BattleGrenades = {
+  pendingOf: () => ({ decidedAt: 198, releaseAt: 201, source: 'contact-policy' }),
+  count: () => 2,
+  cooldownLeft: () => 0,
+  assaultAssessment: () => {
+    throw Error('grenade gate reevaluated');
+  },
+  assaultOpportunity: () => {
+    throw Error('grenade planner reevaluated');
+  }
+};
+const before = JSON.stringify(witness.sim._commandReception);
+for (let t = 190; t <= 210; t++) witness.sample(t);
+const tail = witness.probe.report(witness.sim).actorTails[0];
+assert.equal(tail.actor, 'ge:76');
+assert.equal(tail.history.length, 10);
+assert.equal(tail.history.at(-1).t, 210);
+const row = tail.history.at(-1);
+assert.equal(row.commands.movement.latest.phase, 'received', 'stored phase retained');
+assert.equal(row.commands.movement.projectedPhase, 'adopted', 'clock projection is separate');
+assert.equal(row.commands.movement.adopted.envelopeId, 'env-old', 'scheduled time is not adoption');
+assert.equal(row.commands.movement.adoptedIsLatest, false);
+assert.equal(row.commands.movement.latest.publishKey, 'new-key');
+assert.equal(row.commands.movement.appliedEnvelope, 'env-old');
+assert.equal(row.commands.movement.appliedPublishKey, 'old-key');
+assert.equal(row.commands.movement.latest.relayId, 'relay-2');
+assert.equal(row.controller.actions[0].since, 89.4);
+assert.equal(row.controller.selections[0].stage, 'selected', 'selection never becomes discharge');
+assert.equal(row.fireContext.fireReadyAt, 200);
+assert.equal(row.fireContext.ammo, 0);
+assert.equal(row.grenade.pending.releaseAt, 201, 'pending is not a native release receipt');
+assert.equal(JSON.stringify(witness.sim._commandReception), before, 'no command settlement or writes');
+assert.ok(peeks > 0);
+latest.data.publishKey = 'later';
+latest.point.x = 99;
+action.reason = 'later';
+selection.reason = 'later';
+assert.equal(row.commands.movement.latest.publishKey, 'new-key', 'receipt data detached');
+assert.equal(row.commands.movement.latest.point.x, 4, 'receipt position detached');
+assert.equal(row.controller.actions[0].reason, 'published:await-personal-adoption');
+assert.equal(row.controller.selections[0].reason, 'movement');
+assert.equal(witness.stats().mutations, 0);
+assert.equal(witness.stats().randoms, 0);
+console.log(
+  'PASS causal witnesses: adoption vs projection, terminal hold, detached bounded evidence, no settlement/planning'
+);
+
+const bounded = fixture('?probeSide=ge', 'none');
+bounded.root.BattleModules.unitsFor = () =>
+  Array.from({ length: 171 }, (_, i) => ({
+    ...bounded.soldier,
+    id: 1000 + i
+  }));
+bounded.sample(0);
+const boundedReport = bounded.probe.report(bounded.sim);
+assert.equal(boundedReport.actorTails.length, 160);
+assert.equal(boundedReport.actorTailsOmitted, 11);
+console.log('PASS causal terminal witnesses retain explicit actor-cap omissions');
+
+function fireOrder(f, state, shooterId) {
+  f.sim._commandReception.adoptedBySoldier[76]['posture-fire|squad'] = {
+    envelopeId: 'fire-' + state,
+    adoptedAt: f.sim.time,
+    data: { state, shooterId }
+  };
+}
+const preparation = fixture('?probeIds=76', 'none');
+for (let t = 0; t <= 5; t++) {
+  fireOrder(preparation, t < 3 ? 'hold' : 'open');
+  preparation.sample(t);
+}
+let episode = preparation.probe.report(preparation.sim).episodes[0];
+assert.equal(episode.code, 'preparation-observed-during-silence');
+assert.equal(episode.confidence, 'likely');
+assert.equal(episode.evidence.fireOrder, 'open');
+assert.equal(episode.evidence.intervalContext.preparationSamples, 3);
+assert.equal(episode.evidence.intervalContext.orders.hold, 3);
+assert.equal(episode.evidence.intervalContext.orders.open, 3);
+assert.equal(preparation.stats().mutations, 0);
+assert.equal(preparation.stats().randoms, 0);
+
+const suppressed = fixture('?probeIds=76', 'none');
+suppressed.soldier.eng.state = 'station';
+suppressed.soldier.suppressedUntil = 3;
+for (let t = 0; t <= 5; t++) suppressed.sample(t);
+episode = suppressed.probe.report(suppressed.sim).episodes[0];
+assert.equal(episode.code, 'suppression-observed-during-silence');
+assert.equal(episode.evidence.intervalContext.suppressedSamples, 3);
+assert.equal(episode.confidence, 'likely', 'suppression context is not a traced denial');
+
+for (const state of ['clear', 'open', 'precision']) {
+  const f = fixture('?probeIds=76', 'none');
+  fireOrder(f, state, '76');
+  for (let t = 0; t <= 5; t++) f.sample(t);
+  assert.equal(
+    f.probe.report(f.sim).episodes[0].code,
+    'unexplained-fire-silence',
+    'clear/open and the designated marksman cannot invent a preparation explanation'
+  );
+}
+const reset = fixture('?probeIds=76', 'none');
+fireOrder(reset, 'hold');
+reset.sample(0);
+reset.sample(1);
+reset.sim.onFire(reset.soldier);
+fireOrder(reset, 'open');
+for (let t = 2; t <= 7; t++) reset.sample(t);
+assert.equal(
+  reset.probe.report(reset.sim).episodes[0].code,
+  'unexplained-fire-silence',
+  'a shot starts a fresh interval without carrying old preparation forward'
+);
+const superseded = fixture('?probeIds=76', 'none');
+fireOrder(superseded, 'hold');
+superseded.soldier.eng.retreatEndedAt = 1;
+for (let t = 0; t <= 5; t++) superseded.sample(t);
+assert.equal(
+  superseded.probe.report(superseded.sim).episodes[0].evidence.intervalContext.preparationSamples,
+  0
+);
+console.log(
+  'PASS temporal fire context: HOLD-to-OPEN, expired suppression, honest unknowns, shot reset and stale orders'
+);
+
+const executed = fixture('?probeIds=76', 'none');
+function decision(f, t, code) {
+  f.sim.time = t;
+  f.root.BattleCausalInaction.decision(f.soldier, f.sim, code, 'engagement', 'bound-1');
+}
+executed.sample(0);
+decision(executed, 1, 'micro-update');
+decision(executed, 1, 'preparation-held-fire');
+decision(executed, 2, 'micro-update');
+decision(executed, 2, 'firing-path-entered');
+decision(executed, 2, 'weapon-attempt');
+decision(executed, 3, 'micro-update'); // entered Micro, no traced terminal branch
+executed.sample(5);
+const traced = executed.probe.report(executed.sim).episodes[0];
+assert.equal(traced.code, 'executed-nonfiring-decision');
+assert.equal(traced.confidence, 'verified');
+assert.equal(traced.scope, 'decision-branch', 'only actual branch execution is verified');
+assert.equal(traced.evidence.decisions.coverage.updateTicks, 3);
+assert.equal(traced.evidence.decisions.coverage.blockedUpdateTicks, 1);
+assert.equal(traced.evidence.decisions.coverage.weaponAttemptTicks, 1);
+assert.equal(traced.evidence.decisions.coverage.otherUpdateTicks, 1);
+assert.equal(traced.evidence.roundsFired, 0, 'attempt is not a discharge');
+assert.equal(traced.evidence.decisions.events[0].actionId, 'bound-1');
+assert.equal(executed.stats().randoms, 0);
+assert.equal(executed.stats().mutations, 0);
+
+const oldTarget = fixture('?probeIds=76', 'none');
+decision(oldTarget, 0, 'suppression-held-fire');
+oldTarget.target.id = 100;
+for (let t = 1; t <= 6; t++) oldTarget.sample(t);
+assert.equal(
+  oldTarget.probe.report(oldTarget.sim).episodes[0].code,
+  'unexplained-fire-silence',
+  'a decision for a different target never explains a new interval'
+);
+const eventCap = fixture('?probeIds=76', 'none');
+for (let i = 0; i < 600; i++) decision(eventCap, i / 1000, i % 2 ? 'micro-update' : 'bound-await-adoption');
+eventCap.sample(1);
+eventCap.sample(6);
+const capped = eventCap.probe.report(eventCap.sim);
+assert.equal(capped.decisionEventsOmitted, 88);
+assert.equal(
+  capped.episodes[0].code,
+  'unexplained-fire-silence',
+  'old events before interval start excluded'
+);
+assert.equal(capped.episodes[0].evidence.decisions.omittedLifetime, 88);
+console.log(
+  'PASS executed decisions: partial tick coverage, attempts vs rounds, target isolation and explicit caps'
+);

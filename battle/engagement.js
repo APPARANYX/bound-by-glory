@@ -148,6 +148,15 @@
   function posOf(s) {
     return s.root.position;
   }
+  // Optional observer: report the branch already taken, never evaluate another gate.
+  function traceFireDecision(s, battle, code, actionId) {
+    var tap = root.BattleCausalInaction;
+    if (tap && tap.decision) {
+      try {
+        tap.decision(s, battle, code, 'engagement', actionId);
+      } catch (_) {}
+    }
+  }
   function telemetry(battle, type, data) {
     if (root.BattleTelemetry) root.BattleTelemetry.record(type, data, battle);
   }
@@ -1057,6 +1066,7 @@
     ? root.BattleExtensionPoints({ afterDrill: ['combat-urgency'] })
     : { attach: function () {}, run: function () {}, order: {} };
   function updateSoldier(s, battle) {
+    traceFireDecision(s, battle, 'micro-update');
     var result = runDrill(s, battle);
     /* Combat-urgency/shared-contact drills must not re-arm the facing layer after freeze() deliberately
        cleared it. Other reactions keep their existing extension behavior. */
@@ -1413,6 +1423,7 @@
       'orient'
     );
     e.fireReadyAt = Math.max(e.fireReadyAt, e.since + recognition(s));
+    if (battle.time < e.until) traceFireDecision(s, battle, 'recognition-held-fire');
     return battle.time >= e.until;
   }
 
@@ -1708,6 +1719,7 @@
     holdPosition(s, battle);
     commitStance(s, battle, PRONE_ROLES[s.role] ? 'prone' : 'crouch', PRONE_HOLD);
     if (s.suppressedUntil - battle.time < 0.4) tryFire(s, battle);
+    else traceFireDecision(s, battle, 'suppression-held-fire');
   }
 
   function assault(s, battle) {
@@ -2436,6 +2448,7 @@
     if (!task || task.battle !== battle) return;
     if (task.drill === 'march' && fireControlPreparing(s, battle)) {
       task.reason = 'blocked:requires-contact-resource';
+      traceFireDecision(s, battle, 'preparation-held-fire');
       task.at = battle.time;
       return;
     }
@@ -2468,6 +2481,7 @@
         } else {
           holdPosition(s, battle);
           task.reason = 'published:await-personal-adoption';
+          traceFireDecision(s, battle, 'bound-await-adoption', task.order.key);
         }
       } else {
         var reached = Math.hypot(posOf(s).x - task.point.x, posOf(s).z - task.point.z) <= 0.45;
@@ -2518,6 +2532,7 @@
       s.state = 'advance';
       s.setUp = false;
       task.reason = marchPosture(s, battle) ? 'march:contact-low' : 'march:quiet';
+      traceFireDecision(s, battle, 'march-drill-no-fire-path');
     } else if (drill === 'prepare') {
       prepareFireControl(s, battle);
       task.reason = 'preparing:personal-fire-order';
@@ -2581,6 +2596,7 @@
       /* Native fire-control, ammo, muzzle, shock and ballistic gates still
          decide whether a real area round may leave this cover post. */
       var emitted = drill === 'suppress' && aim ? suppress(s, battle, aim) : false;
+      if (drill !== 'suppress') traceFireDecision(s, battle, 'watch-drill-no-fire-path');
       task.reason = !aim
         ? 'blocked:no-fresh-reported-sector'
         : drill === 'suppress'

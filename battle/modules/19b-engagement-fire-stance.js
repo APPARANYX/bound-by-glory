@@ -382,6 +382,14 @@
       return !!(s.moving && (s.moveSpeed || 0) > Math.max(0.16, (s.speed || 1) * MOVE_FIRE_FRACTION));
     }
     /* Optional forensic observer. No gameplay state ownership and no changes to gate results. */
+    function traceFireDecision(s, battle, code) {
+      var tap = root.BattleCausalInaction;
+      if (tap && tap.decision) {
+        try {
+          tap.decision(s, battle, code, 'engagement-fire-stance');
+        } catch (_) {}
+      }
+    }
     function reportFireDenial(s, battle, reason) {
       var tap = root.BattleCausalInaction;
       if (tap && tap.denied) {
@@ -432,9 +440,11 @@
       return true;
     }
     function tryFire(s, battle) {
+      traceFireDecision(s, battle, 'firing-path-entered');
       if (!fireAllowed(s, battle)) return false;
       var d = dist(posOf(s).x, posOf(s).z, posOf(s.target).x, posOf(s.target).z);
       if (d > SA().engageRange(s)) return reportFireDenial(s, battle, 'engagement-range');
+      traceFireDecision(s, battle, 'weapon-attempt');
       SA().tryFire(s, battle);
       return true;
     }
@@ -631,6 +641,7 @@
       return fireControlObservation(s, battle).ready;
     }
     function prepareFireControl(s, battle) {
+      traceFireDecision(s, battle, 'preparation-held-fire');
       var target = fireControlTarget(s, battle),
         known = target ? posOf(target) : knownThreat(s, battle),
         p = posOf(s),
@@ -861,6 +872,7 @@
       move(s, battle, { x: anchor.x, z: anchor.z }, 'firing-station');
       if (d > 0.35) {
         s.setUp = false;
+        traceFireDecision(s, battle, 'station-en-route');
         return;
       }
       if (SA().isMachineGun(s)) {
@@ -874,6 +886,7 @@
           target: null,
           state: 'holding'
         });
+        traceFireDecision(s, battle, 'station-no-sector-target');
         return;
       }
       var lines = portLines(s, battle, st, t),
@@ -890,6 +903,7 @@
         to: lines.to
       });
       if (lines.eye.ok && lines.muzzle.ok) tryFire(s, battle);
+      else traceFireDecision(s, battle, 'station-line-blocked');
     }
     function legacyStation(s, battle, e, t, st) {
       s._faceHint = t.threatSector;
@@ -910,8 +924,12 @@
             dz = tp.z - st.windowZ,
             len = Math.hypot(dx, dz) || 1;
           if ((dx * st.normalX + dz * st.normalZ) / len >= 0.25) tryFire(s, battle);
+          else traceFireDecision(s, battle, 'station-no-sector-target');
         }
-      } else s.setUp = false;
+      } else {
+        s.setUp = false;
+        traceFireDecision(s, battle, 'station-en-route');
+      }
     }
     return {
       engagementLive: engagementLive,
