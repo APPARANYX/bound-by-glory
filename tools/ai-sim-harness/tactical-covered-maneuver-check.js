@@ -741,7 +741,7 @@ test('real undeliverable bound waits for retry before terminal cancellation and 
   );
   w.b.time += 0.3;
   w.E.updateSoldier(man, w.b);
-  assert.equal(w.r.BattleMovementResolver.current(man)?.kind, 'hold');
+  assert.equal(man._movementResolver?.combat?.kind, 'hold', 'native hold remains owned until cleanup');
   tick(w);
   assert.equal(live(w, 'combat.bound').some(a => a.actionId === action.actionId), false);
   assert.equal(w.r.BattleCoverPositions.current(man, w.b), null, 'failed actor released cover');
