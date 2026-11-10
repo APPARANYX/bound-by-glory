@@ -311,10 +311,7 @@ test('command-delivery preflight prunes disconnected movers before expensive rou
   squad(w);
   assert.ok(asked.includes(man), 'delivery preflight consulted authoritative command service');
   const audit = w.M.summary(w.q).diagnostic;
-  assert.equal(
-    audit.teams.find(t => t.moverId === String(man.id))?.result,
-    'command-link-unreachable'
-  );
+  assert.equal(audit.teams.find(t => t.moverId === String(man.id))?.result, 'command-link-unreachable');
   CR.canDeliverMovement = real;
   clean(w);
 });
