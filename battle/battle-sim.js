@@ -987,6 +987,11 @@
     this._aiAccum += dt;
     while (this._aiAccum >= AI_TICK && !this.winner) {
       this._aiAccum -= AI_TICK;
+      this._geometryStep = (this._geometryStep || 0) + 1;
+      if (root.BattleGeometryStepCache)
+        root.BattleGeometryStepCache.beginStep(this, this._geometryStep);
+      if (root.BattleAIPolicy && root.BattleAIPolicy.pinTickPolicies)
+        root.BattleAIPolicy.pinTickPolicies(this);
       var f = this.factions,
         squadsUs = f.us.squads,
         squadsGe = f.ge.squads;
@@ -997,6 +1002,7 @@
       this._checkWinner();
       if (this.onUpdate) this.onUpdate(this);
     }
+    if (this._policyTickPin) this._policyTickPin = null;
     if (root.BattleModules) root.BattleModules.runHook('onSimulationStep', this, { dt: dt });
   };
   BattleSim.prototype.step = function (dt) {

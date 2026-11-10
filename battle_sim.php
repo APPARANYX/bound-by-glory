@@ -262,7 +262,7 @@ if ($body !== false && strlen($body) > 100 && stripos($body, '<html') !== false)
     $cdnTag = '<script src="https://cdn.jsdelivr.net/npm/babylonjs@9.27.1/babylon.js"></script>';
     if (strpos($body, $cdnTag) !== false) $body = str_replace($cdnTag, $bootstrap."\n".$cdnTag, $body);
     $version = rawurlencode($resolvedRef) . '&c=' . rawurlencode($cacheEpoch);
-    foreach (array('core-runtime.js','soldier.js','weapons.js','obstacle-field.js','terrain-features.js','squad-ai.js','movement-resolver.js','engagement.js','battle-sim.js') as $file) $body = str_replace('<script src="'.$file.'"></script>', '<script src="'.$base.'battle/'.$file.'?v='.$version.'"></script>', $body);
+    foreach (array('core-runtime.js','soldier.js','weapons.js','geometry-step-cache.js','obstacle-field.js','terrain-features.js','squad-ai.js','movement-resolver.js','engagement.js','battle-sim.js') as $file) $body = str_replace('<script src="'.$file.'"></script>', '<script src="'.$base.'battle/'.$file.'?v='.$version.'"></script>', $body);
     /* Keep the GitHub-served battle on the same controller/player camera as the local
        deployed entry. The plain HTML has only an ArcRotate fallback, with no Start-hold
        settings, gamepad possession or LB/RB menu. The camera patch must succeed before

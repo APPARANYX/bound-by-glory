@@ -57,7 +57,7 @@ void main(){if(vD>${SHADOW_END.toFixed(1)})discard;if(vD<${NEAR_SHADOW_END.toFix
   var shadowTypes=V.map(makeShadowType);try{if(typeof nearPatch!=='undefined')nearPatch.alphaIndex=0;}catch(_){ }
 
   var BUDGET_MS=1.2,HYST=CHUNK*.85,PAD=CHUNK*1.25,mats=[],seeds=[],grads=[],matN=new Int32Array(6),seedN=new Int32Array(6),boundBuf=new WeakMap();
-  var job=null,haveShadows=false,builtX=1e9,builtZ=1e9,builtDen=-1,builtRev=-1;
+  var job=null,haveShadows=false,builtX=1e9,builtZ=1e9,builtDen=-1,builtRev=-1,builtStreamGen=-1;
   function fit(list,i,need){var a=list[i];if(!a||a.length<need)list[i]=new Float32Array(Math.ceil(need*1.25)+16);return list[i];}
   function push(mesh,kind,data,stride,instances){var b=boundBuf.get(mesh);if(!b){b={};boundBuf.set(mesh,b);}if(b[kind]!==data){mesh.thinInstanceSetBuffer(kind,data,stride,false);b[kind]=data;}else mesh.thinInstanceBufferUpdated(kind);if(instances>=0)mesh.thinInstanceCount=instances;}
 
@@ -87,7 +87,10 @@ void main(){if(vD>${SHADOW_END.toFixed(1)})discard;if(vD<${NEAR_SHADOW_END.toFix
      changes - otherwise shadows bake flat at y=0 and stay painted across the road until you
      happen to walk far enough to trip the movement hysteresis. */
   function apiState(){try{var s=window.GrassAPI&&window.GrassAPI.snapshot&&window.GrassAPI.snapshot();return s?{rev:+s.revision||0,ready:!!s.hasTerrainSampler}:{rev:0,ready:false};}catch(_){return{rev:0,ready:false};}}
-  function pumpShadows(){if(!job&&window.__grassStreamBusy)return;var st=apiState();if(!haveShadows&&!st.ready)return;var den=+density.value,dx=camera.position.x-builtX,dz=camera.position.z-builtZ,moved=Math.sqrt(dx*dx+dz*dz),jump=!haveShadows||moved>SHADOW_END;if(den!==builtDen||st.rev!==builtRev)startShadowJob(den,st.rev);else if(!job&&moved>HYST)startShadowJob(den,st.rev);if(job)stepShadows(jump);}
+  function pumpShadows(){if(!job&&window.__grassStreamBusy)return;
+    var streamGen=window.__grassStreamGen;
+    if(streamGen!=null&&streamGen!==builtStreamGen){builtStreamGen=streamGen;builtDen=-1;}
+    var st=apiState();if(!haveShadows&&!st.ready)return;var den=+density.value,dx=camera.position.x-builtX,dz=camera.position.z-builtZ,moved=Math.sqrt(dx*dx+dz*dz),jump=!haveShadows||moved>SHADOW_END;if(den!==builtDen||st.rev!==builtRev)startShadowJob(den,st.rev);else if(!job&&moved>HYST)startShadowJob(den,st.rev);if(job)stepShadows(jump);}
 
   var t=0;scene.onBeforeRenderObservable.add(function(){var dt=Math.min(engine.getDeltaTime()/1000,.05);t+=dt;var showNear=drawNear.checked?1:0,showMedium=drawMedium.checked?1:0,showAny=!!(showNear||showMedium);for(var i=0;i<6;i++){shadowTypes[i].mat.setVector3('cameraPosition',camera.globalPosition);shadowTypes[i].mat.setFloat('uTime',t);shadowTypes[i].mat.setFloat('uWind',+wind.value);shadowTypes[i].mat.setFloat('uDrawNear',showNear);shadowTypes[i].mat.setFloat('uDrawMedium',showMedium);shadowTypes[i].mesh.setEnabled(showAny);}pumpShadows();});
   density.addEventListener('input',function(){builtDen=-1;});/* first bake is kicked off by pumpShadows once the terrain sampler exists */

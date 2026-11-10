@@ -210,8 +210,17 @@
   function byNumber(x, y) {
     return x - y;
   }
-  function movementClear(a, b) {
+  function movementClearUncached(a, b) {
     return !blocked(a, b, 'move');
+  }
+  function movementClear(a, b) {
+    var C = root.BattleGeometryStepCache;
+    if (!C || !C.enabled) return movementClearUncached(a, b);
+    var ver = String(version);
+    var key = C.keyMovement(a, b, ver);
+    return C.memo('movementClear', key, function () {
+      return movementClearUncached(a, b);
+    });
   }
   /* Physical navigation owns how a man gets past something in his way. The Movement Resolver still
      owns where he is going: this only ever rewrites one integration step, never a destination.
@@ -248,8 +257,17 @@
       }
     return null;
   }
-  function losBlocked(a, b, ay, by) {
+  function losBlockedUncached(a, b, ay, by) {
     return blocked(a, b, 'los', ay, by);
+  }
+  function losBlocked(a, b, ay, by) {
+    var C = root.BattleGeometryStepCache;
+    if (!C || !C.enabled) return losBlockedUncached(a, b, ay, by);
+    var ver = String(version);
+    var key = C.keyLosBlocked(a, b, ay, by, ver);
+    return C.memo('lineOfSightBlocked', key, function () {
+      return losBlockedUncached(a, b, ay, by);
+    });
   }
   function addNode(p, kind, meta) {
     var n = { id: nodes.length, x: p.x, z: p.z, kind: kind || 'nav', meta: meta || null };
