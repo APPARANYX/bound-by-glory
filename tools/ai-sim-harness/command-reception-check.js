@@ -348,8 +348,11 @@ test('controller movement reachability preflight uses native voice/visual/relay 
   const legacy = world('?commandReception=1&commandMovement=1&commandRelay=0');
   const other = legacy.us.members[5];
   other.root.position.x += 180;
-  assert.equal(legacy.C.canDeliverMovement(legacy.us, legacy.b, other), true,
-    'legacy timing mode retains its documented distance-unbounded behavior');
+  assert.equal(
+    legacy.C.canDeliverMovement(legacy.us, legacy.b, other),
+    true,
+    'legacy timing mode retains its documented distance-unbounded behavior'
+  );
 });
 
 test('squad diagnostics are safe before publication and after restart without creating state', () => {
