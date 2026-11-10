@@ -1,0 +1,23 @@
+{
+  "branch": "work/benchmark-launch/pr795-transport900-flagoff-us-defend",
+  "launch_parent_sha": "504f69e3a71ae21706b04e17c5d07fdcde900b4b",
+  "launch_sha": "131709f7976d7784aa5b20bd12f2747e15224268",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/504f69e3a71ae21706b04e17c5d07fdcde900b4b",
+  "request": {
+    "battle_type": "us-defend",
+    "benchmark": "standard",
+    "origin_agent": "human",
+    "purpose": "#795 M4 transport 900s on 504f69e3: head no-param vs controllerTransport=0, us-defend, 48 seeds",
+    "query_off": "strategicInterception=0&controllerTransport=0",
+    "query_on": "strategicInterception=0",
+    "ref": "work/pin/pr795-504f69e3",
+    "seed": "pr795-transport900-20261108",
+    "seeds": "48",
+    "sim_seconds": "900",
+    "windows": "0+900"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/pr795-504f69e3",
+  "source_sha_at_archive": "504f69e3a71ae21706b04e17c5d07fdcde900b4b"
+}
