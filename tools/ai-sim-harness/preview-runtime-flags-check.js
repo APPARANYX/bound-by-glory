@@ -22,6 +22,9 @@ const inputs = Array.from({ length: 32 }, (_, mask) =>
       .concat(skillFlags.map((name, bit) => [name, mask & (1 << bit) ? '1' : '0']))
   )
 );
+inputs.forEach((q, i) => {
+  q.controllerGrenadeArea = i % 2 ? '1' : '0';
+});
 const microNames = ['controllerStance', 'controllerSoldierFire', 'controllerReactions', 'controllerDrill'];
 const microInputs = Array.from({ length: 16 }, (_, mask) =>
   Object.fromEntries(microNames.map((name, bit) => [name, mask & (1 << bit) ? '1' : '0']))
@@ -42,6 +45,7 @@ const queries = allQueries.slice(0, inputs.length);
 for (const profile of ['strategic', 'legacy'])
   queries.forEach((query, index) => {
     const forwarded = new URLSearchParams(query);
+    assert.equal(forwarded.get('controllerGrenadeArea'), inputs[index].controllerGrenadeArea);
     skillFlags.forEach(name =>
       assert.equal(forwarded.get(name), inputs[index][name], 'S1 rollback forwarding: ' + name)
     );
