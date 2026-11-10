@@ -972,14 +972,27 @@
   /* SquadAI fireGate slot, after the ammunition gate and before trigger-time LOS: a round is only
      launched at a live target inside the weapon's range, and a weapon still cycling does not count. */
   function inRange(shooter, battle) {
-    if (!shooter || !battle || !shooter.target || shooter.target.dead || shooter.fireCooldown > 0)
-      return false;
+    if (!shooter || !battle) return false;
+    /* The same tests in the same order as before; each refusal names the test already failed. */
+    if (!shooter.target) return refused(shooter, battle, 'no-target');
+    if (shooter.target.dead) return refused(shooter, battle, 'target-dead');
+    if (shooter.fireCooldown > 0) return refused(shooter, battle, 'cooldown');
     var stats = shooter.weapon && shooter.weapon.stats;
-    if (!stats) return false;
+    if (!stats) return refused(shooter, battle, 'no-weapon-stats');
     var p = shooter.root.position,
       t = shooter.target.root.position,
       d = S.dist2 ? S.dist2(p.x, p.z, t.x, t.z) : Math.hypot(p.x - t.x, p.z - t.z);
-    return d <= stats.range;
+    return d <= stats.range || refused(shooter, battle, 'out-of-range');
+  }
+  // Observe only the refusal already taken; an observer never owns the gate's answer.
+  function refused(shooter, battle, why) {
+    var tap = root.BattleCausalInaction;
+    if (tap && tap.decision) {
+      try {
+        tap.decision(shooter, battle, 'weapon-gate-ballistics-' + why, 'ballistics');
+      } catch (_) {}
+    }
+    return false;
   }
 
   if (typeof S.extend === 'function') {

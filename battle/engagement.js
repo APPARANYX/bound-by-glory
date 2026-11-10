@@ -1213,7 +1213,10 @@
     if (TC && s.squad && !s.isPlayer && TC.dispatch(battle, s.squad, 'engagement', s)) {
       /* A committed survival displacement is retained execution, including its native arrival and
          failure paths. decide() below refuses new legacy choices for controlled squads. */
-      if (e.state === 'bound' && e.urgentBound) return bound(s, battle);
+      if (e.state === 'bound' && e.urgentBound) {
+        traceFireDecision(s, battle, 'urgent-cover-bound');
+        return bound(s, battle);
+      }
       return controllerCombatTick(s, battle);
     }
     /* A first contact is not automatically a trigger pull. While the Squad Leader is holding fire,

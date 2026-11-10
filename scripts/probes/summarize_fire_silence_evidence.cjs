@@ -10,13 +10,17 @@ let total = 0,
 for (const path of paths) {
   const raw = JSON.parse(fs.readFileSync(path, 'utf8'));
   const rows = [],
-    worked = [];
+    worked = [],
+    gateRefusals = {};
   for (const battle of raw.battles) {
     const report = battle.reports['causal-inaction'];
     assert.equal(report.classificationVersion, 3, 'Requires matching v3 instrumentation');
     for (const episode of report.episodes) {
       const evidence = episode.evidence,
         decisions = evidence.decisions;
+      // Event counts inside silent intervals; one tick can carry an owner tag and its sub-cause.
+      for (const [code, n] of Object.entries(decisions?.counts || {}))
+        if (code.startsWith('weapon-gate-')) gateRefusals[code] = (gateRefusals[code] || 0) + n;
       if (episode.code === 'unexplained-fire-silence' && decisions?.coverage.weaponAttemptTicks > 0) {
         rows.push({
           seed: battle.seed,
@@ -46,6 +50,6 @@ for (const path of paths) {
         });
     }
   }
-  console.log(JSON.stringify({ path, step: raw.step, seconds: raw.seconds, rows, worked }));
+  console.log(JSON.stringify({ path, step: raw.step, seconds: raw.seconds, rows, worked, gateRefusals }));
 }
 console.log(JSON.stringify({ episodes: total, weaponAttemptTicks: attempts }));

@@ -546,6 +546,7 @@ console.log(
 
 for (const code of [
   'controller-no-combat-task',
+  'urgent-cover-bound',
   'withdraw-no-close-target',
   'advance-shock-hold',
   'advance-no-target',
@@ -556,6 +557,11 @@ for (const code of [
   'weapon-burst-target-not-threat',
   'weapon-gate-ammunition',
   'weapon-gate-ballistics',
+  'weapon-gate-ballistics-no-target',
+  'weapon-gate-ballistics-target-dead',
+  'weapon-gate-ballistics-cooldown',
+  'weapon-gate-ballistics-no-weapon-stats',
+  'weapon-gate-ballistics-out-of-range',
   'weapon-gate-direct-fire-los',
   'weapon-gate-grenades'
 ]) {
