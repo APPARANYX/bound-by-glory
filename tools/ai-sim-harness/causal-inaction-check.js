@@ -543,3 +543,39 @@ assert.equal(capped.episodes[0].evidence.decisions.omittedLifetime, 88);
 console.log(
   'PASS executed decisions: partial tick coverage, attempts vs rounds, target isolation and explicit caps'
 );
+
+for (const code of [
+  'controller-no-combat-task',
+  'urgent-cover-bound',
+  'withdraw-no-close-target',
+  'advance-shock-hold',
+  'advance-no-target',
+  'weapon-cooldown',
+  'weapon-lab-aimed-blocked',
+  'weapon-lab-discharge-blocked',
+  'weapon-target-not-threat',
+  'weapon-burst-target-not-threat',
+  'weapon-gate-ammunition',
+  'weapon-gate-ballistics',
+  'weapon-gate-ballistics-no-target',
+  'weapon-gate-ballistics-target-dead',
+  'weapon-gate-ballistics-cooldown',
+  'weapon-gate-ballistics-no-weapon-stats',
+  'weapon-gate-ballistics-out-of-range',
+  'weapon-gate-direct-fire-los',
+  'weapon-gate-grenades'
+]) {
+  const f = fixture('?probeSide=ge&probeIds=76', 'resolved');
+  f.sample(0);
+  decision(f, 1, 'micro-update');
+  decision(f, 1, code);
+  decision(f, 2, 'micro-update');
+  f.sample(5);
+  const e = f.probe.report(f.sim).episodes[0];
+  assert.equal(e.code, 'executed-nonfiring-decision');
+  assert.equal(e.scope, 'decision-branch');
+  assert.equal(e.evidence.decisions.counts[code], 1);
+  assert.equal(e.evidence.decisions.coverage.otherUpdateTicks, 1);
+  assert.equal(e.evidence.roundsFired, 0);
+}
+console.log('PASS native return vocabulary retains partial coverage and zero-discharge distinction');

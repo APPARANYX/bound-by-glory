@@ -421,3 +421,255 @@ test('native preparation and pinned branches report decisions without observer a
   };
   assert.doesNotThrow(() => w.E.updateSoldier(w.s, w.b));
 });
+
+test('HOLD without a native combat task is not reported as executed preparation', () => {
+  const w = world(),
+    events = [];
+  w.r.BattleCausalInaction = { decision: (s, b, code) => events.push(code) };
+  w.q.fireControl = { state: 'hold' };
+  // Isolate the actual no-task return, without letting the provider create a task.
+  w.r.BattleTacticalContactSkills.engagement = () => {};
+  w.E.updateSoldier(w.s, w.b);
+  assert.ok(events.includes('controller-no-combat-task'));
+  assert.ok(!events.includes('preparation-held-fire'));
+  assert.ok(!events.includes('weapon-attempt'));
+});
+
+test('a retained urgent cover bound is traced instead of a missing controller combat task', () => {
+  const run = mode => {
+    const w = world(),
+      events = [],
+      e = w.E.stateOf(w.s);
+    // Isolate the retained-bound return, without letting the provider create a task.
+    w.r.BattleTacticalContactSkills.engagement = () => {};
+    // The state module 44 leaves behind when a suppressed man commits to cover.
+    e.cover = { x: w.s.root.position.x + 12, z: w.s.root.position.z - 6, distance: 13.4 };
+    w.E.requestState(w.s, w.b, 'urgent-cover', 8);
+    e.urgentBound = true;
+    assert.equal(e.state, 'bound');
+    if (mode !== 'absent')
+      w.r.BattleCausalInaction = {
+        decision: (s, b, code, owner) => {
+          if (mode === 'throw') throw Error('observer failure');
+          if (code === 'urgent-cover-bound') assert.equal(owner, 'engagement');
+          events.push(code);
+        }
+      };
+    let shots = 0;
+    w.b.onFire = () => shots++;
+    w.E.updateSoldier(w.s, w.b);
+    return {
+      events,
+      outcome: {
+        shots,
+        state: e.state,
+        urgentBound: e.urgentBound,
+        cover: e.cover && { x: e.cover.x, z: e.cover.z },
+        cooldown: w.s.fireCooldown,
+        target: w.s.target && w.s.target.id,
+        moving: !!w.s.moving
+      }
+    };
+  };
+  const absent = run('absent'),
+    recorded = run('record'),
+    thrown = run('throw');
+  assert.ok(recorded.events.includes('micro-update'));
+  assert.ok(recorded.events.includes('urgent-cover-bound'));
+  assert.ok(!recorded.events.includes('controller-no-combat-task'));
+  assert.equal(recorded.outcome.state, 'bound', 'the bound is still executing');
+  assert.equal(recorded.outcome.shots, 0);
+  assert.deepEqual(recorded.outcome, absent.outcome);
+  assert.deepEqual(thrown.outcome, absent.outcome);
+});
+
+test('withdrawal traces only the branch that does not attempt close-target fire', () => {
+  const w = world(),
+    events = [];
+  w.r.BattleCausalInaction = { decision: (s, b, code) => events.push(code) };
+  w.q.state = 'retreat';
+  w.E.updateSoldier(w.s, w.b);
+  assert.ok(events.includes('withdraw-no-close-target'));
+  assert.ok(!events.includes('firing-path-entered'));
+  events.length = 0;
+  w.target.root.position.z = w.s.root.position.z + 20;
+  w.E.updateSoldier(w.s, w.b);
+  assert.ok(events.includes('firing-path-entered'));
+  assert.ok(!events.includes('withdraw-no-close-target'));
+});
+
+test('weapon returns preserve gate order, call counts and outcomes with absent/recording/throwing observers', () => {
+  const cases = [
+    [
+      'weapon-missing',
+      w => {
+        w.s.weapon = null;
+      }
+    ],
+    [
+      'weapon-cooldown',
+      w => {
+        w.s.fireCooldown = 2;
+      }
+    ],
+    [
+      'weapon-lab-aimed-blocked',
+      w => {
+        w.r.PhaseCCombatLab = { blockShot: (s, b, stage) => stage === 'aimed' };
+      }
+    ],
+    [
+      'weapon-lab-discharge-blocked',
+      w => {
+        w.r.PhaseCCombatLab = { blockShot: (s, b, stage) => stage === 'discharge' };
+      }
+    ],
+    [
+      'weapon-target-not-threat',
+      w => {
+        w.target.dead = true;
+      }
+    ],
+    ...['ammunition', 'ballistics', 'direct-fire-los', 'grenades'].map(id => [
+      'weapon-gate-' + id,
+      w => {
+        w.s.fireCooldown = 2; // gates precede cooldown; never report the unexecuted branch
+        w.r.SquadAI.extend('fireGate', id, () => {
+          w.gates.push(id);
+          return false;
+        });
+      }
+    ])
+  ];
+  for (const [expected, setup] of cases) {
+    const outcomes = [];
+    for (const mode of ['absent', 'record', 'throw']) {
+      const w = world(),
+        events = [];
+      w.gates = [];
+      w.r.BattleAmmunition.initialize(w.s, w.b);
+      for (const id of ['ammunition', 'ballistics', 'direct-fire-los', 'grenades'])
+        w.r.SquadAI.extend('fireGate', id, () => {
+          w.gates.push(id);
+          return true;
+        });
+      let shots = 0;
+      w.b.onFire = () => shots++;
+      setup(w);
+      if (mode !== 'absent')
+        w.r.BattleCausalInaction = {
+          decision: (s, b, code, owner) => {
+            if (mode === 'throw') throw Error('observer failure');
+            assert.equal(owner, 'squad-ai');
+            events.push(code);
+          }
+        };
+      const returned = w.r.SquadAI.tryFire(w.s, w.b);
+      outcomes.push({
+        returned,
+        shots,
+        gates: w.gates,
+        cooldown: w.s.fireCooldown,
+        ammo: w.s.weapon && w.s.weapon.ammo,
+        target: w.s.target && w.s.target.id
+      });
+      assert.equal(shots, 0);
+      if (mode === 'record') assert.deepEqual(events, [expected]);
+    }
+    assert.deepEqual(outcomes[1], outcomes[0], expected);
+    assert.deepEqual(outcomes[2], outcomes[0], expected);
+  }
+});
+
+test('the ballistics gate names the test that refused without changing its answer', () => {
+  const cases = [
+    [
+      'no-target',
+      w => {
+        w.s.target = null;
+      }
+    ],
+    [
+      'target-dead',
+      w => {
+        w.target.dead = true;
+      }
+    ],
+    [
+      'cooldown',
+      w => {
+        w.s.fireCooldown = 2;
+      }
+    ],
+    [
+      'no-weapon-stats',
+      w => {
+        w.s.weapon.stats = null;
+      }
+    ],
+    [
+      'out-of-range',
+      w => {
+        w.target.root.position.z = w.s.root.position.z + w.s.weapon.stats.range + 25;
+      }
+    ],
+    [null, () => {}]
+  ];
+  for (const [why, setup] of cases) {
+    const outcomes = [];
+    for (const mode of ['absent', 'record', 'throw']) {
+      const w = world(),
+        events = [];
+      w.r.BattleAmmunition.initialize(w.s, w.b);
+      // The real ballistics owner supplies the gate; its neighbours are isolated.
+      loadModule(w.r, 'battle/modules/14-z-ballistic-raycast.js', {
+        location: w.r.location,
+        console: quietConsole
+      });
+      for (const id of ['ammunition', 'direct-fire-los', 'grenades'])
+        w.r.SquadAI.extend('fireGate', id, () => true);
+      let shots = 0,
+        draws = 0;
+      const random = w.b.random;
+      w.b.random = () => {
+        draws++;
+        return random.call(w.b);
+      };
+      w.b.onFire = () => shots++;
+      setup(w);
+      if (mode !== 'absent')
+        w.r.BattleCausalInaction = {
+          decision: (s, b, code, owner) => {
+            if (mode === 'throw') throw Error('observer failure');
+            events.push(owner + ':' + code);
+          }
+        };
+      const returned = w.r.SquadAI.tryFire(w.s, w.b);
+      outcomes.push({
+        returned,
+        shots,
+        draws,
+        cooldown: w.s.fireCooldown,
+        ammo: w.s.weapon && w.s.weapon.ammo,
+        target: w.s.target && w.s.target.id
+      });
+      if (why) {
+        assert.equal(returned, false, why);
+        assert.equal(shots, 0, why);
+        assert.equal(draws, 0, why);
+        // The owner's sub-cause first, then the unchanged generic gate tag.
+        if (mode === 'record')
+          assert.deepEqual(events, [
+            'ballistics:weapon-gate-ballistics-' + why,
+            'squad-ai:weapon-gate-ballistics'
+          ]);
+      } else {
+        assert.equal(returned, true, 'a live target inside range passes the gate');
+        assert.ok(shots > 0);
+        assert.ok(!events.some(code => /weapon-gate-ballistics/.test(code)));
+      }
+    }
+    assert.deepEqual(outcomes[1], outcomes[0], String(why));
+    assert.deepEqual(outcomes[2], outcomes[0], String(why));
+  }
+});

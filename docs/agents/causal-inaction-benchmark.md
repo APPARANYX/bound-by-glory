@@ -56,6 +56,33 @@ Per actor, at most 512 recent decision events within 10 simulated seconds are re
 capacity losses are explicit in decisionEventsOmitted and omittedLifetime. No lifecycle
 state is settled while capturing evidence. The vocabulary is fixed to keep counts bounded.
 Uninstrumented branches remain unknown rather than being inferred from missing tags.
+The return-path extension distinguishes `controller-no-combat-task` from executed
+preparation: an adopted HOLD does not establish that a preparation task ran. Withdrawal
+records `withdraw-no-close-target` only when the native close-target firing branch is
+not taken. Advance records its executed shock hold or targetless march branch.
+`urgent-cover-bound` records a controlled update that executed the retained urgent cover
+displacement instead of a controller combat task; an arrival in that same update can
+still enter the firing path, which is traced separately.
+SquadAI records missing weapons, cooldown, lab vetoes, target invalidation and the
+specific fireGate extension that returned false. Extension tags identify the rejecting
+owner, not its internal reason; existing ammunition tags and trigger geometry counters
+retain that finer evidence. The ballistics owner additionally names the test that
+refused (`weapon-gate-ballistics-no-target`, `-target-dead`, `-cooldown`,
+`-no-weapon-stats`, `-out-of-range`) immediately before the owner tag, so the two counts
+overlap and must not be summed. Its cooldown test precedes SquadAI's own, so a cycling
+weapon is reported there rather than as `weapon-cooldown`. A sub-cause names the failed
+test only; it does not say which owner set that cooldown or chose that target.
+Gates run once, in their original order. Physical rounds
+still come from onFire, never from tryFire's boolean (which can be true with zero rounds).
+These tags do not establish that a tactical choice was correct or explain untraced time.
+
+Downloaded v3 raw artifacts can be recounted without replaying battles with
+`node scripts/probes/summarize_fire_silence_evidence.cjs <raw.json> ...`.
+Its rows distinguish episodes, actors and weapon-attempt ticks, retain the worked
+original US-defense interval separately, and total the fireGate refusal tags (owner and
+sub-cause) recorded inside silent intervals. Record each artifact's runtime/hook SHA alongside
+this output; identical filenames do not establish identical sources.
+
 Historical v2 observer-only overlays cannot collect these events without the matching
 instrumentation-only native-owner patch; keep runtime, hook and observer provenance.
 
