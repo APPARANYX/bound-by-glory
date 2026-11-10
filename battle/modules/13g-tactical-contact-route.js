@@ -52,6 +52,12 @@
        reports), so the bound costs little: on two 600 s meeting battles an unbounded store grew to
        84k-166k answers (+15-27 MB of heap), and this bound kept 97-99% of its reuse. */
     STORE_LIMIT = 25000,
+    /* D5 (#794): keep cross-plan LOS reuse when trucks are off the sampled segment; off
+       with ?controllerRouteDynIsolate=0 (any footprint disables the sight store). */
+    DYN_ISOLATE =
+      /[?&]tacticalController=new(?:&|#|$)/i.test(SEARCH) &&
+      !/[?&]controllerRouteDynIsolate=0(?:&|#|$)/i.test(SEARCH),
+    DYN_PAD = 14,
     epoch = null,
     sightStore = { epoch: null, lines: null, size: 0 };
   /* Answers that depend on terrain and static geometry alone (a line of sight between two fixed
@@ -59,11 +65,29 @@
      is issued when the obstacle set, its physical version, the navigation version, the terrain
      function or the sight/fire functions change. While a vehicle footprint is on the map there is
      no token: a moving truck can block a line, so nothing is reused. */
+  function dynamicsAffectSegment(obstacles, ax, az, bx, bz) {
+    var dyn = obstacles && obstacles.__dynamicFootprints;
+    if (!dyn || !dyn.length) return false;
+    var minX = Math.min(ax, bx) - DYN_PAD,
+      maxX = Math.max(ax, bx) + DYN_PAD,
+      minZ = Math.min(az, bz) - DYN_PAD,
+      maxZ = Math.max(az, bz) + DYN_PAD;
+    for (var i = 0; i < dyn.length; i++) {
+      var fp = dyn[i],
+        ox = +fp.x,
+        oz = +fp.z,
+        r = (+fp.radius || 3) + DYN_PAD;
+      if (ox + r < minX || ox - r > maxX || oz + r < minZ || oz - r > maxZ) continue;
+      return true;
+    }
+    return false;
+  }
   function geometryEpoch(sim) {
     var o = sim && sim.obstacles,
       A = root.SquadAI,
       N = root.BattleNavigation;
-    if (!o || !sim.heightAt || (o.__dynamicFootprints && o.__dynamicFootprints.length)) return null;
+    if (!o || !sim.heightAt) return null;
+    if (!DYN_ISOLATE && o.__dynamicFootprints && o.__dynamicFootprints.length) return null;
     var version = o.length + '|' + (+o.__physicalVersion || 0) + '|' + (N ? N.version : '');
     if (
       !epoch ||
@@ -117,7 +141,10 @@
       lines = sightRow(sim, at, stance);
     for (var k = 0; k < reports.length; k++) {
       var p = reports[k],
-        toX = lines ? lines.get(p.x) : null,
+        dynNear =
+          DYN_ISOLATE &&
+          dynamicsAffectSegment(sim.obstacles, at.x, at.z, p.x, p.z),
+        toX = lines && !dynNear ? lines.get(p.x) : null,
         stored = toX ? toX.get(p.z) : undefined;
       if (stored === undefined) {
         if (h === null) h = sim.heightAt(at.x, at.z);
@@ -132,7 +159,7 @@
           sim.heightAt,
           sim.obstacles
         );
-        if (lines) {
+        if (lines && !dynNear) {
           if (!toX) lines.set(p.x, (toX = new Map()));
           toX.set(p.z, stored);
           sightStore.size++;

@@ -341,8 +341,23 @@ Not blockers for the default switch. Each needs a confirmed failure before a fix
 
 **P3 — real simulation gates.** Require syntax/native owner and contract checks, determinism and no new controller faults, illegal writers, leaked hidden knowledge, stale cover/fire safety, lost physical arrivals, never-ending stalls, or newly starved replan opportunities. Exercise the exact head in the native Tactical Skills Lab before any battle benchmark. Then ask Muse for the approved GitHub paired standard benchmark on **meeting, US-defense and GE-defense, 600 s** (plus 900 s where late Macro actions matter), pinned same scenario seed and same-controller baseline, and any relevant causal/targeted fire suites. Record source/control SHAs, effective flags, observer identity, seed sets, sim step, changed outcomes and wall/CPU/heap effects. Behavior-changing controller work is **not** required to match legacy kills, score, retreats or identical trajectories (`AGENTS.md`); interpret observed gameplay changes and reject real invariant failures. Historical 1.25× legacy wall target above is an *aspiration and trend reference*, not a license to retune decisions or a fabricated acceptance pass. Choose a meaningful speed threshold from the measured baseline *before* reviewing candidate results; never claim savings without profiler and paired-gate evidence.
 
-**P4 — implementation ownership and merge boundaries.** This PR changes **documentation only**, no runtime behavior, performance numbers, flags, baseline, CI configuration or rollout. It does not authorize implementation, blanket disabling of perception, performance-based tactical retuning, test bypass, release, or merge. Future implementation is independent of active Macro/Micro, #799/#808 investigations and other acceptance work. Check the live heads and latest `AGENTS.md` each time; name actual beneficiaries and regressions; mark proposed, implemented, natural-battle validated, accepted and merged separately. Muse handoffs (including exact SHA and `needs-kit-testing`) are required only when scheduling applicable browser/benchmark testing of implementation, not for this inert documentation update.
+**P4 — implementation ownership and merge boundaries.** Section 9.1 in [#794](https://github.com/APPARANYX/bound-by-glory/pull/794) was **documentation only** at land time. Runtime work is tracked per-PR with flags, harness checks, and Muse gates (see 9.1.5).
 
+#### 9.1.5 Implementation traceability ([#817](https://github.com/APPARANYX/bound-by-glory/pull/817) / `feature/001-geometry-reduction`)
+
+Cross-walk of the §9.1 inventory and `specs/001-geometry-query-reduction` against the combined feature branch. Status is **implemented (needs Muse/benchmark)** until paired gates say otherwise.
+
+| ID / track | In #817? | Notes |
+| --- | --- | --- |
+| **US1 — per-step geometry cache** (`specs/001`) | **Yes** | `battle/geometry-step-cache.js`; `?controllerGeometryCache=0` off switch; harness `geometry-step-cache-check.js`. |
+| **D5 — route LOS / dynamic vehicles** | **Partial** | Shared per-step cache keys include dynamic footprint stamp; `13g` `geometryEpoch` no longer drops all sight-store reuse when trucks are present—cross-plan reuse only when `dynamicsAffectSegment` is false (`?controllerRouteDynIsolate=0` restores conservative behavior). Complements, does not replace, per-step memo. |
+| **D8 — Macro/policy timing** | **Partial** | `BattleAIPolicy.pinTickPolicies` per 0.15 s AI tick (client coherence with `battle_policy.php` revision reads); not a full decision-wake redesign. |
+| **D4 — cover geometry** | **No change** | Existing `?controllerCoverCache=` path unchanged; directional bins still open (P2 item 4). |
+| **D1, D2, D3, D6, D7** | **No** | Instrumentation / bounded experiments per P0–P2 remain follow-up PRs. |
+| **K1–K5** | **No** | Knowledge-isolation fixes require dedicated reproducers; geometry cache uses faction-neutral world facts only (K4-compatible intent, not validated). |
+| **Grass streaming LOD** (rendering) | **Yes** | Thin-instance path + frustum/surface culling; does not affect tactical LOS (heightfield/obstacles). |
+
+**Remaining #794 P2 order on this stack:** after US1 lab evidence — (1) tactical redecision gates, (2) squad belief snapshots, (3) acquisition broad-phase, then deeper D4/D6/D7 items.
 
 **Player and UI (not AI):** pressing P gives `Unhandled promise rejection: {}` once per press; Esc does not release possession and P cycles to another soldier.
 
