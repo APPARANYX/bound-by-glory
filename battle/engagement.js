@@ -2251,7 +2251,14 @@
   /* Explicit native contact execution for 13b. This owner never chooses a role, target or cover.
      Recognition, stance, personal fire permission, ammo and geometry remain the shipping services.
      Handles live outside soldiers; ending one clears only the proposal that task actually made. */
-  var controllerCombatTasks = new WeakMap();
+  var controllerCombatTasks = new WeakMap(),
+    /* Only an unadopted controller command has a delivery deadline. A personally adopted
+       physical bound remains event-driven, with no clock-based movement cancellation.
+       ?controllerBoundRecovery=0 retains the old indefinitely pending publication. */
+    CONTROLLER_BOUND_RECOVERY = !/[?&]controllerBoundRecovery=0(?:&|#|$)/i.test(
+      (root.location && root.location.search) || ''
+    ),
+    BOUND_DELIVERY_WAIT = 8;
   function controllerBoundRole(s, battle) {
     var Q = root.BattleSquadStability;
     return Q && Q.controllerBound && Q.controllerBound.role(s, battle);
@@ -2318,6 +2325,31 @@
         CR.executionCurrent(s, battle, 'movement', 'soldier:' + String(s.id), s._fireteamAdoptedEnvelope))
     );
   }
+  /* Command Reception, not the mover's proximity to the leader, owns deliverability.
+     Read only the envelope for THIS controller action: an older or unrelated personal
+     command must not be mistaken for its receipt. No transport re-evaluation or new
+     movement writer is introduced here. Meso may retry the same undeliverable envelope
+     before this read; a later reachable receipt is respected. */
+  function controllerBoundDeliveryFailure(s, battle, task) {
+    var CR = root.BattleCommandReception;
+    if (
+      !CONTROLLER_BOUND_RECOVERY ||
+      !CR ||
+      !CR.movementEnabled ||
+      !CR.movementEnabled() ||
+      controllerBoundAdopted(s, battle, task)
+    )
+      return null;
+    var rec = CR.peek && CR.peek(s, battle, 'movement', 'soldier:' + String(s.id)),
+      same = !!(rec && rec.data && String(rec.data.publishKey || '') === task.order.key);
+    if (same && rec.unreachable) return 'bound-command-unreachable';
+    /* Receipt, processing and orientation are legitimate delays. This deadline is
+       ONLY for adoption, and never interrupts an adopted B→C physical hop. */
+    var expected = same && Number.isFinite(rec.adoptedAt) ? rec.adoptedAt + 2 : 0;
+    if (battle.time >= Math.max(task.since + BOUND_DELIVERY_WAIT, expected))
+      return 'bound-adoption-overdue';
+    return null;
+  }
   function controllerCombatStart(s, battle, drill, reportedPoint) {
     var TC = root.BattleTacticalController;
     if (
@@ -2376,6 +2408,7 @@
     if (task.drill === 'bound') {
       if (controllerBoundRole(s, battle) !== 'move')
         return { stage: 'cancelled', reason: 'bound-window-ended', at: battle.time };
+      if (task.failed) return { stage: 'cancelled', reason: task.failed, at: task.at };
       return {
         stage: task.arrived
           ? 'arrived'
@@ -2404,9 +2437,23 @@
     e.suppressOrder = drill === 'suppress';
     if (drill === 'bound') {
       if (controllerBoundRole(s, battle) !== 'move') return;
+      if (task.failed) return;
       if (!controllerBoundAdopted(s, battle, task)) {
-        holdPosition(s, battle);
-        task.reason = 'published:await-personal-adoption';
+        var failure = controllerBoundDeliveryFailure(s, battle, task);
+        if (failure) {
+          /* The commander learns a failed personal action through its native stage.
+             Covered Maneuver then interrupts this mover, frees the claim and the Meso
+             lease role, and selects another cover hop or keeps the man fighting here.
+             The existing movement-progress owner excludes this failed destination. */
+          task.failed = task.reason = failure;
+          task.at = battle.time;
+          if (root.BattleMovementProgress && root.BattleMovementProgress.noteFailure)
+            root.BattleMovementProgress.noteFailure(s, battle, e.cover || task.point, failure);
+          holdPosition(s, battle);
+        } else {
+          holdPosition(s, battle);
+          task.reason = 'published:await-personal-adoption';
+        }
       } else {
         var reached = Math.hypot(posOf(s).x - task.point.x, posOf(s).z - task.point.z) <= 0.45;
         if (reached) {
