@@ -298,8 +298,8 @@ test('command-delivery preflight prunes disconnected movers before expensive rou
   const w = world();
   const Q = w.r.BattleSquadStability;
   const A = w.r.SquadAI;
-  const man = w.q.members.find(s =>
-    ['alpha', 'bravo', 'charlie'].includes(Q.teamKeyFor(s)) && !A.isMachineGun(s)
+  const man = w.q.members.find(
+    s => ['alpha', 'bravo', 'charlie'].includes(Q.teamKeyFor(s)) && !A.isMachineGun(s)
   );
   const CR = w.r.BattleCommandReception;
   const real = CR.canDeliverMovement;
@@ -624,14 +624,21 @@ test('a movement publication cannot execute before the mover personally adopts i
 });
 test('an unreachable personal bound is cancelled, its mover released and the squad re-decides', () => {
   const w = world();
-  until(w, () => w.M.summary(w.q)?.phase === 'moving' && live(w, 'combat.bound').some(a => a.stage === 'published'));
+  until(
+    w,
+    () => w.M.summary(w.q)?.phase === 'moving' && live(w, 'combat.bound').some(a => a.stage === 'published')
+  );
   const action = live(w, 'combat.bound').find(a => a.stage === 'published');
   const man = w.q.members.find(s => String(s.id) === action.actorId);
   const CR = w.r.BattleCommandReception;
   const realPeek = CR.peek;
   CR.peek = function (s, sim, category, scope) {
     if (s === man && category === 'movement' && scope === 'soldier:' + String(man.id))
-      return { data: { publishKey: 'controller:' + action.actionId }, unreachable: true, adoptedAt: null };
+      return {
+        data: { publishKey: 'controller:' + action.actionId },
+        unreachable: true,
+        adoptedAt: null
+      };
     return realPeek.apply(this, arguments);
   };
   w.E.updateSoldier(man, w.b);
@@ -648,9 +655,12 @@ test('an unreachable personal bound is cancelled, its mover released and the squ
   CR.peek = realPeek;
   clean(w);
 });
-test('a pending bound has an adoption deadline, but a physically adopted bound has no elapsed-time deadline', () => {
+test('an unadopted pending bound waits for planned reception, then expires if still unadopted', () => {
   const w = world();
-  until(w, () => w.M.summary(w.q)?.phase === 'moving' && live(w, 'combat.bound').some(a => a.stage === 'published'));
+  until(
+    w,
+    () => w.M.summary(w.q)?.phase === 'moving' && live(w, 'combat.bound').some(a => a.stage === 'published')
+  );
   const action = live(w, 'combat.bound').find(a => a.stage === 'published');
   const man = w.q.members.find(s => String(s.id) === action.actorId);
   const CR = w.r.BattleCommandReception;
@@ -668,8 +678,11 @@ test('a pending bound has an adoption deadline, but a physically adopted bound h
   const now = w.b.time;
   w.b.time = now + 9;
   w.E.updateSoldier(man, w.b);
-  assert.equal(live(w, 'combat.bound').find(a => a.actionId === action.actionId).stage, 'published',
-    'a future scheduled reception must not be mistaken for a missed deadline');
+  assert.equal(
+    live(w, 'combat.bound').find(a => a.actionId === action.actionId).stage,
+    'published',
+    'a future scheduled reception must not be mistaken for a missed deadline'
+  );
   adoptedAt = now + 1;
   w.E.updateSoldier(man, w.b);
   const failed = live(w, 'combat.bound').find(a => a.actionId === action.actionId);
