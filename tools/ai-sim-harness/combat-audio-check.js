@@ -22,7 +22,7 @@ function test(name, fn) {
 }
 function load(search, engine, lab) {
   const r = { PhaseCCombatLab: lab };
-  if (engine) r.BABYLON = { Engine: { audioEngine: engine } };
+  r.BattleAudioBackend = { engine: () => engine || null };
   if (search != null) r.location = { search };
   new Function('window', 'globalThis', 'location', CORE)(r, r, r.location);
   new Function('window', 'globalThis', 'location', SRC)(r, r, r.location);

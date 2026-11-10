@@ -2264,6 +2264,13 @@
      Recognition, stance, personal fire permission, ammo and geometry remain the shipping services.
      Handles live outside soldiers; ending one clears only the proposal that task actually made. */
   var controllerCombatTasks = new WeakMap();
+  /* Only an unadopted controller command has a delivery deadline. A personally adopted
+     physical bound remains event-driven, with no clock-based movement cancellation.
+     ?controllerBoundRecovery=0 retains the old indefinitely pending publication. */
+  var CONTROLLER_BOUND_RECOVERY = !/[?&]controllerBoundRecovery=0(?:&|#|$)/i.test(
+    (root.location && root.location.search) || ''
+  );
+  var BOUND_DELIVERY_WAIT = 8;
   function controllerBoundRole(s, battle) {
     var Q = root.BattleSquadStability;
     return Q && Q.controllerBound && Q.controllerBound.role(s, battle);
@@ -2330,6 +2337,31 @@
         CR.executionCurrent(s, battle, 'movement', 'soldier:' + String(s.id), s._fireteamAdoptedEnvelope))
     );
   }
+  /* The actual personal envelope owns delivery. A transient unreachable receipt is not
+     terminal: Meso may reissue that same envelope and Command Reception can retry it
+     after the leader/relay comes back into range. Only a delivery wait exceeding the
+     grace window may end a still-unheard bound. Never time out an adopted physical hop. */
+  function controllerBoundDeliveryFailure(s, battle, task) {
+    var CR = root.BattleCommandReception;
+    if (
+      !CONTROLLER_BOUND_RECOVERY ||
+      !CR ||
+      !CR.movementEnabled ||
+      !CR.movementEnabled() ||
+      controllerBoundAdopted(s, battle, task)
+    )
+      return null;
+    var rec = CR.peek && CR.peek(s, battle, 'movement', 'soldier:' + String(s.id)),
+      same = !!(rec && rec.data && String(rec.data.publishKey || '') === task.order.key);
+    if (same && rec.unreachable) {
+      return battle.time >= task.since + BOUND_DELIVERY_WAIT ? 'bound-command-unreachable' : null;
+    }
+    /* Receipt, processing and orientation are legitimate delays. This deadline is
+       ONLY for adoption, and never interrupts an adopted B→C physical hop. */
+    var expected = same && Number.isFinite(rec.adoptedAt) ? rec.adoptedAt + 2 : 0;
+    if (battle.time >= Math.max(task.since + BOUND_DELIVERY_WAIT, expected)) return 'bound-adoption-overdue';
+    return null;
+  }
   function controllerCombatStart(s, battle, drill, reportedPoint) {
     var TC = root.BattleTacticalController;
     if (
@@ -2388,6 +2420,14 @@
     if (task.drill === 'bound') {
       if (controllerBoundRole(s, battle) !== 'move')
         return { stage: 'cancelled', reason: 'bound-window-ended', at: battle.time };
+      if (task.failed) {
+        /* Recheck the live receipt before reporting a terminal stage: the same
+           command may have become reachable between soldier and commander ticks. */
+        var outstanding = controllerBoundDeliveryFailure(s, battle, task);
+        if (outstanding) return { stage: 'cancelled', reason: outstanding, at: task.at };
+        task.failed = null;
+        task.reason = 'published:await-personal-adoption';
+      }
       return {
         stage: task.arrived
           ? 'arrived'
@@ -2412,15 +2452,37 @@
       task.at = battle.time;
       return;
     }
-    var drill = fireControlPreparing(s, battle) ? 'prepare' : task.drill,
+    /* A bound already authorized by the controller must finish or report a failure;
+       a fresh HOLD/PRECISION preparation cannot hide its delivery state. */
+    var drill = task.drill,
       before = s._movementResolver && s._movementResolver.combat;
+    if (drill !== 'bound' && fireControlPreparing(s, battle)) drill = 'prepare';
     e.suppressOrder = drill === 'suppress';
     if (drill === 'bound') {
       if (controllerBoundRole(s, battle) !== 'move') return;
+      if (task.failed) {
+        if (controllerBoundDeliveryFailure(s, battle, task)) {
+          /* Keep the native hold live until the commander acknowledges the
+             cancelled stage or the owner releases the action. */
+          holdPosition(s, battle);
+          return;
+        }
+        task.failed = null;
+      }
       if (!controllerBoundAdopted(s, battle, task)) {
-        holdPosition(s, battle);
-        task.reason = 'published:await-personal-adoption';
-        traceFireDecision(s, battle, 'bound-await-adoption', task.order.key);
+        var failure = controllerBoundDeliveryFailure(s, battle, task);
+        if (failure) {
+          /* Command loss is not impassable terrain. Report failure through the
+             native stage; Covered Maneuver releases just this personal action.
+             Do not poison the navigation owner's failed-cover memory. */
+          task.failed = task.reason = failure;
+          task.at = battle.time;
+          holdPosition(s, battle);
+        } else {
+          holdPosition(s, battle);
+          task.reason = 'published:await-personal-adoption';
+          traceFireDecision(s, battle, 'bound-await-adoption', task.order.key);
+        }
       } else {
         var reached = Math.hypot(posOf(s).x - task.point.x, posOf(s).z - task.point.z) <= 0.45;
         if (reached) {

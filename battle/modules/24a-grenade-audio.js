@@ -84,7 +84,7 @@
       pools[kind] = files(kind).map(function (f, i) {
         return {
           endsAt: 0,
-          sound: new (root.BattleAudioBackend ? root.BattleAudioBackend.Sound : BABYLON.Sound)(
+          sound: new root.BattleAudioBackend.Sound(
             'grenade-' + kind + i,
             root.BattleAudioFormat ? root.BattleAudioFormat.url(base + f) : base + f,
             scene,
@@ -140,9 +140,7 @@
     function sound(c) {
       var pool = pools[c.kind];
       if (!pool || !pool.length) return;
-      var ae = root.BattleAudioBackend
-          ? root.BattleAudioBackend.engine()
-          : root.BABYLON && root.BABYLON.Engine && root.BABYLON.Engine.audioEngine,
+      var ae = root.BattleAudioBackend.engine(),
         ctx = ae && ae.audioContext;
       if (
         (scene && scene.audioEnabled === false) ||

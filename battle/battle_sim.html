@@ -150,8 +150,9 @@ window.BattleLoading=(function(){
   }catch(_){} }
   console.log('[SCENARIO] live seed='+liveSeed+' id='+scenario.id+' fingerprint='+JSON.stringify(scenario.fingerprint.vector));
 
-  if(window.BattleAudioBackend)await BattleAudioBackend.ready;
-  var canvas=document.getElementById('renderCanvas'),engine=new BABYLON.Engine(canvas,true,{stencil:false,preserveDrawingBuffer:true,audioEngine:!(window.BattleAudioBackend&&BattleAudioBackend.independent)});engine.renderEvenInBackground=true;console.log('legacyAudioEngine='+(window.BattleAudioBackend&&BattleAudioBackend.independent?'disabled for Howler':BABYLON.Engine.audioEngine?'present':'missing')+' · background rendering enabled');
+  if(!window.BattleAudioBackend)throw Error('Howler audio backend missing');
+  await BattleAudioBackend.ready;
+  var canvas=document.getElementById('renderCanvas'),engine=new BABYLON.Engine(canvas,true,{stencil:false,preserveDrawingBuffer:true,audioEngine:false});engine.renderEvenInBackground=true;console.log('audioBackend='+BattleAudioBackend.name+' · Babylon audio disabled · background rendering enabled');
   var scene=new BABYLON.Scene(engine);scene.skipPointerMovePicking=true;scene.clearColor=new BABYLON.Color4(.55,.62,.68,1);scene.fogMode=BABYLON.Scene.FOGMODE_LINEAR;scene.fogColor=new BABYLON.Color3(.72,.62,.52);scene.fogStart=scenario.profile==='strategic'?2100:850;scene.fogEnd=scenario.profile==='strategic'?8000:2250;
   var target=new BABYLON.Vector3(scenario.center.x,4,scenario.center.z),camera=new BABYLON.ArcRotateCamera('cam',-Math.PI/2,1.02,720,target,scene);camera.lowerRadiusLimit=90;camera.upperRadiusLimit=scenario.profile==='strategic'?5400:1850;camera.radius=scenario.profile==='strategic'?3200:720;camera.maxZ=scenario.profile==='strategic'?9500:2600;camera.lowerBetaLimit=.28;camera.upperBetaLimit=1.5;camera.wheelPrecision=3;camera.panningSensibility=120;camera.attachControl(canvas,true);
 
@@ -256,10 +257,10 @@ window.BattleLoading=(function(){
   })();
   var startBtn=document.getElementById('startBtn');
   async function unlockAudio(){
-    var ae=window.BattleAudioBackend?BattleAudioBackend.engine():BABYLON.Engine.audioEngine;
-    if(!ae){console.error('[AUDIO] Babylon engine missing');return false;}
+    var ae=BattleAudioBackend.engine();
+    if(!ae){console.error('[AUDIO] Howler engine missing');return false;}
     try{
-      // Babylon 9 unlock() returns void. Start native resume inside the gesture,
+      // Start native context resume inside the gesture,
       // then verify the real context before allowing either Start or Skills Play.
       var ctx=ae.audioContext;
       if(!ctx){console.error('[AUDIO] Audio context missing');return false;}
@@ -305,7 +306,7 @@ window.BattleLoading=(function(){
   };
   function enableLiveAudioMeter(){
     if(new URLSearchParams(location.search).get('audioDiag')!=='1'||liveAudioMeter)return;
-    var ae=(window.BattleAudioBackend?BattleAudioBackend.engine():BABYLON.Engine.audioEngine),ctx=ae&&ae.audioContext,master=ae&&ae.masterGain;
+    var ae=BattleAudioBackend.engine(),ctx=ae&&ae.audioContext,master=ae&&ae.masterGain;
     if(!ctx||!master||!ctx.createAnalyser)return;
     try{
       liveAudioMeter=ctx.createAnalyser();liveAudioMeter.fftSize=2048;
@@ -384,7 +385,7 @@ window.BattleLoading=(function(){
     }catch(err){console.error('[AUDIO] passive output analyser failed',err);}
   }
   window.__battleAudioDiagnostics__=function(){
-    var ae=(window.BattleAudioBackend?BattleAudioBackend.engine():BABYLON.Engine.audioEngine),wa=battle._weaponAudio;
+    var ae=BattleAudioBackend.engine(),wa=battle._weaponAudio;
     return {context:ae&&ae.audioContext&&ae.audioContext.state,
       unlocked:ae&&ae.unlocked,masterGain:ae&&ae.masterGain&&ae.masterGain.gain.value,
       mix:window.BattleAudioMix&&BattleAudioMix.get(),

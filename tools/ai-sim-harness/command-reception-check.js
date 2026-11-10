@@ -333,6 +333,28 @@ test('a returning soldier with an old envelope is enrolled into the new unchange
   assert.equal(unchanged.issuedAt, stable.issuedAt);
 });
 
+test('controller movement reachability preflight uses native voice/visual/relay without publishing', () => {
+  const w = world('?commandReception=1&commandMovement=1&commandRelay=1');
+  const man = w.us.members[5];
+  const initial = { x: man.root.position.x, z: man.root.position.z };
+  assert.equal(w.C.canDeliverMovement(w.us, w.b, man), true, 'formation link is initially available');
+  man.root.position.x += 180;
+  const priorState = w.b._commandReception;
+  assert.equal(w.C.canDeliverMovement(w.us, w.b, man), false, 'no direct voice/visual/relay path');
+  assert.equal(w.b._commandReception, priorState, 'preflight does not publish an envelope');
+  man.root.position.x = initial.x;
+  man.root.position.z = initial.z;
+  assert.equal(w.C.canDeliverMovement(w.us, w.b, man), true, 'link recovers with topology');
+  const legacy = world('?commandReception=1&commandMovement=1&commandRelay=0');
+  const other = legacy.us.members[5];
+  other.root.position.x += 180;
+  assert.equal(
+    legacy.C.canDeliverMovement(legacy.us, legacy.b, other),
+    true,
+    'legacy timing mode retains its documented distance-unbounded behavior'
+  );
+});
+
 test('squad diagnostics are safe before publication and after restart without creating state', () => {
   const w = world();
   delete w.b._commandReception;

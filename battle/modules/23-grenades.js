@@ -16,9 +16,13 @@
     var m = /[?&]grenades=([^&#]*)/.exec(search || '');
     return !m || m[1] === '1';
   }
-  var ON = parseOn(typeof location !== 'undefined' ? location.search : '');
+  var ON = parseOn(typeof location !== 'undefined' ? location.search : ''),
+    AREA_TARGET = !/[?&]controllerGrenadeArea=0(?:&|#|$)/.test(
+      typeof location !== 'undefined' ? location.search : ''
+    );
   var TUNING = Object.freeze({
     RANGE: 35, // Longer reach preserves the 26m fragmentation-clearance gate.
+    TARGET_EFFECTIVE_RADIUS: 5, // Meaningful fragment-exposure reference, not the 22m outer cutoff.
     CONF_MIN: 0.5,
     CONTACT_FRESH: 6,
     DECISION_EVERY: 1.5,
@@ -386,7 +390,33 @@
     if (!c || (+c.confidence || 0) < TUNING.CONF_MIN || battle.time - (+c.at || 0) > TUNING.CONTACT_FRESH)
       return null;
     var aim = { x: +c.x, z: +c.z };
-    return isFinite(aim.x) && isFinite(aim.z) && dist(s.root.position, aim) <= TUNING.RANGE ? aim : null;
+    if (!isFinite(aim.x) || !isFinite(aim.z)) return null;
+    var p = s.root.position,
+      d = dist(p, aim);
+    if (d <= TUNING.RANGE) return aim;
+    var TC = root.BattleTacticalController;
+    if (
+      !AREA_TARGET ||
+      !TC ||
+      !TC.controls(battle, s.squad) ||
+      d > TUNING.RANGE + TUNING.TARGET_EFFECTIVE_RADIUS
+    )
+      return null;
+    /* Aim short of the personally reported contact, not beyond physical throw reach.
+       Damage still needs a clear fragment line; never use an enemy's live position. */
+    var landing = {
+      x: p.x + ((aim.x - p.x) * TUNING.RANGE) / d,
+      z: p.z + ((aim.z - p.z) * TUNING.RANGE) / d
+    };
+    if (
+      lineBlocked(
+        battle,
+        { x: landing.x, y: battle.heightAt(landing.x, landing.z) + TUNING.REST_Y + TUNING.BURST_Y },
+        { x: aim.x, y: battle.heightAt(aim.x, aim.z) + TUNING.VICTIM_Y, z: aim.z }
+      )
+    )
+      return null;
+    return landing;
   }
   /* The old 13m exclusion was smaller than the 22m fragmentation field.
      For AI throws, inspect the whole potential 3.5m scatter disk, including the

@@ -36,7 +36,12 @@
     ),
     states = new WeakMap(),
     teams = ['alpha', 'bravo', 'charlie'],
-    MAX_PARALLEL_MOVERS = 3;
+    MAX_PARALLEL_MOVERS = 3,
+    /* The read-only command-link preflight is paired with Engagement's delivery
+       recovery. One off flag restores the old publish-and-wait behavior. */
+    BOUND_RECOVERY = !/[?&]controllerBoundRecovery=0(?:&|#|$)/i.test(
+      typeof location !== 'undefined' ? location.search || '' : ''
+    );
   function men(sq) {
     return (sq.members || []).filter(function (s) {
       return s && !s.dead && !s.isPlayer;
@@ -211,6 +216,10 @@
       !(root.BattleGrenades && root.BattleGrenades.pendingOf(s, sim))
     );
   }
+  function commandReachable(ctx, s) {
+    var CR = root.BattleCommandReception;
+    return !BOUND_RECOVERY || !CR || !CR.canDeliverMovement || CR.canDeliverMovement(ctx.squad, ctx.sim, s);
+  }
   /* The flank and assault skill (13i) reuses this skill with a lateral axis: while it runs, it names the goal
      to hop toward and the one fireteam that moves; the rest of the squad is the base of fire. */
   function flank(sq) {
@@ -314,7 +323,7 @@
       return null;
     }
     var options = ready.filter(function (s) {
-      return s === leader || A.isMachineGun(s);
+      return (s === leader || A.isMachineGun(s)) && commandReachable(ctx, s);
     });
     if (!options.length) relocation.reason = 'no-ready-leader-or-machinegun';
     options.sort(function (a, b) {
@@ -510,6 +519,29 @@
       /* The Meso covered-window owner accepts alpha/bravo/charlie, not the
          command element. Never choose a route it cannot lease. */
       if (teams.indexOf(team) < 0) return;
+      /* Transport can refuse a bound before it is even published. Prune only
+         prospective movers, not disconnected riflemen's physical supporting fire.
+         Command Reception checks current reachability again on publication. */
+      if (!commandReachable(ctx, s)) {
+        audit.teams.push({
+          team: team,
+          moverId: String(s.id),
+          eligibleMovers: 1,
+          eligibleSupporters: ready.length - 1,
+          candidates: 0,
+          directionalCandidates: 0,
+          admittedRoutes: 0,
+          prunedEdges: 0,
+          graphNodes: 0,
+          routeLength: 0,
+          terminal: 'none',
+          reused: false,
+          moverFailures: [],
+          routeRejections: {},
+          result: 'command-link-unreachable'
+        });
+        return;
+      }
       /* A flank drafts only its own team: every other man stays the base of fire. */
       if (lateral && team !== lateral.team) return;
       /* An irreplaceable covering shooter cannot be selected for a bound,
@@ -794,7 +826,15 @@
           var actionId = st.actions.get(id),
             personal = actionId && ctx.stage(actionId);
           if (!personal || personal.stage === 'cancelled') {
-            interruptMan(ctx, st, p, 'native-personal-order-ended');
+            /* Preserve Command Reception's exact delivery/overdue failure instead
+               of hiding it behind a generic owner-ended label. interruptMan frees
+               only this mover; other physical bounds and supporters continue. */
+            interruptMan(
+              ctx,
+              st,
+              p,
+              personal && personal.reason ? personal.reason : 'native-personal-order-ended'
+            );
             return;
           }
           if (personal.stage === 'arrived') {

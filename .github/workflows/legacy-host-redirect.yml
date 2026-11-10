@@ -1,0 +1,92 @@
+name: Restore historical grasstex URL alias
+
+# Isolated from the protected production runtime deploy. Only runs after this
+# workflow/redirect changes or on explicit manual dispatch.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/legacy-host-redirect.yml'
+      - 'scripts/legacy-root-redirect.htaccess'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: legacy-grasstex-host-alias
+  cancel-in-progress: false
+
+jobs:
+  install:
+    name: Install redirect only if the legacy folder is absent
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install FTP client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lftp
+
+      - name: Create non-destructive compatibility stub
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${FTP_HOST:?Missing FTP_HOST}"
+          : "${FTP_USER:?Missing FTP_USER}"
+          : "${FTP_PASSWORD:?Missing FTP_PASS}"
+
+          # Do not touch a legacy directory if anyone has repopulated it.
+          # A previous deploy's 'cd grasstex' returned 550 after the rename.
+          if lftp -u "$FTP_USER","$FTP_PASSWORD" "$FTP_HOST" >/dev/null 2>&1 <<LFTP
+          set cmd:fail-exit yes
+          set net:max-retries 2
+          set net:timeout 15
+          set ftp:ssl-allow no
+          set ftp:passive-mode true
+          cd grasstex
+          bye
+          LFTP
+          then
+            echo "::notice::grasstex/ exists; leaving it untouched, checking its public redirect"
+          else
+            echo "Old root absent; creating only a redirect stub (no files deleted or mirrored)"
+            lftp -u "$FTP_USER","$FTP_PASSWORD" "$FTP_HOST" <<LFTP
+          set cmd:fail-exit yes
+          set net:max-retries 2
+          set net:timeout 15
+          set ftp:ssl-allow no
+          set ftp:passive-mode true
+          cd bound-by-glory
+          cd ..
+          mkdir -f -p grasstex
+          cd grasstex
+          put "$GITHUB_WORKSPACE/scripts/legacy-root-redirect.htaccess" -o .htaccess
+          bye
+          LFTP
+          fi
+
+      - name: Verify old GET and audio URLs redirect
+        shell: bash
+        run: |
+          set -euo pipefail
+          for route in battle_sim.php Assets/audio/manifest.json; do
+            url="https://test.ivandpopov.com/grasstex/$route"
+            headers="$(curl --silent --show-error --max-redirs 0 --head "$url")"
+            if ! grep -Eiq '^HTTP/[0-9.]+ 307([[:space:]]|$)' <<< "$headers"; then
+              echo "::error::Old URL is not a method-preserving 307 redirect: $url"
+              printf '%s\n' "$headers" | head -15
+              exit 1
+            fi
+            if ! grep -Eiq "^location: (https?://[^/]+)?/bound-by-glory/$route([?\r]|$)" <<< "$headers"; then
+              echo "::error::Old URL did not point to the matching new path: $url"
+              printf '%s\n' "$headers" | head -15
+              exit 1
+            fi
+            echo "Verified compatibility redirect: $route"
+          done

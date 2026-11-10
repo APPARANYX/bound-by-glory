@@ -930,3 +930,54 @@ test('restart discards old commitments and projectiles, restores loadout and rep
 });
 
 console.log(checks + ' grenade checks passed');
+
+test('controller area targeting lands inside throw range near a fresh known enemy', () => {
+  for (const distance of [35.5, 36.5, 40]) {
+    const ctx = setup();
+    const { G, r, b, s } = ctx;
+    r.BattleTacticalController = { controls: () => true };
+    const enemy = victim(ctx, distance, 0);
+    r.SquadAI.rememberSeen(s, enemy, b, true, 'nearby-burst');
+    const draws = ctx.ownDraws.count;
+    const aim = G.assaultOpportunity(s, b);
+    assert.ok(aim, 'reported target within the useful blast neighborhood');
+    assert.ok(Math.hypot(aim.x, aim.z) <= G.TUNING.RANGE + 1e-9);
+    assert.ok(Math.hypot(aim.x - distance, aim.z) <= G.TUNING.TARGET_EFFECTIVE_RADIUS + 1e-9);
+    assert.equal(ctx.ownDraws.count, draws, 'planning consumes no RNG');
+    const friend = man(ctx, 'us', 35, 0);
+    assert.equal(G.assaultOpportunity(s, b), null, 'safety uses actual intended landing');
+    friend.dead = true;
+    b.time += G.TUNING.CONTACT_FRESH + 1;
+    assert.equal(G.assaultOpportunity(s, b), null, 'stale target still rejected');
+  }
+  for (const search of ['?controllerGrenadeArea=0', '?grenades=1']) {
+    const ctx = setup({ search });
+    const { G, r, b, s } = ctx;
+    r.BattleTacticalController = { controls: () => search.includes('Area') };
+    const enemy = victim(ctx, 36.5, 0);
+    r.SquadAI.rememberSeen(s, enemy, b, true, 'retained-range');
+    assert.equal(G.assaultOpportunity(s, b), null, 'off flag and legacy retain direct range');
+  }
+  const ctx = setup();
+  ctx.r.BattleTacticalController = { controls: () => true };
+  const enemy = victim(ctx, 40.01, 0);
+  ctx.r.SquadAI.rememberSeen(ctx.s, enemy, ctx.b, true, 'out-of-effective-range');
+  assert.equal(ctx.G.assaultOpportunity(ctx.s, ctx.b), null);
+});
+
+test('nearby-burst targeting respects fragment occlusion and commits a real short aim', () => {
+  const ctx = setup();
+  const { G, r, b, s } = ctx;
+  r.BattleTacticalController = { controls: () => true };
+  const enemy = victim(ctx, 36.5, 0);
+  r.SquadAI.rememberSeen(s, enemy, b, true, 'known-nearby-target');
+  const original = r.BattleBallistics.environmentLineBlocked;
+  r.BattleBallistics.environmentLineBlocked = () => true;
+  assert.equal(G.assaultOpportunity(s, b), null, 'opaque cover cannot be treated as useful blast reach');
+  r.BattleBallistics.environmentLineBlocked = original;
+  const plan = G.assaultThrow(s, b);
+  assert.ok(plan);
+  assert.deepEqual(plan.aim, { x: 35, z: 0 });
+  at(ctx, plan.releaseAt);
+  assert.equal(G.projectiles(b).length, 1, 'native owner actually releases the short-aim throw');
+});

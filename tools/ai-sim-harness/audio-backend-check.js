@@ -126,11 +126,11 @@ function fixture(enabled, spatial, extraSearch) {
     };
   }
   const root = {
-    console: { error() {} },
+    console: { error() {}, warn() {} },
     location: {
       search: enabled
         ? '?audioBackend=howler' + (spatial ? '&audioSpatial=' + spatial : '') + (extraSearch || '')
-        : ''
+        : extraSearch || ''
     },
     BABYLON: { Sound: BabylonSound, Engine: { audioEngine: { name: 'babylon-engine' } } },
     Howl,
@@ -171,9 +171,13 @@ function fixture(enabled, spatial, extraSearch) {
 }
 (async () => {
   const off = fixture(false);
-  assert.equal(off.backend.Sound, off.root.BABYLON.Sound);
-  assert.equal(off.backend.engine().name, 'babylon-engine');
-  assert.equal(off.howls.length, 0, 'default backend does not create Howls');
+  assert.equal(off.backend.name, 'howler', 'unflagged production uses Howler');
+  assert.notEqual(off.backend.Sound, off.root.BABYLON.Sound, 'Babylon playback is unavailable');
+  assert.equal(off.backend.engine().audioContext, off.ctx);
+  assert.equal(off.howls.length, 0, 'Howler loads clips only on demand');
+  const removed = fixture(false, null, '?audioBackend=babylon');
+  assert.equal(removed.backend.name, 'howler', 'old Babylon flag cannot activate Babylon');
+  assert.notEqual(removed.backend.Sound, removed.root.BABYLON.Sound);
   const r = fixture(true),
     B = r.backend;
   await B.ready;

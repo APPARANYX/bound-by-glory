@@ -116,29 +116,33 @@ const BASE = process.env.AUDIO_MENU_PREVIEW_URL ||
     assert.equal(await page.locator('#battlePlayerSettings').evaluate(el => el.style.display), 'none', 'B closes settings');
 
     const output = await page.evaluate(async () => {
-      const ae = BABYLON.Engine.audioEngine, ctx = ae?.audioContext;
-      if (!ctx) return { audioContext: false };
-      if (ctx.state === 'suspended') await ctx.resume();
-      const buffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-      const s = new BABYLON.Sound('audio-mix-test', buffer, __battle__.scene, null, {
-        volume: 0.1, autoplay: false, spatialSound: true
-      });
-      s.setPosition(__battle__.scene.activeCamera.position);
-      s.play();
-      BattleAudioMix.ensureLimiter(__battle__.scene);
-      const t0 = performance.now();
-      while (BattleAudioMix.stats.routed === 0 && performance.now() - t0 < 8000) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+      const backend = window.BattleAudioBackend, ae = backend.engine(), ctx = ae.audioContext;
+      if (ctx.state !== 'running') await ctx.resume();
+      const oscillator = ctx.createOscillator(), gain = ctx.createGain(), meter = ctx.createAnalyser();
+      gain.gain.value = 0.04;
+      oscillator.connect(gain); gain.connect(ae.masterGain); ae.masterGain.connect(meter);
+      oscillator.start();
+      let peak = 0;
+      const data = new Float32Array(meter.fftSize);
+      for (let i = 0; i < 10; i++) {
+        await new Promise(resolve => setTimeout(resolve, 40));
+        meter.getFloatTimeDomainData(data);
+        for (const value of data) peak = Math.max(peak, Math.abs(value));
       }
-      s.stop(); s.dispose();
-      return { audioContext: true, routed: BattleAudioMix.stats.routed,
-        unavailable: BattleAudioMix.stats.unavailable };
+      oscillator.stop(); oscillator.disconnect(); gain.disconnect(); ae.masterGain.disconnect(meter); meter.disconnect();
+      return { backend: backend.name, audioContext: ctx.state,
+        nativeContext: ctx === window.Howler.ctx, babylonAudio: !!BABYLON.Engine.audioEngine,
+        routed: BattleAudioMix.stats.routed, peak };
     });
     console.log('Menu and output graph:', JSON.stringify({ tab, values, output }));
-    assert.equal(output.audioContext, true, 'Babylon AudioV2 context present');
-    assert.equal(output.routed, 1, 'one output compressor added to main SoundTrack');
+    assert.equal(output.backend, 'howler');
+    assert.equal(output.audioContext, 'running');
+    assert.equal(output.nativeContext, true);
+    assert.equal(output.babylonAudio, false, 'Babylon audio stays disabled');
+    assert.equal(output.routed, 0, 'no retired SoundTrack compressor');
+    assert.ok(output.peak > 0.001, 'synthetic signal reaches the Howler master graph');
     assert.deepEqual(errors, [], 'no browser JS errors');
-    console.log('PASS: Start menu LB/RB, D-pad, persistence, gain and output compressor');
+    console.log('PASS: Start menu LB/RB, D-pad, persistence, gain and Howler output graph');
   } finally {
     await browser.close();
   }
