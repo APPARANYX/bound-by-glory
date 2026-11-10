@@ -2251,14 +2251,14 @@
   /* Explicit native contact execution for 13b. This owner never chooses a role, target or cover.
      Recognition, stance, personal fire permission, ammo and geometry remain the shipping services.
      Handles live outside soldiers; ending one clears only the proposal that task actually made. */
-  var controllerCombatTasks = new WeakMap(),
-    /* Only an unadopted controller command has a delivery deadline. A personally adopted
-       physical bound remains event-driven, with no clock-based movement cancellation.
-       ?controllerBoundRecovery=0 retains the old indefinitely pending publication. */
-    CONTROLLER_BOUND_RECOVERY = !/[?&]controllerBoundRecovery=0(?:&|#|$)/i.test(
-      (root.location && root.location.search) || ''
-    ),
-    BOUND_DELIVERY_WAIT = 8;
+  var controllerCombatTasks = new WeakMap();
+  /* Only an unadopted controller command has a delivery deadline. A personally adopted
+     physical bound remains event-driven, with no clock-based movement cancellation.
+     ?controllerBoundRecovery=0 retains the old indefinitely pending publication. */
+  var CONTROLLER_BOUND_RECOVERY = !/[?&]controllerBoundRecovery=0(?:&|#|$)/i.test(
+    (root.location && root.location.search) || ''
+  );
+  var BOUND_DELIVERY_WAIT = 8;
   function controllerBoundRole(s, battle) {
     var Q = root.BattleSquadStability;
     return Q && Q.controllerBound && Q.controllerBound.role(s, battle);
