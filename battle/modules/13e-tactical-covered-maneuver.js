@@ -794,7 +794,15 @@
           var actionId = st.actions.get(id),
             personal = actionId && ctx.stage(actionId);
           if (!personal || personal.stage === 'cancelled') {
-            interruptMan(ctx, st, p, 'native-personal-order-ended');
+            /* Preserve Command Reception's exact delivery/overdue failure instead
+               of hiding it behind a generic owner-ended label. interruptMan frees
+               only this mover; other physical bounds and supporters continue. */
+            interruptMan(
+              ctx,
+              st,
+              p,
+              personal && personal.reason ? personal.reason : 'native-personal-order-ended'
+            );
             return;
           }
           if (personal.stage === 'arrived') {
