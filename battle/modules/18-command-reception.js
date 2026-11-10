@@ -325,6 +325,24 @@
     direct.relayId = null;
     return direct;
   }
+  /* Pure delivery preflight for a new controller's planned personal bound. Use the
+     exact point-command sender, voice/visual and relay rules that publish uses,
+     without publishing an envelope or advancing a soldier's adoption lifecycle.
+     This only prunes a presently undeliverable candidate; the real publication
+     remains authoritative and may still fail if the link changes afterward. */
+  function canDeliverMovement(sq, battle, soldier) {
+    if (!ON || !MOVEMENT_ON) return true;
+    if (!sq || !battle || !soldier || soldier.dead || soldier.isPlayer || soldier.squad !== sq) return false;
+    var sender = senderFor(sq, {}),
+      probe = {
+        id: 'controller-bound-route-preflight',
+        reference: 'point',
+        relayPolicy: 'auto',
+        issuedAt: +battle.time || 0
+      };
+    if (!RELAY_ON) return !!legacyTiming(probe, soldier, sender, battle);
+    return !!routedTiming(probe, soldier, sender, battle, sq);
+  }
   function planRecipient(st, envelope, soldier, sender, battle, sq) {
     var id = String(soldier.id),
       timing = RELAY_ON
@@ -698,6 +716,7 @@
     movementEnabled: function () {
       return MOVEMENT_ON;
     },
+    canDeliverMovement: canDeliverMovement,
     relayEnabled: function () {
       return RELAY_ON;
     },

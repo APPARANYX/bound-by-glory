@@ -9,6 +9,24 @@ const { chromium } = require('playwright');
 const BASE = process.env.SKILLS_LAB_URL || 'http://127.0.0.1:8765/grasstex/battle_sim_local.php';
 const SIM_SECONDS = Number(process.env.SKILLS_DRILL_SECONDS || 75);
 const SEED = process.env.SKILLS_DRILL_SEED || 'skills-drills-20261026-0001';
+/* Optional causal comparisons. Never allow these inputs to replace the fixed lab
+   scenario, seed, controller, physical duration or preflight acceptance settings.
+   For example: SKILLS_DRILL_EXTRA_FLAGS='controllerReleaseFinal=0&controllerRegroup=0'.
+   Existing CI defaults are unchanged; Muse owns manual browser replays. */
+const EXTRA_FLAGS = new URLSearchParams(process.env.SKILLS_DRILL_EXTRA_FLAGS || '');
+const OPTIONAL_FLAGS = new Set([
+  'controllerReleaseFinal',
+  'controllerRegroup',
+  'controllerDefensivePosts',
+  'controllerRecon',
+  'controllerStructureClearing',
+  'controllerRetreatSkill',
+  'controllerBoundRecovery'
+]);
+for (const [name, value] of EXTRA_FLAGS) {
+  if (!OPTIONAL_FLAGS.has(name) || (value !== '0' && value !== '1'))
+    throw new Error('Unsupported SKILLS_DRILL_EXTRA_FLAGS entry: ' + name + '=' + value);
+}
 const CASES = [
   { distance: 35, arm: 'legacy', retreat: false },
   { distance: 35, arm: 'new', retreat: false },
@@ -134,10 +152,7 @@ function summarizeSamples(samples) {
     /* Matched window lifecycles: no rolling history/person arrivals/failures mix. */
     startedCoveredWindows: last.maneuvers.reduce((n, z) => n + (z.windowsStarted || 0), 0),
     completedCoveredWindows: last.maneuvers.reduce((n, z) => n + (z.windowsCompleted || 0), 0),
-    partiallyCompletedCoveredWindows: last.maneuvers.reduce(
-      (n, z) => n + (z.windowsPartiallyCompleted || 0),
-      0
-    ),
+    partiallyCompletedCoveredWindows: last.maneuvers.reduce((n, z) => n + (z.windowsPartiallyCompleted || 0), 0),
     abortedCoveredWindows: last.maneuvers.reduce((n, z) => n + (z.windowsAborted || 0), 0),
     acceptedPersonalOrders: last.maneuvers.reduce((n, z) => n + (z.personalOrdersAccepted || 0), 0),
     rejectedPersonalOrders: last.maneuvers.reduce((n, z) => n + (z.personalOrdersRejected || 0), 0),
@@ -192,6 +207,11 @@ function summarizeSamples(samples) {
         labMove: c.arm === 'new' && c.cover === 'mixed' ? 'autonomous' : 'baseline',
         stressAct: c.arm === 'new' && c.cover === 'mixed' ? '0' : 'all'
       });
+      for (const [name, value] of EXTRA_FLAGS) params.set(name, value);
+      console.log('SKILLS_DRILL_INPUTS', JSON.stringify({
+        seed: SEED, arm: c.arm, distance: c.distance, cover: c.cover || 'staggered',
+        seconds: SIM_SECONDS, extraFlags: EXTRA_FLAGS.toString()
+      }));
       await page.goto(BASE + '?' + params, { waitUntil: 'domcontentloaded', timeout: 120000 });
       await page.waitForFunction(() => window.BattleSkillsLab?.snapshot()?.targetCount === 10, null, {
         timeout: 120000
@@ -283,7 +303,9 @@ function summarizeSamples(samples) {
       assert.equal(captured[captured.length - 1].lab.paused, true, 'time cap pauses without victory');
       const gaitData = captured[captured.length - 1].lab.gaitTelemetry;
       if (c.arm === 'new') {
-        const diagnosticSquads = captured[captured.length - 1].lab.squads.filter(s => s.id.startsWith('us:'));
+        const diagnosticSquads = captured[captured.length - 1].lab.squads.filter(s =>
+          s.id.startsWith('us:')
+        );
         assert.ok(
           diagnosticSquads.some(s => s.grenadeDiagnostic && s.grenadeDiagnostic.reasons),
           'active native contact owner exports grenade refusal reasons'
@@ -295,10 +317,7 @@ function summarizeSamples(samples) {
       }
       assert.ok(Object.keys(gaitData.byGait).length > 0, 'native simulation captured physical gait');
       if (c.arm === 'new' && summary.totalPhysicalArrivals > 0) {
-        assert.ok(
-          Object.keys(gaitData.coveredBounds).length > 0,
-          'arriving native bounds have measured gait'
-        );
+        assert.ok(Object.keys(gaitData.coveredBounds).length > 0, 'arriving native bounds have measured gait');
         assert.ok(
           Object.values(gaitData.coveredBounds).every(g => g.distanceM > 0 && g.averageActualMps > 0),
           'covered gait summary includes actual physical displacement and speed'

@@ -188,9 +188,29 @@ const { requestPreview } = require('./preview_request.cjs');
       q.commandPhase = 'retreat';
       TC.dispatch(b, q, 'fireAndMovement', { underFire: 1 });
       TC.dispatch(b, q, 'squadCommand');
+      /* S1b-f ports the native retreat movement skill to controller-issued personal
+         orders. Contact/fire actions must end, but new movement.move retreat orders
+         are required and must remain owned by the single Meso publisher. */
       const after = TC.summary(b),
-        retreatActions = (after.live || []).filter(a => a.squad === q.id).length;
-      const screen = { shots, lane, samples, before, owned, retreatActions, fireAfterRetreat: q.fireControl };
+        retreatLive = (after.live || []).filter(a => a.squad === q.id),
+        retreatContacts = retreatLive.filter(
+          a => a.capability === 'combat.contact' || a.capability === 'fire.control'
+        ),
+        retreatMoves = retreatLive.filter(a => a.capability === 'movement.move'),
+        retreatEligible = q.members.filter(s => !s.dead && !s.isPlayer).length;
+      const screen = {
+        shots,
+        lane,
+        samples,
+        before,
+        owned,
+        retreatActions: retreatLive.length,
+        retreatContacts,
+        retreatMoves,
+        retreatEligible,
+        retreatKind: BattleSquadStability.controllerSkills.kind(q, b),
+        fireAfterRetreat: q.fireControl
+      };
       b.restart();
       b.pause();
       screen.restart = TC.summary(b);
@@ -200,7 +220,23 @@ const { requestPreview } = require('./preview_request.cjs');
     assert.ok(evidence.fixture.samples.some(s => s.fire === 'open'));
     assert.ok(evidence.fixture.shots > 0, 'real owner discharge');
     assert.equal(evidence.fixture.before.stats.faults, 0);
-    assert.equal(evidence.fixture.retreatActions, 0);
+    assert.equal(evidence.fixture.retreatContacts.length, 0, 'retreat ends all personal contact/fire actions');
+    assert.equal(evidence.fixture.retreatKind, 'retreat', 'native squad retreat skill is selected');
+    assert.equal(
+      evidence.fixture.retreatMoves.length,
+      evidence.fixture.retreatEligible,
+      'native retreat publishes one personal movement order per eligible soldier'
+    );
+    assert.equal(
+      new Set(evidence.fixture.retreatMoves.map(a => a.actorId)).size,
+      evidence.fixture.retreatEligible,
+      'retreat orders must have distinct actors'
+    );
+    assert.equal(
+      evidence.fixture.retreatActions,
+      evidence.fixture.retreatMoves.length,
+      'no non-retreat action remains after withdrawal handoff'
+    );
     assert.equal(evidence.fixture.fireAfterRetreat, null);
     assert.equal(evidence.fixture.restart.actions, 0);
     assert.equal(evidence.fixture.restart.pending, 0);
