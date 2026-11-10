@@ -183,4 +183,3 @@ macroQueries.slice(macroInputs.length).forEach((query, index) => {
   assert.equal(forwarded.has('notInPreviewAllowlist'), false);
 });
 console.log('PASS 2 explicit audio-spatial / ground-stop / intelligence preview forwarding cases');
-
