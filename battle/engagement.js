@@ -2434,8 +2434,9 @@
     }
     /* A bound already authorized by the controller must finish or report a failure;
        a fresh HOLD/PRECISION preparation cannot hide its delivery state. */
-    var drill = task.drill === 'bound' ? 'bound' : fireControlPreparing(s, battle) ? 'prepare' : task.drill,
+    var drill = task.drill,
       before = s._movementResolver && s._movementResolver.combat;
+    if (drill !== 'bound' && fireControlPreparing(s, battle)) drill = 'prepare';
     e.suppressOrder = drill === 'suppress';
     if (drill === 'bound') {
       if (controllerBoundRole(s, battle) !== 'move') return;
