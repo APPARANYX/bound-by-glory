@@ -14,7 +14,10 @@ function test(name, fn) {
 function world(range = 100, flags = '&commandPosture=0') {
   H.resetIds();
   const r = H.bootstrap({
-    search: '?stressAct=0&commandRelay=0&tacticalController=new' + flags,
+    search:
+      '?stressAct=0&tacticalController=new' +
+      (flags.includes('commandRelay=') ? '' : '&commandRelay=0') +
+      flags,
     stats: true
   });
   const systems = {};
@@ -684,6 +687,95 @@ test('an unadopted pending bound waits for planned reception, then expires if st
   assert.equal(failed.stage, 'cancelled');
   assert.equal(failed.reason, 'bound-adoption-overdue');
   CR.peek = realPeek;
+  clean(w);
+});
+/* This checks a REAL Command Reception envelope, not a stubbed peek. The link
+   was available at the initial controller publication; it becomes disconnected
+   before a replacement personal envelope is issued. */
+function publishedBoundWithLostLink() {
+  const w = world(100, '&commandRelay=1&commandPosture=0&squadRelay=0');
+  const published = () => live(w, 'combat.bound').some(a => a.stage === 'published');
+  until(w, () => w.M.summary(w.q)?.phase === 'moving' && published());
+  const leader = w.r.SquadAI.leaderOf(w.q);
+  const action = live(w, 'combat.bound').find(
+    a => a.stage === 'published' && a.actorId !== String(leader.id)
+  );
+  assert.ok(action, 'an independent published personal mover is available');
+  const man = w.q.members.find(s => String(s.id) === action.actorId);
+  const beforeX = man.root.position.x;
+  man.root.position.x += 220;
+  const CR = w.r.BattleCommandReception;
+  assert.equal(CR.canDeliverMovement(w.q, w.b, man), false, 'link is now physically unreachable');
+  const meta = {
+    scope: 'soldier:' + String(man.id),
+    action: 'controller',
+    signature: 'fixture:post-publication-link-loss:' + action.actionId,
+    reference: 'point',
+    point: { x: man.root.position.x, z: man.root.position.z + 6 },
+    data: { publishKey: 'controller:' + action.actionId }
+  };
+  CR.publish(w.q, w.b, 'movement', [man], meta);
+  const rec = CR.peek(man, w.b, 'movement', meta.scope);
+  assert.equal(rec.unreachable, true, 'real transport rejected the envelope');
+  assert.equal(rec.data.publishKey, meta.data.publishKey);
+  return { w, action, man, CR, meta, beforeX };
+}
+test('real undeliverable bound waits for retry before terminal cancellation and releases its cover claim', () => {
+  const { w, action, man, CR } = publishedBoundWithLostLink();
+  const before = JSON.stringify(man._movementProgress?.failures || {});
+  w.E.updateSoldier(man, w.b);
+  assert.equal(
+    live(w, 'combat.bound').find(a => a.actionId === action.actionId).stage,
+    'published',
+    'a temporary unreachable receipt gets the original delivery grace'
+  );
+  w.b.time += 8.1;
+  w.E.updateSoldier(man, w.b);
+  const stage = live(w, 'combat.bound').find(a => a.actionId === action.actionId);
+  assert.equal(stage.stage, 'cancelled');
+  assert.equal(stage.reason, 'bound-command-unreachable');
+  assert.equal(
+    JSON.stringify(man._movementProgress?.failures || {}),
+    before,
+    'lost radio/visual contact must not poison pathfinding memory'
+  );
+  w.b.time += 0.3;
+  w.E.updateSoldier(man, w.b);
+  assert.equal(w.r.BattleMovementResolver.current(man)?.kind, 'hold');
+  tick(w);
+  assert.equal(live(w, 'combat.bound').some(a => a.actionId === action.actionId), false);
+  assert.equal(w.r.BattleCoverPositions.current(man, w.b), null, 'failed actor released cover');
+  assert.ok(w.M.summary(w.q).history.some(h => h.reason.includes('bound-command-unreachable')));
+  assert.ok(CR.telemetry(w.b).unreachable >= 1);
+  clean(w);
+});
+test('real Command Reception retry clears unreachable failure before commander cleanup', () => {
+  const { w, action, man, CR, meta, beforeX } = publishedBoundWithLostLink();
+  w.b.time += 8.1;
+  w.E.updateSoldier(man, w.b);
+  assert.equal(live(w, 'combat.bound').find(a => a.actionId === action.actionId).stage, 'cancelled');
+  man.root.position.x = beforeX;
+  CR.publish(w.q, w.b, 'movement', [man], meta);
+  const rec = CR.peek(man, w.b, 'movement', meta.scope);
+  assert.equal(rec.unreachable, false, 'native retry found the returning link');
+  assert.ok(rec.adoptedAt > w.b.time, 'receipt gets a fresh actual adoption clock');
+  w.E.updateSoldier(man, w.b);
+  const current = live(w, 'combat.bound').find(a => a.actionId === action.actionId);
+  assert.equal(current.stage, 'published', 'pending owner failure must clear on retry');
+  assert.equal(CR.telemetry(w.b).recovered >= 1, true);
+  clean(w);
+});
+test('physically adopted personal bound is never cancelled by the publication deadline', () => {
+  const w = world();
+  until(w, () => live(w, 'combat.bound').some(a => a.stage === 'executing'));
+  const action = live(w, 'combat.bound').find(a => a.stage === 'executing');
+  const man = w.q.members.find(s => String(s.id) === action.actorId);
+  const at = w.b.time;
+  w.b.time += 30;
+  w.E.updateSoldier(man, w.b);
+  const stage = live(w, 'combat.bound').find(a => a.actionId === action.actionId);
+  assert.ok(['executing', 'arrived'].includes(stage.stage), 'adopted B-to-C movement has no time limit');
+  w.b.time = at;
   clean(w);
 });
 test('covering is event-driven: multiple personal moves and no lease expiry while moving', () => {
