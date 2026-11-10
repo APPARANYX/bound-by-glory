@@ -2346,8 +2346,7 @@
     /* Receipt, processing and orientation are legitimate delays. This deadline is
        ONLY for adoption, and never interrupts an adopted B→C physical hop. */
     var expected = same && Number.isFinite(rec.adoptedAt) ? rec.adoptedAt + 2 : 0;
-    if (battle.time >= Math.max(task.since + BOUND_DELIVERY_WAIT, expected))
-      return 'bound-adoption-overdue';
+    if (battle.time >= Math.max(task.since + BOUND_DELIVERY_WAIT, expected)) return 'bound-adoption-overdue';
     return null;
   }
   function controllerCombatStart(s, battle, drill, reportedPoint) {
