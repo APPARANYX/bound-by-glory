@@ -340,11 +340,8 @@
         relayPolicy: 'auto',
         issuedAt: +battle.time || 0
       };
-    return !!(
-      RELAY_ON
-        ? routedTiming(probe, soldier, sender, battle, sq)
-        : legacyTiming(probe, soldier, sender, battle)
-    );
+    if (!RELAY_ON) return !!legacyTiming(probe, soldier, sender, battle);
+    return !!routedTiming(probe, soldier, sender, battle, sq);
   }
   function planRecipient(st, envelope, soldier, sender, battle, sq) {
     var id = String(soldier.id),
