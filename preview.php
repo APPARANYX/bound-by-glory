@@ -367,6 +367,7 @@ function stage($branch, $sha, $root, $previewRoot, &$error) {
 
     $hostLoaderSha = sha1('blob ' . strlen($loader) . "\0" . $loader);
     $contractMatchesBranch = $branchContractSha === null || $branchContractSha === sha1('blob ' . strlen($contract) . "\0" . $contract);
+    $loader = patch_loader_ai_v2($loader, array_keys($files));
     $meta = array('ref' => $branch, 'sha' => $sha, 'deployedAt' => gmdate('Y-m-d\TH:i:s\Z'), 'source' => 'preview.php',
                   'files' => count($files), 'runtimeReused' => $runtimeReused, 'runtimeDownloaded' => count($files) - $runtimeReused, 'loaderMatchesBranch' => ($branchLoaderSha === null || $branchLoaderSha === $hostLoaderSha) && $contractMatchesBranch,
                   'contractMatchesBranch' => $contractMatchesBranch, 'runtimeLoaderSha' => hash('sha256', $loader),
@@ -375,7 +376,6 @@ function stage($branch, $sha, $root, $previewRoot, &$error) {
     if (file_put_contents($tmp . '/runtime-contract.php', $contract) !== strlen($contract)) {
         rrmdir($tmp); $error = 'could not stage the host runtime contract'; if ($lock) fclose($lock); return null;
     }
-    $loader = patch_loader_ai_v2($loader, array_keys($files));
     if (file_put_contents($tmp . '/battle_sim.php', $loader) !== strlen($loader)) {
         rrmdir($tmp); $error = 'could not stage the host runtime loader'; if ($lock) fclose($lock); return null;
     }
