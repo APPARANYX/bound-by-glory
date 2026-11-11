@@ -1,0 +1,23 @@
+{
+  "branch": "work/benchmark-launch/pr796-head-flagoff-std-ge-defend",
+  "launch_parent_sha": "0cac14f1058d25fea3156f06ea5d2b12c2352951",
+  "launch_sha": "1ae3213f7f1d2365218fdcff4c3234d66803b866",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/0cac14f1058d25fea3156f06ea5d2b12c2352951",
+  "request": {
+    "battle_type": "ge-defend",
+    "benchmark": "standard",
+    "origin_agent": "human",
+    "purpose": "#796 S1a gate on 0cac14f1: head no-param vs controllerPhaseBand=0, ge-defend, 60 seeds",
+    "query_off": "strategicInterception=0&controllerPhaseBand=0",
+    "query_on": "strategicInterception=0",
+    "ref": "work/pin/pr796-0cac14f",
+    "seed": "pr796-s1a-20261108",
+    "seeds": "60",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/pr796-0cac14f",
+  "source_sha_at_archive": "0cac14f1058d25fea3156f06ea5d2b12c2352951"
+}
