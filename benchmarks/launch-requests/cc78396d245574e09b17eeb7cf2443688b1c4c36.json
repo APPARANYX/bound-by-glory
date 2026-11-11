@@ -1,0 +1,20 @@
+{
+  "branch": "work/benchmark-launch/pr799-orig797-head-reactoff",
+  "launch_parent_sha": "ad7b19803d4f45e56f9a0246e9ed5a233759d9c5",
+  "launch_sha": "cc78396d245574e09b17eeb7cf2443688b1c4c36",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/ad7b19803d4f45e56f9a0246e9ed5a233759d9c5",
+  "request": {
+    "benchmark": "causal",
+    "lifecycle": "1",
+    "query": "strategicInterception=0&tacticalController=new&controllerReactions=0",
+    "ref": "work/pin/pr799-orig797-head",
+    "role": "all",
+    "seconds": "600",
+    "seeds": "20",
+    "side": "all"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/pr799-orig797-head",
+  "source_sha_at_archive": "ad7b19803d4f45e56f9a0246e9ed5a233759d9c5"
+}
