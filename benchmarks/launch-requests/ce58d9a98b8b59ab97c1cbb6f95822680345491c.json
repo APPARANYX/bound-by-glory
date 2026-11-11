@@ -1,0 +1,17 @@
+{
+  "branch": "work/benchmark-launch/pr797-causal-head",
+  "launch_parent_sha": "5d7cc87eec92d7428fd22c3806c26c0aed5e1c89",
+  "launch_sha": "ce58d9a98b8b59ab97c1cbb6f95822680345491c",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/5d7cc87eec92d7428fd22c3806c26c0aed5e1c89",
+  "request": {
+    "benchmark": "causal",
+    "query": "strategicInterception=0",
+    "ref": "work/pin/pr797-5d7cc87",
+    "seconds": "600",
+    "seeds": "20"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/pr797-5d7cc87",
+  "source_sha_at_archive": "5d7cc87eec92d7428fd22c3806c26c0aed5e1c89"
+}
