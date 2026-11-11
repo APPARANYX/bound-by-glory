@@ -77,7 +77,8 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s scripts -p 'test_classify_ci_risk.py'
           if [[ "$EVENT_NAME" != "pull_request" || -z "$BASE_SHA" ]]; then
-            printf 'risk_tier=architecture\\nfull_validation=true\\n' >> "$GITHUB_OUTPUT"
+            echo 'risk_tier=architecture' >> "$GITHUB_OUTPUT"
+            echo 'full_validation=true' >> "$GITHUB_OUTPUT"
             echo 'Manual or unknown event: full validation'
           else
             git diff --name-only "$BASE_SHA" HEAD > "$RUNNER_TEMP/changed-paths.txt"
