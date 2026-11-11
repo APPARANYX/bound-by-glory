@@ -1,0 +1,23 @@
+{
+  "branch": "work/benchmark-launch/pr796-phase900-main-us-defend",
+  "launch_parent_sha": "b811827444e6c6a29827049f2460c494dfcee1ea",
+  "launch_sha": "f784c3a748dcad97f1344ca3f04516b889fd0715",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "battle_type": "us-defend",
+    "benchmark": "standard",
+    "origin_agent": "human",
+    "purpose": "#796 S1a 900s control on b8118274: main no-param vs explicit legacy, us-defend, 48 seeds",
+    "query_off": "strategicInterception=0&tacticalController=legacy",
+    "query_on": "strategicInterception=0",
+    "ref": "work/pin/pr796-main-b811827",
+    "seed": "pr796-phase900-20261108",
+    "seeds": "48",
+    "sim_seconds": "900",
+    "windows": "0+900"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/pr796-main-b811827",
+  "source_sha_at_archive": "b811827444e6c6a29827049f2460c494dfcee1ea"
+}
