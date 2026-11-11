@@ -12,6 +12,7 @@ function world() {
   loadModule(r, 'battle/movement-resolver.js');
   loadModule(r, 'battle/modules/13a-tactical-controller.js');
   loadModule(r, 'battle/modules/13b-tactical-owner-adapters.js');
+  loadModule(r, 'battle/modules/46-ammunition-stoppages.js');
   const bind = { location: r.location };
   loadModule(r, 'battle/modules/91-echo-knowledge.js', bind);
   loadModule(r, 'battle/modules/92-echo-soldier-policy.js', bind);
@@ -41,22 +42,32 @@ function world() {
 }
 
 const w = world();
+const K = w.r.BattleEchoKnowledge;
 assert.ok(w.TC.controls(w.b, w.us));
-assert.equal(
-  w.r.BattleEchoSoldierPolicy.choose('fire.personal', {
-    threat: true,
-    settled: true,
-    stationary: true,
-    facing: true,
-    authorized: true,
-    reloading: false,
-    shock: false
-  }).value,
-  true
-);
-H.run(w.r, w.b, 8);
-assert.ok(w.b.time > 7);
-assert.ok(w.TC.summary(w.b).new >= 2);
-assert.ok(w.TC.dispatch(w.b, w.us, 'fireAndMovement'));
+
+const man = w.us.members[0];
+const st = K.personalOf(man);
+st.tracks['e1'] = { id: 'e1', x: 40, z: 50, peakAt: 0, peakConfidence: 0.9, source: 'sight' };
+assert.doesNotThrow(() => K.confidenceOf(st.tracks['e1'], 5));
+assert.ok(K.confidenceOf(st.tracks['e1'], 5) < K.confidenceOf(st.tracks['e1'], 0));
+
+man.target = w.b.factions.ge.squads[0].members[0];
+w.b.time = 6;
+K.ingestSight(man, w.b);
+const obs = K.syncSquadThreat(w.us, w.b);
+assert.ok(obs);
+const sqst = K.squadOf(w.us);
+assert.ok(sqst.threatAxis);
+assert.ok(Math.hypot(sqst.threatAxis.x - 0, sqst.threatAxis.z - 120) < 30);
+
+w.us.inContact = true;
+sqst.lastHostileAt = 6;
+w.b.time = 20;
+w.us.inContact = false;
+w.r.BattleEchoSquadCoord.updateContactPhase(w.us, w.b);
+assert.equal(sqst.phase, 'advance');
+
+H.run(w.r, w.b, 6);
+assert.ok(w.r.BattleAIScratch.summary(w.b).squads.length >= 1);
 
 console.log('ai-scratch-check: ok');

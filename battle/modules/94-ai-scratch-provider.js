@@ -7,6 +7,7 @@
   if (!ON) return;
   var ID = 'echo-scratch';
   var squads = new WeakMap();
+  var WAKE = 0.45;
 
   function K() {
     return root.BattleEchoKnowledge;
@@ -19,7 +20,18 @@
   }
   function stateOf(sq) {
     var st = squads.get(sq);
-    if (!st) squads.set(sq, (st = { men: new Map(), leg: 0, nextWake: 0, holds: new Map() }));
+    if (!st)
+      squads.set(
+        sq,
+        (st = {
+          men: new Map(),
+          leg: 0,
+          nextWake: 0,
+          holds: new Map(),
+          bound: null,
+          scheduler: { sightIngests: 0, boundCompletes: 0, boundWaits: 0 }
+        })
+      );
     return st;
   }
   function point(obj) {
@@ -36,7 +48,10 @@
     if (res && res.ok) {
       st.men.set(id, { actionId: res.actionId, kind: cap, point: at, man: man });
       st.holds.delete(id);
-    } else st.holds.set(id, (res && res.reason) || 'refused');
+      return res.actionId;
+    }
+    st.holds.set(id, (res && res.reason) || 'refused');
+    return null;
   }
   function releaseAll(ctx, st, why) {
     st.men.forEach(function (cur) {
@@ -44,15 +59,107 @@
     });
     st.men.clear();
     st.holds.clear();
+    st.bound = null;
+  }
+  function shotBaseline(squad, sim) {
+    var A = root.BattleAmmunition,
+      out = Object.create(null);
+    if (!A || !A.shotEvidence) return out;
+    var men = C().living(squad);
+    for (var i = 0; i < men.length; i++) {
+      var ev = A.shotEvidence(men[i], sim);
+      out[String(men[i].id)] = ev ? ev.shots : 0;
+    }
+    return out;
+  }
+  function supportDelivered(st, sim, since) {
+    var A = root.BattleAmmunition;
+    if (!A || !st.bound || !st.bound.watchers) return false;
+    for (var i = 0; i < st.bound.watchers.length; i++) {
+      var id = st.bound.watchers[i];
+      var man = st.bound.men[id];
+      if (!man) continue;
+      var ev = A.shotEvidence(man, sim);
+      var base = st.bound.shots[id] || 0;
+      if (ev && ev.at >= since - 0.05 && ev.shots > base) return true;
+    }
+    return false;
+  }
+  function moversArrived(ctx, st) {
+    if (!st.bound || !st.bound.movers) return false;
+    for (var i = 0; i < st.bound.movers.length; i++) {
+      var id = st.bound.movers[i];
+      var cur = st.men.get(id);
+      if (!cur || cur.kind !== 'movement.move') return false;
+      var stage = ctx.stage(cur.actionId);
+      if (!stage || stage.stage !== 'arrived') return false;
+    }
+    return st.bound.movers.length > 0;
+  }
+  function tryCompleteBound(ctx, st, kb, sim) {
+    var b = st.bound;
+    if (!b || b.done) return;
+    if (!moversArrived(ctx, st)) {
+      st.scheduler.boundWaits++;
+      return;
+    }
+    if (!supportDelivered(st, sim, b.startedAt)) {
+      st.scheduler.boundWaits++;
+      return;
+    }
+    b.done = true;
+    kb.boundPulse++;
+    st.scheduler.boundCompletes++;
+    st.bound = null;
+  }
+  function armBound(ctx, sq, st, kb, sim) {
+    if (st.bound || kb.phase !== 'contact') return;
+    var men = C().living(sq);
+    if (men.length < 2) return;
+    var movers = [],
+      watchers = [],
+      menMap = Object.create(null);
+    for (var i = 0; i < men.length; i++) {
+      var id = String(men[i].id);
+      menMap[id] = men[i];
+      if (i % 2 === 0) movers.push(id);
+      else watchers.push(id);
+    }
+    st.bound = {
+      pulse: kb.boundPulse,
+      startedAt: +sim.time || 0,
+      movers: movers,
+      watchers: watchers,
+      men: menMap,
+      shots: shotBaseline(sq, sim),
+      done: false
+    };
+    var fwd = C().forwardToObjective(sq, sim);
+    var anchor = point(sq.orderAnchor) || C().centroid(men);
+    var slots = C().formationSlots(sq, anchor, fwd);
+    for (var j = 0; j < slots.length; j++) {
+      var role = j % 2 === 0 ? 'mover' : 'watcher';
+      var dest = C().boundPoint(sq, sim, role);
+      var cap = role === 'watcher' ? 'movement.hold' : 'movement.move';
+      var cur = st.men.get(String(slots[j].man.id));
+      if (cur) {
+        var stage = ctx.stage(cur.actionId);
+        if (stage && stage.stage !== 'cancelled' && stage.stage !== 'arrived') continue;
+        if (cur) ctx.finish(cur.actionId, 'bound-rearm');
+        st.men.delete(String(slots[j].man.id));
+      }
+      ask(ctx, st, slots[j].man, cap, dest);
+    }
   }
 
   function squadCommand(ctx) {
     var sq = ctx.squad,
       sim = ctx.sim,
       st = stateOf(sq);
-    C().refreshSketch(sq, sim);
+    C().refreshSketch(sq, sim, { ingestSights: false });
     if (sq.state === 'retreat' || sq.commandPhase === 'retreat') return releaseAll(ctx, st, 'retreat');
     var kb = K().squadOf(sq);
+    if (kb.phase === 'contact' && st.bound) return;
     var legs = sq.route || [];
     if (!legs.length) return;
     var leg = ownerLeg(sq);
@@ -61,14 +168,6 @@
     var fwd = C().forwardToObjective(sq, sim);
     var anchor = point(sq.orderAnchor) || C().centroid(C().living(sq));
     var slots = C().formationSlots(sq, anchor || target, fwd);
-    if (kb.phase === 'contact' && kb.boundPulse % 2 === 1) {
-      for (var i = 0; i < slots.length; i++) {
-        var role = i % 2 === 0 ? 'mover' : 'watcher';
-        var dest = C().boundPoint(sq, sim, role);
-        ask(ctx, st, slots[i].man, role === 'watcher' ? 'movement.hold' : 'movement.move', dest);
-      }
-      return;
-    }
     for (var j = 0; j < slots.length; j++) {
       var s = slots[j].man;
       var cur = st.men.get(String(s.id));
@@ -96,17 +195,11 @@
     var kb = K().squadOf(sq);
     var t = +sim.time || 0;
     if (t < st.nextWake) return;
-    st.nextWake = t + 0.45;
-    C().refreshSketch(sq, sim);
-    if (sq.inContact && kb.phase === 'contact') {
-      kb.boundPulse++;
-      kb.sketch = Object.assign({}, kb.sketch, { pulse: kb.boundPulse, since: t });
-    }
-    var threat = kb.threatAxis;
-    if (threat && sq.leader && !sq.leader.dead) {
-      var SA = root.SquadAI;
-      if (SA && SA.reportContact && sq.faction) SA.reportContact(sq, sim, threat, 'echo-sketch');
-    }
+    st.nextWake = t + WAKE;
+    C().refreshSketch(sq, sim, { ingestSights: true });
+    st.scheduler.sightIngests++;
+    tryCompleteBound(ctx, st, kb, sim);
+    if (kb.phase === 'contact' && sq.inContact && !st.bound) armBound(ctx, sq, st, kb, sim);
   }
 
   function executeMission(ctx) {
@@ -198,14 +291,23 @@
     id: ID,
     takeAll: takeAll,
     reset: reset,
-    summary: function () {
-      return { provider: ID, squads: squads };
+    summary: function (sim) {
+      var rows = [];
+      if (sim && sim.factions)
+        ['us', 'ge'].forEach(function (f) {
+          var list = (sim.factions[f] && sim.factions[f].squads) || [];
+          for (var i = 0; i < list.length; i++) {
+            var st = squads.get(list[i]);
+            if (st) rows.push({ squad: list[i].id, scheduler: st.scheduler, bound: !!st.bound });
+          }
+        });
+      return { provider: ID, squads: rows };
     }
   };
 
   if (root.BattleModules)
     root.BattleModules.registerSystem('ai-scratch-echo', {
-      version: '1-vertical-slice',
+      version: '2-receipt-gated',
       onBattleStart: function (sim) {
         reset(sim);
         takeAll(sim);

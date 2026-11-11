@@ -5,6 +5,7 @@
   var K = function () {
     return root.BattleEchoKnowledge;
   };
+  var QUIET_EXIT = 10;
 
   function unit(v) {
     var d = Math.hypot(v.x, v.z) || 1;
@@ -74,29 +75,40 @@
     }
     return add(here, fwd, hop);
   }
-  function refreshSketch(sq, sim) {
+
+  function updateContactPhase(sq, sim) {
     var Kb = K();
     if (!Kb.on) return;
     var st = Kb.squadOf(sq);
     var t = +sim.time || 0;
-    var men = living(sq);
-    for (var i = 0; i < men.length; i++) Kb.ingestSight(men[i], sim);
-    if (sq.inContact) {
-      var anchor = sq.orderAnchor || centroid(men);
-      if (anchor) Kb.ingestSquadReport(sq, sim, anchor, 'in-contact');
-      if (st.phase === 'advance') {
-        st.phase = 'contact';
-        st.boundPulse = 0;
-      }
-    } else if (st.phase === 'contact' && t - ((st.sketch && st.sketch.since) || 0) > 10) {
+    if (st.phase === 'advance' && sq.inContact) {
+      st.phase = 'contact';
+      st.boundPulse = 0;
+      st.contactEnteredAt = t;
+    } else if (st.phase === 'contact' && !sq.inContact && t - (st.lastHostileAt || 0) > QUIET_EXIT) {
       st.phase = 'advance';
+      st.boundPulse = 0;
     }
-    st.sketch = {
-      since: t,
-      phase: st.phase,
-      pulse: st.boundPulse,
-      forward: forwardToObjective(sq, sim)
-    };
+  }
+
+  function refreshSketch(sq, sim, opts) {
+    var Kb = K();
+    if (!Kb.on) return;
+    opts = opts || {};
+    var st = Kb.squadOf(sq);
+    var t = +sim.time || 0;
+    if (opts.ingestSights) {
+      var men = living(sq);
+      for (var i = 0; i < men.length; i++) Kb.ingestSight(men[i], sim);
+      Kb.syncSquadThreat(sq, sim);
+    }
+    updateContactPhase(sq, sim);
+    if (!st.sketch) st.sketch = {};
+    st.sketch.updatedAt = t;
+    st.sketch.phase = st.phase;
+    st.sketch.pulse = st.boundPulse;
+    st.sketch.forward = forwardToObjective(sq, sim);
+    st.sketch.lastHostileAt = st.lastHostileAt;
   }
 
   root.BattleEchoSquadCoord = {
@@ -106,6 +118,8 @@
     formationSlots: formationSlots,
     boundPoint: boundPoint,
     forwardToObjective: forwardToObjective,
-    refreshSketch: refreshSketch
+    refreshSketch: refreshSketch,
+    updateContactPhase: updateContactPhase,
+    QUIET_EXIT: QUIET_EXIT
   };
 })(typeof window !== 'undefined' ? window : globalThis);
