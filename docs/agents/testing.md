@@ -12,7 +12,7 @@ The native first-contact and ballistic-flight meeting probes report grenade frie
 
 ## Test harnesses
 
-Requesting Kit's browser/VM testing: apply the `needs-kit-testing` label to the issue or PR (see AGENTS.md). PR #749 asked for Muse browser/VM QA in its body and a comment but carried no label, so the hook never saw it until Ivan relayed it — a body or comment mention does not trigger anything. State the branch/PR, what to test, and the acceptance criteria on the labelled item.
+Requesting Kit's browser/VM testing: apply the `needs-kit-testing` label to the issue or PR (see AGENTS.md). PR #749 asked for Muse browser/VM QA in its body and a comment but carried no label, so the hook never saw it until Ivan relayed it — a body or comment mention does not trigger anything. State the branch/PR, what to test, and the acceptance criteria on the labelled item. When Kit picks up a labelled request it acknowledges it (👍 on the request comment), posts a start comment with a time estimate, and posts the verdict when the gate finishes; it then removes `needs-kit-testing` and, for an unambiguous verdict, labels the PR `test-passed` or `test-failed`. A re-test needs the label re-applied and a new head, since the hook only wakes on a head change.
 
 All of these run offline in seconds unless noted, and all pass on `main`.
 
