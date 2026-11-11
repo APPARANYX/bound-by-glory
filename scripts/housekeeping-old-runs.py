@@ -30,11 +30,16 @@ if keep_days < 1:
     raise SystemExit("KEEP_DAYS must be at least 1")
 
 
-def gh(args):
+def gh(args, allow_404=False):
     for attempt in range(3):
         p = subprocess.run(["gh", "api", *args], capture_output=True, text=True)
         if p.returncode == 0:
             return json.loads(p.stdout) if p.stdout.strip() else None
+        if allow_404 and "404" in p.stderr:
+            # The run is already gone (concurrent pass, one-off cleanup, or
+            # manual delete). A 404 will never succeed on retry, and the
+            # missing run must not abort the pass.
+            return "gone"
         if attempt == 2:
             raise RuntimeError(f"gh api {' '.join(args)} failed: {p.stderr.strip()}")
         time.sleep(attempt + 1)
@@ -77,7 +82,7 @@ live_branches.discard(default_branch)
 protected = open_branches | live_branches
 write(f"Keeping every run of {len(open_branches)} open PR branches and {len(live_branches)} existing branches (all but {default_branch})")
 
-deleted = kept = 0
+deleted = kept = gone = 0
 page = 1
 seen = set()
 stop = ""
@@ -103,7 +108,12 @@ while deleted < limit:
             kept += 1
             continue
         if not dry:
-            gh(["-X", "DELETE", f"repos/{repo}/actions/runs/{run['id']}"])
+            result = gh(["-X", "DELETE", f"repos/{repo}/actions/runs/{run['id']}"], allow_404=True)
+            if result == "gone":
+                gone += 1
+                if gone <= 50 or gone % 100 == 0:
+                    write(f"- Already gone {run['id']}: {run.get('name')} ({run.get('created_at')})")
+                continue
         deleted += 1
         if deleted <= 50 or deleted % 100 == 0:
             write(f"- {'Would delete' if dry else 'Deleted'} {run['id']}: {run.get('name')} ({run.get('created_at')})")
@@ -113,4 +123,5 @@ while deleted < limit:
 if not stop and deleted >= limit:
     stop = f"reached MAX_DELETE={limit}, the next pass continues"
 total = (gh([f"repos/{repo}/actions/runs?created=%3C{cutoff}&status=completed&per_page=1"]) or {}).get("total_count")
-write(f"{'Would delete' if dry else 'Deleted'}: {deleted}. Kept for open PRs and live branches: {kept}. Older completed runs left (kept runs included): {total}. {stop}".rstrip())
+gone_part = f" Already gone (skipped): {gone}." if gone else ""
+write(f"{'Would delete' if dry else 'Deleted'}: {deleted}. Kept for open PRs and live branches: {kept}.{gone_part} Older completed runs left (kept runs included): {total}. {stop}".rstrip())
