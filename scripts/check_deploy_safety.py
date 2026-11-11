@@ -4,7 +4,8 @@
 Feeds prepare_incremental_deploy.py a remote hash state that lists sidecar JSON, FBX
 soldier-animation lab files, models and a retired module, and asserts that only the retired
 battle module is deleted, that a mass deletion is refused, and that a protected upload is refused.
-The repo's own Motion Lab files (MANAGED_LAB) are the one lab exception: uploaded, never deleted.
+The repo's own Motion Lab and two production lab controllers are exact allowlist
+exceptions: uploaded, never deleted.
 Run from the repo root (CI's deploy-plan job does).
 """
 from __future__ import annotations
@@ -77,7 +78,7 @@ def main() -> int:
                    "battle/unknown-lab.js", "labs/hand-placed-lab.html"):
         if not P.is_protected(remote):
             failures.append("unmanaged lab unexpectedly unprotected: " + remote)
-    # The repo's own Motion Lab files are the one lab exception: uploaded, never deleted.
+    # The repo's own Motion Lab files are also explicitly managed: uploaded, never deleted.
     code, deletes, out = plan(PROTECTED_REMOTE + [f"labs/{n}" for n in ("gone-lab.php",)])
     for lab in P.MANAGED_LAB:
         if P.is_protected(lab):
@@ -92,8 +93,9 @@ def main() -> int:
     if failures:
         print("DEPLOY SAFETY FAIL\n  " + "\n  ".join(failures))
         return 1
-    print("Deploy safety: only retired battle/modules/*.js are deleted; sidecar JSON, lab files and "
-          "unmanaged files are never deleted or overwritten; mass deletion is refused.")
+    print("Deploy safety: only retired battle/modules/*.js are deleted; sidecars and "
+          "unmanaged labs are protected; explicitly managed labs upload but are never deleted; "
+          "mass deletion is refused.")
     return 0
 
 
