@@ -67,6 +67,16 @@ def main() -> int:
     for remote in PROTECTED_REMOTE:
         if not P.is_protected(remote):
             failures.append("not protected: " + remote)
+    # The two production lab controllers are managed runtime files, not hand-placed labs.
+    for remote in sorted(P.MANAGED_BATTLE_LABS):
+        if P.is_protected(remote):
+            failures.append("production lab controller wrongly protected: " + remote)
+        if remote.removeprefix("battle/") not in P.BATTLE_FILES:
+            failures.append("production lab controller missing from BATTLE_FILES: " + remote)
+    for remote in ("battle/audio-lab.js", "battle/full-audio-stress.js",
+                   "battle/unknown-lab.js", "labs/hand-placed-lab.html"):
+        if not P.is_protected(remote):
+            failures.append("unmanaged lab unexpectedly unprotected: " + remote)
     # The repo's own Motion Lab files are the one lab exception: uploaded, never deleted.
     code, deletes, out = plan(PROTECTED_REMOTE + [f"labs/{n}" for n in ("gone-lab.php",)])
     for lab in P.MANAGED_LAB:

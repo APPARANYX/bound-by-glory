@@ -66,6 +66,9 @@ def main() -> None:
                 raise SystemExit(f'{helper} must upload before its dependent {filename}')
 
     required = sorted(set(page_core_tags()) | set(loader_runtimes()))
+    blocked = sorted(name for name in listed if plan.is_protected(f"battle/{name}"))
+    if blocked:
+        raise SystemExit("BATTLE_FILES includes protected upload path(s): " + ", ".join(blocked))
     missing = [name for name in required if name not in listed]
     if missing:
         raise SystemExit(
