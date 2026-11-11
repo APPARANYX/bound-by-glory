@@ -75,6 +75,39 @@ test('timed contact reconciliation without new contact event', () => {
   assert.equal(K.shouldRun(sim, sq, 'contact'), true);
 });
 
+test('wakeup deadlines use earliest-wins (later ingest cannot postpone)', () => {
+  const r = boot();
+  const K = r.BattleAIV2;
+  const sim = { time: 0, factions: {} };
+  const sq = { id: 'us-0', faction: 'us', inContact: true };
+  var facts = { underFire: 1, effective: 1, pinned: 0, contactStarted: false };
+  K.ingestEngagementFacts({ sim, squad: sq, facts });
+  var snap = K.squadSnapshot(sim, sq);
+  assert.equal(snap.wakeAt.contact, 0.25);
+  sim.time = 0.05;
+  K.ingestEngagementFacts({ sim, squad: sq, facts });
+  snap = K.squadSnapshot(sim, sq);
+  assert.equal(snap.wakeAt.contact, 0.25);
+  sim.time = 0.26;
+  assert.equal(K.shouldRun(sim, sq, 'contact'), true);
+});
+
+test('urgent invalidation runs before scheduled wakeup', () => {
+  const r = boot();
+  const K = r.BattleAIV2;
+  const sim = { time: 0, factions: {} };
+  const sq = { id: 'us-0', faction: 'us', inContact: true };
+  K.ingestEngagementFacts({
+    sim,
+    squad: sq,
+    facts: { underFire: 1, effective: 0, pinned: 0, contactStarted: false }
+  });
+  K.markRan(sim, sq, 'contact');
+  assert.equal(K.shouldRun(sim, sq, 'contact'), false);
+  K.forceDirty(sim, sq, ['contact']);
+  assert.equal(K.shouldRun(sim, sq, 'contact'), true);
+});
+
 test('contact loss invalidates consumer even when underFire key is unchanged', () => {
   const r = boot();
   const K = r.BattleAIV2;

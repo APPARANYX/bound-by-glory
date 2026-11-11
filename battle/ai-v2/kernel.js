@@ -104,11 +104,15 @@
     }
   }
 
+  /* Earliest-deadline wins: a later reconciliation request cannot postpone an already-promised
+     wakeup. Urgent events should use invalidate()/forceDirty() or pass at <= current wakeAt. */
   function scheduleWakeup(sim, sq, consumer, at, why) {
     if (!ON || !sq) return;
     var st = squadState(sq),
-      t = +(sim.time || 0);
-    st.wakeAt[consumer] = Math.max(st.wakeAt[consumer] || 0, +at || t);
+      t = +(sim.time || 0),
+      next = +at || t,
+      cur = st.wakeAt[consumer];
+    if (cur == null || next < cur) st.wakeAt[consumer] = next;
     battleState(sim).stats.wakeups++;
     if (why) emit(sim, 'wakeup:' + why, { squad: sq }, { consumer: consumer, at: st.wakeAt[consumer] });
   }
