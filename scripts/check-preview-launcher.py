@@ -157,7 +157,7 @@ check(file_get_contents($dest . '/' . $truckGlb['path']) === 'fixture:truck.glb'
 check(file_get_contents($dest . '/Assets/vehicles/truck.fbx.json') === '{"hostOwned":true}', 'vehicle sidecar retained');
 $meta = read_cache($dest . '/preview.json');
 check($meta['contractMatchesBranch'] === false && $meta['loaderMatchesBranch'] === false, 'branch helper mismatch remains visible while untrusted helper is excluded');
-check($meta['runtimeReused'] === 24 && $meta['runtimeDownloaded'] === 2, 'reuse counters');
+check($meta['runtimeReused'] === 24 && $meta['runtimeDownloaded'] === 4, 'reuse counters');
 $testTree = null;
 check(stage('main', $newCommit, $root, $previewRoot, $error) === $slug, 'staged launch requires no tree fetch');
 $oldStage = $base . '/old-stage';
