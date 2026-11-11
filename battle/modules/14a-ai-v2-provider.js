@@ -35,9 +35,8 @@
     policies: {
       squadCommand: M.squadCommand,
       commanderTick: function (ctx) {
-        var Q = root.BattleSquadStability;
-        if (Q && Q.controllerSkills && Q.controllerSkills.review)
-          Q.controllerSkills.review(ctx.sim, ctx.squad);
+        var C = root.BattleTacticalMarchCore;
+        if (C && C.commanderTick) C.commanderTick(ctx);
       },
       fireAndMovement: M.fireAndMovement,
       executeMission: M.executeMission,
@@ -59,6 +58,23 @@
     lifecycle: OA.lifecycle
   });
   if (!reg.ok) throw new Error('AI V2 provider rejected: ' + reg.reason);
+
+  var C = root.BattleTacticalMarchCore;
+  if (C) {
+    root.BattleTacticalMarchProvider = {
+      on: true,
+      id: M.id,
+      structure: C.structure,
+      clear: C.clear,
+      singleWriter: C.singleWriter,
+      skillOn: M.skillOn,
+      leg: C.leg,
+      ownsSkill: C.ownsSkill,
+      release: C.release,
+      releaseMan: C.releaseMan,
+      target: C.target
+    };
+  }
 
   if (root.BattleModules)
     root.BattleModules.registerSystem('ai-v2-provider', {

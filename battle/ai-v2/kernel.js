@@ -1,9 +1,11 @@
-/* AI V2 kernel: event ledger, provenance knowledge, and invalidation scheduler.
-   Experimental architecture (`?aiV2=1`). No squad/soldier fields; WeakMaps only. */
+/* AI V2 kernel: per-consumer invalidation, timed wakeups, and dispatch instrumentation.
+   Experimental (`?aiV2=1`). Optional bypass: `?aiV2Schedule=0` runs every consumer every dispatch. */
 (function (root) {
   'use strict';
   var SEARCH = typeof location !== 'undefined' ? location.search || '' : '';
   var ON = /[?&]aiV2=1(?:&|#|$)/i.test(SEARCH);
+  var SCHEDULE_ON = ON && !/[?&]aiV2Schedule=0(?:&|#|$)/i.test(SEARCH);
+  var CONSUMERS = ['mission', 'formation', 'contact', 'maneuver', 'skills', 'strategic'];
   var battles = new WeakMap();
   var squads = new WeakMap();
 
@@ -14,7 +16,14 @@
         events: [],
         seq: 0,
         lastStrategic: Object.create(null),
-        stats: { emitted: 0, skipped: 0, ingested: 0 }
+        stats: {
+          emitted: 0,
+          ingested: 0,
+          dispatches: Object.create(null),
+          runs: Object.create(null),
+          skips: Object.create(null),
+          wakeups: 0
+        }
       };
       battles.set(sim, st);
     }
@@ -24,28 +33,35 @@
     var st = squads.get(sq);
     if (!st) {
       st = {
-        dirty: new Set(['movement', 'contact', 'maneuver', 'strategic']),
+        dirty: new Set(CONSUMERS),
         channels: Object.create(null),
-        knowledge: { contacts: [], reports: 0, lastIngest: -1 },
+        wakeAt: Object.create(null),
+        tactical: { inContact: false, underFire: 0 },
         missionKey: null,
-        rosterKey: null,
         contactKey: null,
-        lastMovementTick: -1,
-        skips: Object.create(null)
+        rosterKey: null,
+        legKey: null,
+        routeActive: false
       };
       squads.set(sq, st);
     }
     return st;
   }
 
-  function contactKey(facts) {
-    if (!facts || typeof facts !== 'object') return '';
+  function engagementKey(facts) {
+    if (!facts || typeof facts !== 'object') return 'none';
     return [
-      facts.inContact ? 1 : 0,
       facts.contactStarted ? 1 : 0,
       +(facts.underFire || 0),
-      facts.knownContact ? 1 : 0
+      +(facts.effective || 0),
+      +(facts.pinned || 0)
     ].join(':');
+  }
+
+  function noteDispatch(sim, sq, entryPoint) {
+    if (!ON || !sim) return;
+    var b = battleState(sim);
+    b.stats.dispatches[entryPoint] = (b.stats.dispatches[entryPoint] || 0) + 1;
   }
 
   function emit(sim, type, scope, payload) {
@@ -53,14 +69,14 @@
     var b = battleState(sim);
     b.seq++;
     b.stats.emitted++;
-    var ev = {
+    b.events = b.events || [];
+    b.events.push({
       seq: b.seq,
       at: +(sim.time || 0),
       type: type,
       scope: scope || null,
       payload: payload || null
-    };
-    b.events.push(ev);
+    });
     if (b.events.length > 256) b.events.splice(0, b.events.length - 256);
     if (scope && scope.squad) invalidate(sim, scope.squad, type);
   }
@@ -68,7 +84,8 @@
   function invalidate(sim, sq, reason) {
     var st = squadState(sq);
     if (reason === 'mission-superseded' || reason === 'roster-changed') {
-      st.dirty = new Set(['movement', 'contact', 'maneuver', 'strategic', 'individual']);
+      st.dirty = new Set(CONSUMERS);
+      st.legKey = null;
       return;
     }
     if (reason === 'contact-changed') {
@@ -77,89 +94,143 @@
       return;
     }
     if (reason === 'leg-advanced') {
-      st.dirty.add('movement');
+      st.dirty.add('mission');
+      st.dirty.add('formation');
       return;
     }
-    st.dirty.add('movement');
-    st.dirty.add('contact');
+    if (reason === 'formation-refresh') {
+      st.dirty.add('formation');
+    }
   }
 
-  function ingestFacts(ctx) {
+  function scheduleWakeup(sim, sq, consumer, at, why) {
+    if (!ON || !sq) return;
+    var st = squadState(sq),
+      t = +(sim.time || 0);
+    st.wakeAt[consumer] = Math.max(st.wakeAt[consumer] || 0, +at || t);
+    battleState(sim).stats.wakeups++;
+    if (why) emit(sim, 'wakeup:' + why, { squad: sq }, { consumer: consumer, at: st.wakeAt[consumer] });
+  }
+
+  function ingestEngagementFacts(ctx) {
+    if (!ON || !ctx || !ctx.squad || !ctx.sim) return;
+    var sq = ctx.squad,
+      sim = ctx.sim,
+      facts = ctx.facts,
+      st = squadState(sq),
+      b = battleState(sim);
+    b.stats.ingested++;
+    var wasContact = st.tactical.inContact;
+    st.tactical.inContact = !!(sq.inContact || (facts && facts.underFire > 0));
+    st.tactical.underFire = facts ? +(facts.underFire || 0) : 0;
+    var ek = engagementKey(facts);
+    if (st.contactKey !== ek) {
+      st.contactKey = ek;
+      emit(sim, 'contact-changed', { squad: sq }, { key: ek });
+    }
+    if (st.tactical.inContact) {
+      scheduleWakeup(sim, sq, 'contact', (+sim.time || 0) + 0.25, 'in-contact');
+      scheduleWakeup(sim, sq, 'maneuver', (+sim.time || 0) + 0.35, 'in-contact');
+    }
+    if (st.tactical.inContact !== wasContact && !st.tactical.inContact) {
+      delete st.wakeAt.contact;
+      delete st.wakeAt.maneuver;
+    }
+  }
+
+  function ingestSquadContext(ctx) {
     if (!ON || !ctx || !ctx.squad || !ctx.sim) return;
     var sq = ctx.squad,
       sim = ctx.sim,
       st = squadState(sq),
-      facts = ctx.facts,
-      b = battleState(sim);
-    b.stats.ingested++;
-    st.lastIngest = +(sim.time || 0);
+      token = ctx.token;
     var m = sq._macroMission,
       mKey = m ? [m.version, m.intent, m.status, m.objectiveId || ''].join('|') : 'none';
     if (st.missionKey !== mKey) {
       st.missionKey = mKey;
       emit(sim, 'mission-superseded', { squad: sq }, { key: mKey });
     }
-    var ck = contactKey(facts);
-    if (st.contactKey !== ck) {
-      st.contactKey = ck;
-      emit(sim, 'contact-changed', { squad: sq }, { key: ck });
+    var rKey = token
+      ? [token.rosterRevision, token.missionVersion].join(':')
+      : String(sq.members && sq.members.length);
+    if (st.rosterKey !== rKey) {
+      st.rosterKey = rKey;
+      emit(sim, 'roster-changed', { squad: sq }, { key: rKey });
     }
-    if (facts && facts.reports && facts.reports.length) st.knowledge.reports += facts.reports.length;
-    /* Provenance-only contact memory: never read enemy authoritative state here. */
-    if (facts && facts.contactPoint) {
-      var p = facts.contactPoint;
-      if (p && isFinite(+p.x) && isFinite(+p.z))
-        st.knowledge.contacts.push({
-          x: +p.x,
-          z: +p.z,
-          at: +(sim.time || 0),
-          source: facts.contactSource || 'squad-fact'
-        });
-      while (st.knowledge.contacts.length > 8) st.knowledge.contacts.shift();
+    var leg = +(sq.routeIndex || 0);
+    var legKey = ((sq.route && sq.route.length) || 0) + ':' + leg;
+    if (st.legKey !== legKey) {
+      st.legKey = legKey;
+      emit(sim, 'leg-advanced', { squad: sq }, { leg: leg });
     }
+    st.routeActive = !!(sq.route && sq.route.length);
+    if (st.routeActive) scheduleWakeup(sim, sq, 'mission', (+sim.time || 0) + 1, 'route-active');
+    if (token && token.missionVersion != null) st.dirty.add('formation');
   }
 
-  function shouldRun(sim, sq, channel) {
-    if (!ON) return true;
-    var st = squadState(sq);
-    if (st.dirty.has(channel)) return true;
-    /* Strategic layer: bounded reconsideration without meaningful new information. */
-    if (channel === 'strategic') {
+  function shouldRun(sim, sq, consumer) {
+    if (!ON || !SCHEDULE_ON) return true;
+    var st = squadState(sq),
+      t = +(sim.time || 0);
+    if (st.dirty.has(consumer)) return true;
+    if (st.wakeAt[consumer] != null && t + 1e-6 >= st.wakeAt[consumer]) return true;
+    if (consumer === 'strategic') {
       var b = battleState(sim),
         f = sq.faction,
-        last = b.lastStrategic[f] || -Infinity,
-        t = +(sim.time || 0);
-      if (t - last >= 2) {
-        b.lastStrategic[f] = t;
-        return true;
-      }
+        last = b.lastStrategic[f] || -Infinity;
+      if (t - last >= 2) return true;
     }
-    st.skips[channel] = (st.skips[channel] || 0) + 1;
-    battleState(sim).stats.skipped++;
+    if (consumer === 'contact' && st.tactical.inContact) {
+      var lc = st.channels.contact;
+      if (lc == null) lc = -Infinity;
+      if (t - lc >= 0.25) return true;
+    }
+    if (consumer === 'maneuver' && (st.tactical.inContact || st.tactical.underFire > 0)) {
+      var lm = st.channels.maneuver;
+      if (lm == null) lm = -Infinity;
+      if (t - lm >= 0.35) return true;
+    }
+    if (consumer === 'mission' && st.routeActive) {
+      var lmi = st.channels.mission;
+      if (lmi == null) lmi = -Infinity;
+      if (t - lmi >= 1) return true;
+    }
+    var b = battleState(sim);
+    b.stats.skips[consumer] = (b.stats.skips[consumer] || 0) + 1;
     return false;
   }
 
-  function markRan(sim, sq, channel) {
+  function markRan(sim, sq, consumer) {
     if (!ON || !sq) return;
-    var st = squadState(sq);
-    st.dirty.delete(channel);
-    st.channels[channel] = +(sim.time || 0);
+    var st = squadState(sq),
+      t = +(sim.time || 0);
+    st.dirty.delete(consumer);
+    st.channels[consumer] = t;
+    var b = battleState(sim);
+    b.stats.runs[consumer] = (b.stats.runs[consumer] || 0) + 1;
+    if (consumer === 'strategic') b.lastStrategic[sq.faction] = t;
+    if (consumer === 'contact' && st.tactical.inContact)
+      scheduleWakeup(sim, sq, 'contact', t + 0.25, 'reconcile');
+    if (consumer === 'maneuver' && (st.tactical.inContact || st.tactical.underFire > 0))
+      scheduleWakeup(sim, sq, 'maneuver', t + 0.35, 'reconcile');
+    if (consumer === 'mission' && st.routeActive) scheduleWakeup(sim, sq, 'mission', t + 1, 'reconcile');
+    else if (st.wakeAt[consumer] != null && t >= st.wakeAt[consumer]) delete st.wakeAt[consumer];
   }
 
   function forceDirty(sim, sq, channels) {
     var st = squadState(sq);
-    (channels || ['movement', 'contact', 'maneuver']).forEach(function (c) {
+    (channels || CONSUMERS).forEach(function (c) {
       st.dirty.add(c);
     });
   }
 
-  function picture(sim, sq) {
+  function squadSnapshot(sim, sq) {
     var st = squadState(sq);
     return {
-      contacts: st.knowledge.contacts.slice(),
-      reports: st.knowledge.reports,
       dirty: Array.from(st.dirty),
-      skips: Object.assign({}, st.skips)
+      wakeAt: Object.assign({}, st.wakeAt),
+      tactical: Object.assign({}, st.tactical),
+      channels: Object.assign({}, st.channels)
     };
   }
 
@@ -167,7 +238,7 @@
     var b = sim && battles.get(sim);
     if (!b) return null;
     return {
-      events: b.events.slice(-16),
+      events: (b.events || []).slice(-16),
       stats: Object.assign({}, b.stats)
     };
   }
@@ -176,15 +247,30 @@
     if (sim) battles.delete(sim);
   }
 
+  function compareHint(sim) {
+    var b = sim && battles.get(sim);
+    if (!b) return null;
+    return {
+      scheduleOn: SCHEDULE_ON,
+      runs: Object.assign({}, b.stats.runs),
+      skips: Object.assign({}, b.stats.skips),
+      dispatches: Object.assign({}, b.stats.dispatches)
+    };
+  }
+
   root.BattleAIV2 = {
     on: ON,
-    ingestFacts: ingestFacts,
+    scheduleOn: SCHEDULE_ON,
+    noteDispatch: noteDispatch,
+    ingestEngagementFacts: ingestEngagementFacts,
+    ingestSquadContext: ingestSquadContext,
     shouldRun: shouldRun,
     markRan: markRan,
     forceDirty: forceDirty,
     emit: emit,
-    picture: picture,
+    squadSnapshot: squadSnapshot,
     summary: summary,
+    compareHint: compareHint,
     beforeRestart: beforeRestart,
     _squadState: squadState
   };

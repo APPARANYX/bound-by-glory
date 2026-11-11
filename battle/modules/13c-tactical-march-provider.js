@@ -561,6 +561,67 @@
     return out;
   }
 
+  function fireAndMovementContact(ctx) {
+    var Q = root.BattleSquadStability;
+    if (Q && Q.noteControllerSuccession) Q.noteControllerSuccession(ctx.sim, ctx.squad, ctx.facts);
+    var LP = Q && Q.localPlan;
+    if (skillOn('structure') && STRUCTURE && LP && LP.structuresOn) LP.update(ctx.sim, ctx.squad, ctx.facts);
+    root.BattleTacticalContactSkills.update(ctx);
+  }
+  function fireAndMovementManeuver(ctx) {
+    if (root.BattleTacticalFlankAssault) root.BattleTacticalFlankAssault.update(ctx);
+    if (root.BattleTacticalCoveredManeuver) root.BattleTacticalCoveredManeuver.update(ctx);
+    if (root.BattleTacticalAmbushSkill) root.BattleTacticalAmbushSkill.update(ctx);
+  }
+  function fireAndMovementAll(ctx) {
+    fireAndMovementContact(ctx);
+    fireAndMovementManeuver(ctx);
+  }
+  root.BattleTacticalMarchCore = {
+    id: ID,
+    skillOn: skillOn,
+    structure: STRUCTURE,
+    clear: CLEAR,
+    singleWriter: SINGLE,
+    executeMission: executeMission,
+    squadCommand: squadCommand,
+    fireAndMovementContact: fireAndMovementContact,
+    fireAndMovementManeuver: fireAndMovementManeuver,
+    fireAndMovement: fireAndMovementAll,
+    commanderTick: function (ctx) {
+      var Q = root.BattleSquadStability;
+      if (skillOn('regroup')) Q.controllerSkills.review(ctx.sim, ctx.squad);
+    },
+    takeAll: takeAll,
+    ownsSkill: function (sq, sim) {
+      var st = skillSquads.get(sq);
+      return !!(st && st.kind && st.battle === sim && st.at === sim.time);
+    },
+    leg: function (sq) {
+      var st = squads.get(sq);
+      return st && st.target ? { point: st.target, final: !!st.final, index: st.leg } : null;
+    },
+    target: function (sq) {
+      return stateOf(sq).target;
+    },
+    release: function (ctx) {
+      standDown(ctx, stateOf(ctx.squad), 'covered-maneuver');
+    }
+  };
+  root.BattleTacticalMarchCore.releaseMan = function (ctx, man) {
+    var skill = skillState(ctx.squad),
+      personal = skill.men.get(String(man.id));
+    if (personal) ctx.finish(personal.id, 'squad-skill-handoff');
+    skill.men.delete(String(man.id));
+    skill.stopped.delete(String(man.id));
+    var st = stateOf(ctx.squad),
+      id = String(man.id),
+      cur = st.men.get(id);
+    if (cur) ctx.finish(cur.actionId, 'station-selection');
+    st.men.delete(id);
+    if (st.stopped) st.stopped.delete(id);
+  };
+
   if (AIV2) return;
   root.BattleTacticalMarchProvider = {
     on: ON,
@@ -611,19 +672,7 @@
         var Q = root.BattleSquadStability;
         if (skillOn('regroup')) Q.controllerSkills.review(ctx.sim, ctx.squad);
       },
-      fireAndMovement: function (ctx) {
-        /* Succession (15d) is noted once per dispatch; each skill below reads the same test itself. */
-        var Q = root.BattleSquadStability;
-        if (Q && Q.noteControllerSuccession) Q.noteControllerSuccession(ctx.sim, ctx.squad, ctx.facts);
-        var LP = Q && Q.localPlan;
-        if (skillOn('structure') && STRUCTURE && LP && LP.structuresOn)
-          LP.update(ctx.sim, ctx.squad, ctx.facts);
-        root.BattleTacticalContactSkills.update(ctx);
-        /* The flank decision runs first: the covered-bound skill reads its goal on the same step. */
-        if (root.BattleTacticalFlankAssault) root.BattleTacticalFlankAssault.update(ctx);
-        if (root.BattleTacticalCoveredManeuver) root.BattleTacticalCoveredManeuver.update(ctx);
-        if (root.BattleTacticalAmbushSkill) root.BattleTacticalAmbushSkill.update(ctx);
-      },
+      fireAndMovement: fireAndMovementAll,
       executeMission: executeMission,
       engagement: function (ctx) {
         if (root.BattleTacticalCoveredManeuver && root.BattleTacticalCoveredManeuver.engagement(ctx)) return;

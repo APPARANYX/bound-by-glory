@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 'use strict';
-/* AI V2 experimental stack: kernel invalidation, provider registration, march exclusion. */
+/* AI V2 stack smoke: provider registration and march-core wiring. */
 const assert = require('node:assert/strict');
-const path = require('node:path');
 const H = require('./harness');
 const { loadModule } = require('./module-loader');
 const CONTRACT = require('../../battle/tactical-capability-contract');
@@ -24,44 +23,20 @@ function boot(search) {
     }
   };
   loadModule(r, 'battle/ai-v2/kernel.js', { location: r.location });
-  loadModule(r, 'battle/ai-v2/meso.js', { location: r.location });
   loadModule(r, 'battle/movement-resolver.js');
   loadModule(r, 'battle/modules/13a-tactical-controller.js');
   loadModule(r, 'battle/modules/13b-tactical-owner-adapters.js');
+  r.BattleTacticalContactSkills = { update() {}, engagement() {} };
+  r.BattleTacticalSoldierPolicy = {
+    choose() {
+      return null;
+    }
+  };
   loadModule(r, 'battle/modules/13c-tactical-march-provider.js', { location: r.location });
-  loadModule(r, 'battle/modules/13d-tactical-contact-skills.js', { location: r.location });
+  loadModule(r, 'battle/ai-v2/meso.js', { location: r.location });
   loadModule(r, 'battle/modules/14a-ai-v2-provider.js', { location: r.location });
-  r.BattleTacticalContactSkills = r.BattleTacticalContactSkills || { update() {}, engagement() {} };
   return r;
 }
-
-test('kernel: event-driven skip reduces repeat contact work', () => {
-  const r = boot();
-  const K = r.BattleAIV2;
-  assert.ok(K.on);
-  const sim = { time: 1, factions: {} };
-  const sq = { id: 'us-0', faction: 'us', _macroMission: { version: 1 } };
-  K.forceDirty(sim, sq, ['contact']);
-  assert.equal(K.shouldRun(sim, sq, 'contact'), true);
-  K.markRan(sim, sq, 'contact');
-  assert.equal(K.shouldRun(sim, sq, 'contact'), false);
-  K.ingestFacts({
-    sim,
-    squad: sq,
-    facts: { inContact: true, contactStarted: true, underFire: 0 }
-  });
-  assert.equal(K.shouldRun(sim, sq, 'contact'), true);
-  const s1 = K.summary(sim);
-  K.ingestFacts({ sim, squad: sq, facts: { inContact: true, contactStarted: true, underFire: 0 } });
-  const s2 = K.summary(sim);
-  assert.ok(s2.stats.skipped >= s1.stats.skipped);
-});
-
-test('march provider stays off when aiV2=1', () => {
-  const r = boot();
-  assert.equal(r.BattleTacticalMarchProvider.id, 'ai-v2');
-  assert.equal(r.BattleTacticalMarchProvider.on, true);
-});
 
 test('provider controls squads under aiV2', () => {
   const r = boot();
@@ -78,25 +53,16 @@ test('provider controls squads under aiV2', () => {
     commandPhase: 'approach'
   };
   sim.factions.us.squads.push(sq);
-  r.BattleAIV2Meso.takeAll(sim);
-  assert.ok(TC.controls(sim, sq), 'squad should be on ai-v2 provider');
+  var sw = TC.requestMode(sim, sq, 'new', 'ai-v2');
+  assert.equal(sw.ok, true, sw.reason || '');
+  assert.ok(TC.controls(sim, sq));
   assert.equal(TC.summary(sim).new, 1);
 });
 
-test('deterministic knowledge picture from facts only', () => {
+test('march provider does not register when aiV2=1', () => {
   const r = boot();
-  const K = r.BattleAIV2;
-  const sim = { time: 10 };
-  const sq = { id: 'us-0', faction: 'us', _macroMission: { version: 1 } };
-  K.ingestFacts({
-    sim,
-    squad: sq,
-    facts: { contactPoint: { x: 5, z: 9 }, contactSource: 'sighting' }
-  });
-  const pic = K.picture(sim, sq);
-  assert.equal(pic.contacts.length, 1);
-  assert.equal(pic.contacts[0].source, 'sighting');
-  assert.equal(pic.contacts[0].x, 5);
+  assert.equal(r.BattleTacticalMarchProvider.id, 'ai-v2');
+  assert.ok(r.BattleTacticalMarchCore);
 });
 
 console.log('\n' + n + ' tests passed');
