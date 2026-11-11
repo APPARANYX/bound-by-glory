@@ -27,7 +27,10 @@
       case 'posture.commit':
         return answer(f.want || 'crouch', 'echo-commit');
       case 'cover.score':
-        return answer((1 - (f.quality || 0)) * 50 - (f.distance || 0) + (f.forward || 0) * 0.5, 'echo-cover-score');
+        return answer(
+          (1 - (f.quality || 0)) * 50 - (f.distance || 0) + (f.forward || 0) * 0.5,
+          'echo-cover-score'
+        );
       case 'cover.take':
         return answer(
           f.suppressed && f.best ? 'best' : f.incumbent ? 'incumbent' : f.best ? 'best' : 'none',

@@ -61,7 +61,7 @@
     var st = personalOf(man);
     var t = +(sim && sim.time) || 0;
     decayTracks(st, t);
-  if (man.target && !man.target.dead) {
+    if (man.target && !man.target.dead) {
       var p = here(man.target);
       if (p)
         st.tracks[String(man.target.id)] = freeze({

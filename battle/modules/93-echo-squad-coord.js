@@ -36,7 +36,9 @@
   }
   function forwardToObjective(sq, sim) {
     var goal =
-      (sq.route && sq.route.length && sq.route[Math.min(sq.route.length - 1, Math.max(0, sq.routeIndex || 0))]) ||
+      (sq.route &&
+        sq.route.length &&
+        sq.route[Math.min(sq.route.length - 1, Math.max(0, sq.routeIndex || 0))]) ||
       sq.objective ||
       sq.orderAnchor;
     var here = centroid(living(sq));
@@ -64,7 +66,10 @@
     var st = K().squadOf(sq);
     if (st.threatAxis) {
       if (role === 'watcher') return here;
-      var blend = unit({ x: fwd.x * 0.65 + (here.x - st.threatAxis.x) * 0.35, z: fwd.z * 0.65 + (here.z - st.threatAxis.z) * 0.35 });
+      var blend = unit({
+        x: fwd.x * 0.65 + (here.x - st.threatAxis.x) * 0.35,
+        z: fwd.z * 0.65 + (here.z - st.threatAxis.z) * 0.35
+      });
       return add(here, blend, hop);
     }
     return add(here, fwd, hop);
@@ -73,7 +78,7 @@
     var Kb = K();
     if (!Kb.on) return;
     var st = Kb.squadOf(sq);
-    var t = +(sim.time) || 0;
+    var t = +sim.time || 0;
     var men = living(sq);
     for (var i = 0; i < men.length; i++) Kb.ingestSight(men[i], sim);
     if (sq.inContact) {
@@ -83,7 +88,7 @@
         st.phase = 'contact';
         st.boundPulse = 0;
       }
-    } else if (st.phase === 'contact' && t - (st.sketch && st.sketch.since || 0) > 10) {
+    } else if (st.phase === 'contact' && t - ((st.sketch && st.sketch.since) || 0) > 10) {
       st.phase = 'advance';
     }
     st.sketch = {

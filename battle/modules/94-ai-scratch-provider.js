@@ -19,11 +19,7 @@
   }
   function stateOf(sq) {
     var st = squads.get(sq);
-    if (!st)
-      squads.set(
-        sq,
-        (st = { men: new Map(), leg: 0, nextWake: 0, holds: new Map() })
-      );
+    if (!st) squads.set(sq, (st = { men: new Map(), leg: 0, nextWake: 0, holds: new Map() }));
     return st;
   }
   function point(obj) {
@@ -81,11 +77,15 @@
         ctx.finish(cur.actionId, 'arrived');
         st.men.delete(String(s.id));
         ask(ctx, st, s, 'movement.hold', slots[j].point);
-      } else if (!cur || stage && stage.stage === 'cancelled') {
+      } else if (!cur || (stage && stage.stage === 'cancelled')) {
         ask(ctx, st, s, 'movement.move', slots[j].point);
       }
     }
-    if (C().centroid(C().living(sq)) && dist(C().centroid(C().living(sq)), target) < 18 && leg < legs.length - 1)
+    if (
+      C().centroid(C().living(sq)) &&
+      dist(C().centroid(C().living(sq)), target) < 18 &&
+      leg < legs.length - 1
+    )
       st.leg = leg + 1;
   }
 
@@ -94,7 +94,7 @@
       sim = ctx.sim,
       st = stateOf(sq);
     var kb = K().squadOf(sq);
-    var t = +(sim.time) || 0;
+    var t = +sim.time || 0;
     if (t < st.nextWake) return;
     st.nextWake = t + 0.45;
     C().refreshSketch(sq, sim);
@@ -105,8 +105,7 @@
     var threat = kb.threatAxis;
     if (threat && sq.leader && !sq.leader.dead) {
       var SA = root.SquadAI;
-      if (SA && SA.reportContact && sq.faction)
-        SA.reportContact(sq, sim, threat, 'echo-sketch');
+      if (SA && SA.reportContact && sq.faction) SA.reportContact(sq, sim, threat, 'echo-sketch');
     }
   }
 
@@ -191,7 +190,8 @@
     adapters: OA.adapters,
     lifecycle: OA.lifecycle
   });
-  if (!reg.ok && reg.reason !== 'duplicate-provider') throw new Error('ECHO provider rejected: ' + reg.reason);
+  if (!reg.ok && reg.reason !== 'duplicate-provider')
+    throw new Error('ECHO provider rejected: ' + reg.reason);
 
   root.BattleAIScratch = {
     on: true,
