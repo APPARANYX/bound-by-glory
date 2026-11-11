@@ -13,7 +13,8 @@
 (function (root) {
   'use strict';
   var SEARCH = typeof location !== 'undefined' ? location.search || '' : '',
-    ON = /[?&]tacticalController=new(?:&|#|$)/i.test(SEARCH),
+    AIV2 = /[?&]aiV2=1(?:&|#|$)/i.test(SEARCH),
+    ON = /[?&]tacticalController=new(?:&|#|$)/i.test(SEARCH) && !AIV2,
     /* ?supportWait=0 restores the controller marching support squads at once (no staged wait). */
     SUPPORT_WAIT = !/[?&]supportWait=0(?:&|#|$)/i.test(SEARCH),
     /* ?controllerStructure=0: a leg inside a building no longer waits for the structure chain. */
@@ -560,6 +561,7 @@
     return out;
   }
 
+  if (AIV2) return;
   root.BattleTacticalMarchProvider = {
     on: ON,
     structure: STRUCTURE,
