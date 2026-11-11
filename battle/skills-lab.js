@@ -844,6 +844,7 @@
         (scene && scene.metadata && scene.metadata.battleScenario && scene.metadata.battleScenario.seed) ||
         null,
       controller: params.get('tacticalController') || 'legacy',
+      aiV2: params.get('aiV2') === '1',
       focus: focus,
       rangeScale: scale,
       rangeDistanceM: distanceM,

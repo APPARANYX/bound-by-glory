@@ -1,7 +1,7 @@
 <?php
 /* Branch preview launcher: /grasstex/preview.php
    Type a branch name, a PR number or a GitHub branch/PR URL and this page stages that commit's battle
-   runtime (battle/battle_sim.html, battle/*.js, battle/modules/*.js) into
+   runtime (battle/battle_sim.html, battle/*.js, battle/ai-v2/*.js, battle/modules/*.js) into
    /grasstex/preview/ref-<sha12>/ and opens it. No Actions run and no work/** branch needed.
 
    It reuses the branch-preview contract of battle_sim_local.php (a preview.json beside the loader):
@@ -143,6 +143,30 @@ function host_loader($root) {
         if ($src !== false && strpos($src, 'BATTLE_PREVIEW') !== false && strpos($src, 'preview.json') !== false) return $src;
     }
     return null;
+}
+
+/* The host loader is trusted PHP; branches may add new battle scripts. Inject tags only when the
+   staged commit ships battle/ai-v2/*.js and the host loader has not yet been redeployed. */
+function patch_loader_ai_v2($loader, $runtimePaths) {
+    $needs = false;
+    foreach ($runtimePaths as $path) {
+        if (strpos($path, 'battle/ai-v2/') === 0) { $needs = true; break; }
+    }
+    if (!$needs || strpos($loader, 'ai-v2/kernel.js') !== false) return $loader;
+    if (strpos($loader, '$runtimeBase') !== false && strpos($loader, '$deployId') !== false) {
+        $ins = '$extras.=\'<script src="\'.$runtimeBase.\'battle/ai-v2/kernel.js?v=\'.$deployId.\'&c=\'.rawurlencode($cacheEpoch).\'"></script>\'."\\n";' . "\n" .
+            '$extras.=\'<script src="\'.$runtimeBase.\'battle/ai-v2/meso.js?v=\'.$deployId.\'&c=\'.rawurlencode($cacheEpoch).\'"></script>\'."\\n";';
+        $marker = '/* Modules load after commander';
+        if (strpos($loader, $marker) !== false) return str_replace($marker, $ins . $marker, $loader);
+    }
+    if (strpos($loader, '$activeModuleFiles') !== false && strpos($loader, '$version') !== false) {
+        $ins = '    $extras .= \'<script src="\'.$base.\'battle/ai-v2/kernel.js?v=\'.$version.\'"></script>\' . "\\n";' . "\n" .
+            '    $extras .= \'<script src="\'.$base.\'battle/ai-v2/meso.js?v=\'.$version.\'"></script>\' . "\\n";' . "\n" .
+            '    ';
+        $marker = 'foreach ($activeModuleFiles as $file)';
+        if (strpos($loader, $marker) !== false) return str_replace($marker, $ins . $marker, $loader);
+    }
+    return $loader;
 }
 
 function rrmdir($dir) {
@@ -327,7 +351,7 @@ function stage($branch, $sha, $root, $previewRoot, &$error) {
         $path = $e['path'];
         if ($path === 'battle_sim_local.php') $branchLoaderSha = $e['sha'];
         if ($path === 'runtime-contract.php') $branchContractSha = $e['sha'];
-        if (preg_match('#^battle/(battle_sim\.html|audio_lab\.html|[A-Za-z0-9._-]+\.js|modules/[A-Za-z0-9._-]+\.js)$#', $path)) $files[$path] = $e;
+        if (preg_match('#^battle/(battle_sim\.html|audio_lab\.html|[A-Za-z0-9._-]+\.js|ai-v2/[A-Za-z0-9._-]+\.js|modules/[A-Za-z0-9._-]+\.js)$#', $path)) $files[$path] = $e;
         elseif (preg_match('#^Assets/((soldiers|animations|weapons|vehicles)/[^/]+\.fbx|(weapons|vehicles)/[^/]+\.glb|animations/[^/]+\.bin|effects/.+\.png)$#', $path)
             && strpos($path, '..') === false && strpos($path, '/.') === false && preg_match('#^[A-Za-z0-9 ._()/-]+$#', $path)) $assets[] = $e;
     }
@@ -343,6 +367,7 @@ function stage($branch, $sha, $root, $previewRoot, &$error) {
 
     $hostLoaderSha = sha1('blob ' . strlen($loader) . "\0" . $loader);
     $contractMatchesBranch = $branchContractSha === null || $branchContractSha === sha1('blob ' . strlen($contract) . "\0" . $contract);
+    $loader = patch_loader_ai_v2($loader, array_keys($files));
     $meta = array('ref' => $branch, 'sha' => $sha, 'deployedAt' => gmdate('Y-m-d\TH:i:s\Z'), 'source' => 'preview.php',
                   'files' => count($files), 'runtimeReused' => $runtimeReused, 'runtimeDownloaded' => count($files) - $runtimeReused, 'loaderMatchesBranch' => ($branchLoaderSha === null || $branchLoaderSha === $hostLoaderSha) && $contractMatchesBranch,
                   'contractMatchesBranch' => $contractMatchesBranch, 'runtimeLoaderSha' => hash('sha256', $loader),
