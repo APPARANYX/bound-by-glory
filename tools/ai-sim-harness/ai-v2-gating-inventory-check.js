@@ -18,7 +18,10 @@ function test(name, fn) {
 
 test('ungated: squadCommand always invokes march core', () => {
   assert.match(meso, /function squadCommand[\s\S]*C\.squadCommand\(ctx\)/);
-  assert.doesNotMatch(meso, /function squadCommand[\s\S]*if \(!K\.shouldRun[\s\S]*'formation'[\s\S]*\) return/);
+  assert.doesNotMatch(
+    meso,
+    /function squadCommand[\s\S]*if \(!K\.shouldRun[\s\S]*'formation'[\s\S]*\) return/
+  );
 });
 
 test('gated: mission, contact, maneuver use shouldRun', () => {
