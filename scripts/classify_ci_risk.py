@@ -47,7 +47,7 @@ def main():
     args = parser.parse_args()
     import sys
     with open(args.files, encoding="utf-8") if args.files else sys.stdin as stream:
-        result = classify(line.strip() for line in stream if line.strip(), elevated=args.elevated)
+        result = classify((line.strip() for line in stream if line.strip()), elevated=args.elevated)
     print(json.dumps(result, sort_keys=True))
     if args.github_output:
         with open(args.github_output, "a", encoding="utf-8") as out:
