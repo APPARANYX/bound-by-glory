@@ -185,6 +185,14 @@
   var INCOMING_FIRE_REVEAL_ON = parseIncomingFireReveal(
     typeof location !== 'undefined' ? location.search || '' : ''
   );
+  /* K1: a squad the tactical controller owns learns that its contact is down only when one of its
+     own men was watching him fall (perceive -> noteSeenDown). Until then the record keeps the ordinary
+     CONTACT_MEMORY, whatever the simulation knows about the man. `?seenDeath=0` restores the previous
+     read of the enemy's live `dead` flag for A/B work and rollback; legacy squads keep that read. */
+  function parseSeenDeath(search) {
+    return !/[?&]seenDeath=(?:0|off|false)(?:&|#|$)/i.test(search || '');
+  }
+  var SEEN_DEATH_ON = parseSeenDeath(typeof location !== 'undefined' ? location.search || '' : '');
   /* Phase 0G1: secondary threat awareness. When on, soldierContact gains a 'secondary' field
      holding the next-best belief in a different 20m sector from the primary. Engagement can
      orient toward the secondary when the primary is behind cover or out of range. Default off;
@@ -1008,6 +1016,10 @@
   function stillTracking(soldier, heightAt, obstacles) {
     var t = soldier.target;
     if (!threatDisposition(t).combatThreat) return false;
+    return inTrackingSight(soldier, t, heightAt, obstacles);
+  }
+  /* The physical half of tracking: within his tracking reach and in line of sight, whatever the man is. */
+  function inTrackingSight(soldier, t, heightAt, obstacles) {
     var role = ROLES[soldier.role],
       p = soldier.root.position;
     if (
@@ -1070,6 +1082,15 @@
         best = rec;
     });
     return best ? best.combatThreat !== false : null;
+  }
+  /* The man this soldier was tracking is down. If he is the squad's contact and the soldier can still
+     see where he fell, the squad's record is marked: a confirmed casualty, known because a man of the
+     squad watched it. A fresh sighting replaces the record and so the mark. One sight line per watched
+     death, nothing per tick; no RNG. */
+  function noteSeenDown(soldier, unit, battle) {
+    var c = SEEN_DEATH_ON && soldier.squad && soldier.squad.contact;
+    if (!c || c.unit !== unit || c.seenDownAt != null) return;
+    if (inTrackingSight(soldier, unit, battle.heightAt, battle.obstacles)) c.seenDownAt = battle.time;
   }
   function ownFirstHandFor(held, unit, battle) {
     if (!held || held.unit !== unit) return null;
@@ -1335,7 +1356,9 @@
        threat contact is no longer about him. Dead contacts keep the old short decay so nearby enemies
        are not erased from the squad picture by one kill. */
     /* A squad the tactical controller owns drops him on what its men saw of him (seenThreat), not
-       on his live state; legacy keeps its read until it is retired. */
+       on his live state; legacy keeps its read until it is retired. The same holds for his death: the
+       short decay needs a man of the squad to have watched him fall (seenDownAt). A death nobody in
+       the squad saw leaves the record its full term, so hidden truth never edits what the squad knows. */
     var TC = root.BattleTacticalController,
       owned = !!(c.unit && TC && TC.controls && TC.controls(battle, squad));
     if (
@@ -1347,7 +1370,8 @@
       squad.contact = null;
       return null;
     }
-    var limit = c.unit && c.unit.dead ? CONTACT_MEMORY / 3 : CONTACT_MEMORY;
+    var down = owned && SEEN_DEATH_ON ? c.seenDownAt != null : c.unit && c.unit.dead,
+      limit = down ? CONTACT_MEMORY / 3 : CONTACT_MEMORY;
     if (battle.time - c.at > limit) {
       squad.contact = null;
       return null;
@@ -2193,7 +2217,10 @@
       return role;
     }
     var had = soldier.target;
-    if (had && !stillTracking(soldier, heightAt, obstacles)) soldier.target = null;
+    if (had && !stillTracking(soldier, heightAt, obstacles)) {
+      if (had.dead) noteSeenDown(soldier, had, battle);
+      soldier.target = null;
+    }
     if (!soldier.target && battle.time >= (soldier._scanAt || 0)) {
       soldier._scanAt = battle.time + SCAN_INTERVAL + ((+soldier.id || 0) % 5) * 0.04;
       soldier.target = findTarget(
@@ -2460,6 +2487,10 @@
     parseIncomingFireReveal: parseIncomingFireReveal,
     incomingFireRevealOn: function () {
       return INCOMING_FIRE_REVEAL_ON;
+    },
+    parseSeenDeath: parseSeenDeath,
+    seenDeathOn: function () {
+      return SEEN_DEATH_ON;
     },
     noteIncomingFire: noteIncomingFire,
     soldierContact: soldierContact,

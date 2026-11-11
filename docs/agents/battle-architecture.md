@@ -669,6 +669,14 @@ the target object still exists.
 `squad.contact` remains Perception's aggregate picture **upward** for squad/commander status: its own sightings, else a
 friendly squad's first-hand sighting actually delivered through the tactical callout channel (module 09; `?callouts=0`
 is the legacy free relay), else enemy gunfire within 120 m. It is not instant common knowledge inside Engagement.
+The record lasts `CONTACT_MEMORY` (12 s) from the sighting it carries. A squad the tactical controller owns shortens
+that to a third only for a **death one of its own men watched**: Perception marks the record (`contact.seenDownAt`) when
+a man loses the target he was tracking because it is down and he still has the sight line to where it fell. A death
+nobody in the squad saw (behind cover, inflicted by another squad, or of a man the squad knows only by report) leaves the
+record its full term, so the enemy's live `dead` flag never edits what the squad knows; `squadContact` is read by Squad
+Leader skills, the controller's contact skill and the General's `reportedContacts`. Callouts carry sightings, not deaths:
+a neighbour squad keeps a relayed report until the sighting ages out. `?seenDeath=0` restores the old live-state read;
+legacy-owned squads keep it until legacy is retired (`contact-death-provenance-check.js`).
 The fixed-step clock resets through `beforeBattleRestart`, dispatched by the core before roster
 replacement. This covers both explicit benchmark drives and `?fixedClock=all`; the clock adds no
 per-instance restart wrapper. Ordinary live render observers/cadence remain unchanged, and

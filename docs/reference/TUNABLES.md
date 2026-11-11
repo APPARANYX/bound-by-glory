@@ -23,6 +23,7 @@ constant; `RETREAT_CASUALTY_FRAC` below is `squad-ai.js`'s fallback for a squad 
 - `FOCUS_HALF = Math.PI / 3` — 60° half-angle, 120° focus cone
 - `HEAR_RANGE = 120` — hearing range (m)
 - `CONTACT_MEMORY = 12` — contact memory duration (s)
+- `seenDeath` (**on by default**, controller-owned squads; `?seenDeath=0` restores the live-state read) — a squad contact decays in `CONTACT_MEMORY / 3` (4 s) only when a man of the squad watched the enemy fall; an unseen death keeps the full `CONTACT_MEMORY`
 - `SCAN_SWEEP = 40°` — scan sweep angle
 - `CONTACT_REFRESH = 2` — contact refresh interval (s)
 - `SENIORITY = { sergeant: 0, rifleman: 1, scout: 2, gunner: 9 }` — role seniority for command
