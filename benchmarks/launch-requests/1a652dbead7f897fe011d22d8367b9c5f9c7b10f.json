@@ -1,0 +1,21 @@
+{
+  "branch": "work/benchmark-launch/pr797-probe-main",
+  "launch_parent_sha": "e8650a82bddf0e2b1d314a674623c8aeffd3fc1b",
+  "launch_sha": "1a652dbead7f897fe011d22d8367b9c5f9c7b10f",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "benchmark": "probe-pack",
+    "map": "tactical",
+    "origin_agent": "human",
+    "purpose": "#797 Micro U gate control on e8650a82: probe pack no-param vs explicit legacy",
+    "query_off": "strategicInterception=0&tacticalController=legacy",
+    "query_on": "strategicInterception=0",
+    "ref": "work/pin/pr797-main-e8650a82",
+    "seed": "pack-797",
+    "seeds": "40"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/pr797-main-e8650a82",
+  "source_sha_at_archive": "e8650a82bddf0e2b1d314a674623c8aeffd3fc1b"
+}
