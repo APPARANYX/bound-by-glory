@@ -105,7 +105,9 @@
     return PRIORITY[kind] || 20;
   }
   function tolerance(kind) {
-    return ['firing-station', 'hold', 'reload-hold', 'contact-reaction'].indexOf(kind) >= 0 ? 0.1 : ORDER_EPS;
+    return ['firing-station', 'hold', 'reload-hold', 'contact-reaction', 'v2-post'].indexOf(kind) >= 0
+      ? 0.1
+      : ORDER_EPS;
   }
   function metrics(b) {
     return (
@@ -492,6 +494,14 @@
       return hold;
     }
     if (player) st.player = null;
+    /* Experimental `?ai=v2`: one command per man, from his own brain. No order/combat arbitration, no
+       squad-phase overrides: there is nothing left to arbitrate. This resolver still legalizes the point
+       and remains the only writer of the destination. */
+    if (root.BattleAIV2 && root.BattleAIV2.on) {
+      st.order = null;
+      st.combat = null;
+      return root.BattleAIV2.movementProposal(soldier, battle, proposal);
+    }
     var P = root.BattleTacticalPositions,
       task = P && P.update(soldier, battle),
       sq = soldier.squad || {};
@@ -569,6 +579,8 @@
   function tacticalWaypoint(soldier, battle, pick) {
     /* The player steers himself: no cover detour or door ingress substituted for his input. */
     if (pick.kind === 'player') return null;
+    /* A V2 man chose his own cover and route; no second planner substitutes a waypoint. */
+    if (pick.owner === 'ai-v2') return null;
     if (pick.kind === 'firing-station' && root.BattleTacticalPositions)
       return root.BattleTacticalPositions.waypoint(soldier, battle);
     var T = root.BattleTacticalRoute;

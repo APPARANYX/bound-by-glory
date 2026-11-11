@@ -2145,6 +2145,8 @@
        the vehicle owns travel; the normal formation solver must not issue
        competing infantry posts. Boarding still allows the Meso mission handoff. */
     if (squad && squad._transport && squad._transport.phase === 'embarked') return;
+    /* Experimental `?ai=v2`: the V2 squad mind is the squad's command owner; the legacy chain never runs. */
+    if (root.BattleAIV2 && root.BattleAIV2.on) return root.BattleAIV2.squadTick(squad, battle);
     return EXT.first('squadCommand', squadStatus)(squad, battle);
   }
 
@@ -2253,9 +2255,14 @@
     EXT.run('beforeSoldier', soldier, battle);
     if (!soldier.dead) {
       var role = perceive(soldier, battle);
-      if (root.BattleEngagement) root.BattleEngagement.updateSoldier(soldier, battle);
-      else fallbackBehavior(soldier, battle, role);
-      if (resolver) resolver.resolve(soldier, battle);
+      /* Experimental `?ai=v2`: the V2 soldier brain decides stance, fire and the one movement command, and
+         consults the Resolver itself. Perception above and the weapon hooks around stay as they are. */
+      if (root.BattleAIV2 && root.BattleAIV2.on) root.BattleAIV2.soldierTick(soldier, battle);
+      else {
+        if (root.BattleEngagement) root.BattleEngagement.updateSoldier(soldier, battle);
+        else fallbackBehavior(soldier, battle, role);
+        if (resolver) resolver.resolve(soldier, battle);
+      }
     }
     EXT.run('afterSoldier', soldier, battle);
   }

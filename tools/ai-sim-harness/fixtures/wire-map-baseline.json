@@ -7,7 +7,8 @@
     "restart-reset": "Restart: BattleSim.restart sweeps every soldier and squad through the module reset hooks.",
     "resolver-fallback": "Only when BattleMovementResolver is absent (isolated unit harness); production loads the resolver before any AI tick.",
     "engagement-fallback": "no-Engagement fallback (fallbackBehavior): only runs when engagement.js failed to load, so a broken deployment still fights.",
-    "squad-status-fallback": "Status-only squadStatus: runs only when no squadCommand owner is attached; the Squad Leader replaces it."
+    "squad-status-fallback": "Status-only squadStatus: runs only when no squadCommand owner is attached; the Squad Leader replaces it.",
+    "ai-v2-owner": "Experimental `?ai=v2` only (11v-11y): the V2 layer is this field's one runtime writer while the flag is on, because squad-ai.js, movement-resolver.js and commander-ai.js branch to it before the listed owner's decision path runs. With the flag off this file writes nothing."
   },
   "fields": {
     "squad._reconTask": {
@@ -359,6 +360,10 @@
         "modules/15k-squad-leader-reconstitution.js": {
           "as": "layer",
           "why": "Roster rewrites stamp the count (reform sets the merged squad's, disband zeroes an absorbed one) (moved here from 16 in the bare-bones split)."
+        },
+        "modules/11x-ai-v2-tactical.js": {
+          "as": "fallback",
+          "why": "ai-v2-owner"
         }
       }
     },
@@ -474,6 +479,10 @@
         "modules/21-defender-engineers.js": {
           "as": "setup",
           "why": "garrison-setup"
+        },
+        "modules/11x-ai-v2-tactical.js": {
+          "as": "fallback",
+          "why": "ai-v2-owner"
         }
       }
     },
@@ -534,6 +543,10 @@
         "squad-ai.js": {
           "as": "fallback",
           "why": "squad-status-fallback"
+        },
+        "modules/11x-ai-v2-tactical.js": {
+          "as": "fallback",
+          "why": "ai-v2-owner"
         }
       }
     },
@@ -555,6 +568,10 @@
         "modules/22a-commander-strategic-recovery.js": {
           "as": "slot",
           "why": "selectMission points the re-issued mission at its objective, written through commander-ai.js's declared ctx sink (_commanderRecoveryCtx) after the 22a verbatim split - the owner's own code, relocated."
+        },
+        "modules/11x-ai-v2-tactical.js": {
+          "as": "fallback",
+          "why": "ai-v2-owner"
         }
       }
     },
@@ -589,6 +606,10 @@
         "modules/19b-engagement-fire-stance.js": {
           "as": "slot",
           "why": "station and the legacy fire position stop the look direction, written through Engagement's declared ctx sink (_engagementFireStanceCtx) after the 19b verbatim split - the owner's own code, relocated"
+        },
+        "modules/11w-ai-v2-individual.js": {
+          "as": "fallback",
+          "why": "ai-v2-owner"
         }
       }
     },
@@ -882,6 +903,10 @@
         "modules/19b-engagement-fire-stance.js": {
           "as": "slot",
           "why": "station and legacyStation set and clear the emplaced-gun flag, written through Engagement's declared ctx sink (_engagementFireStanceCtx) after the 19b verbatim split - the owner's own code, relocated"
+        },
+        "modules/11w-ai-v2-individual.js": {
+          "as": "fallback",
+          "why": "ai-v2-owner"
         }
       }
     },
@@ -903,6 +928,10 @@
         "modules/19b-engagement-fire-stance.js": {
           "as": "slot",
           "why": "the fire-control states mirror their state label, written through Engagement's declared ctx sink (_engagementFireStanceCtx) after the 19b verbatim split - the owner's own code, relocated"
+        },
+        "modules/11w-ai-v2-individual.js": {
+          "as": "fallback",
+          "why": "ai-v2-owner"
         }
       }
     },
@@ -1045,6 +1074,58 @@
         "modules/21c-strategic-reinforcements.js": {
           "as": "setup",
           "why": "spawn-stamp"
+        }
+      }
+    },
+    "squad.contactSince": {
+      "owner": "engagement.js",
+      "writers": {
+        "engagement.js": {
+          "as": "owner",
+          "why": "updateSquad stamps when the squad's contact report began."
+        },
+        "modules/11x-ai-v2-tactical.js": {
+          "as": "fallback",
+          "why": "ai-v2-owner"
+        }
+      }
+    },
+    "squad.inContact": {
+      "owner": "engagement.js",
+      "writers": {
+        "engagement.js": {
+          "as": "owner",
+          "why": "updateSquad publishes the squad's contact report."
+        },
+        "modules/11x-ai-v2-tactical.js": {
+          "as": "fallback",
+          "why": "ai-v2-owner"
+        }
+      }
+    },
+    "squad.leaderId": {
+      "owner": "modules/15k-squad-leader-reconstitution.js",
+      "writers": {
+        "modules/15k-squad-leader-reconstitution.js": {
+          "as": "owner",
+          "why": "Names the leader of a re-formed squad."
+        },
+        "modules/11x-ai-v2-tactical.js": {
+          "as": "fallback",
+          "why": "ai-v2-owner"
+        }
+      }
+    },
+    "soldier.setUpSince": {
+      "owner": null,
+      "writers": {
+        "squad-ai.js": {
+          "as": "fallback",
+          "why": "engagement-fallback"
+        },
+        "modules/11w-ai-v2-individual.js": {
+          "as": "fallback",
+          "why": "ai-v2-owner"
         }
       }
     }

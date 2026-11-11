@@ -692,11 +692,15 @@
   }
   function updateCommander(sim, town, dt) {
     dt = dt || COMMAND_TICK;
-    var macro = macroEnabled(sim),
+    /* Experimental `?ai=v2`: the V2 side commands own every mission; Force Command, its doctrine rules and
+       the interception planner do not run. The objective service and the tick hook below still do. */
+    var v2 = !!(root.BattleAIV2 && root.BattleAIV2.on),
+      macro = macroEnabled(sim) && !v2,
       macroWake = false,
       wakeReasons = {};
     if (macro) R.ensureAssignments(sim, town);
     if (root.BattleObjectiveSystem) root.BattleObjectiveSystem.tick(sim, dt);
+    if (v2) root.BattleAIV2.strategicTick(sim, town, dt);
     if (macro)
       ['us', 'ge'].forEach(function (f) {
         var result = updateFactionCommander(sim, town, f);
@@ -882,7 +886,17 @@
     return sim;
   };
 
+  /* Experimental `?ai=v2`: the V2 squad mind owns its missions; this publishes the one it adopted as the
+     record the transport owner and the overlays read, so `_macroMission` keeps one writer file. Force
+     Command does not run under that flag (updateCommander), so the field still has one runtime writer. */
+  function publishAdoptedMission(sq, record) {
+    if (!(root.BattleAIV2 && root.BattleAIV2.on) || !sq || !record || record.owner !== 'ai-v2') return null;
+    sq._macroMission = record;
+    return record;
+  }
+
   root.BattleCommanderAI = {
+    publishAdoptedMission: publishAdoptedMission,
     intentEvidence: intentEvidence,
     missionStates: MISSION_STATES,
     transitionMission: transitionMission,
