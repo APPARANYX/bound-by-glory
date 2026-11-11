@@ -149,7 +149,7 @@ check(!staged_current($dest), 'damaged contract invalidates cached preview');
 put($dest . '/runtime-contract.php', $stagedContract);
 put($dest . '/battle_sim.php', '<?php damaged loader');
 check(!staged_current($dest), 'damaged loader invalidates cached preview');
-put($dest . '/battle_sim.php', $loader);
+put($dest . '/battle_sim.php', $stagedLoader);
 put($root . '/runtime-contract.php', '<?php // changed production contract');
 check(staged_current($dest), 'production contract changes cannot mutate immutable preview');
 check(file_get_contents($dest . '/' . $truck['path']) === 'fixture:truck.fbx', 'vehicle FBX included in full staging');
