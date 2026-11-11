@@ -40,6 +40,11 @@ BATTLE_FILES = [
     "scenario-generator.js","battle-navigation.js","town-objectives.js","module-registry.js",
     "ai-policy.js","objective-system.js","battle-telemetry.js","commander-doctrine.js",
     "commander-routes.js","commander-ai.js","tactical-capability-contract.js","ai-trainer.js","battle-control.js",
+    # Production Lab controllers, chosen dynamically by battle_sim_local.php ($labScript ternary):
+    # skills-lab.js when skillsLab=1, phase-c-compact-range.js (Combat Lab) otherwise. Without
+    # these the deployed loader asks for a 404 and the lab never boots. (Not the preview-only
+    # diagnostic audio lab - audio-lab.js / full-audio-stress.js stay out, per the comment above.)
+    "skills-lab.js","phase-c-compact-range.js",
 ]
 # Imported soldier models, animation masters, the prepared clip pack (Assets/animations/prepared-clips.bin) and weapon
 # models (source .zip packs stay out). The FBX soldier backend (battle/modules/53-fbx-soldier-backend.js) reads them

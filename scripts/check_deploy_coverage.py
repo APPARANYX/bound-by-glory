@@ -39,6 +39,12 @@ def loader_runtimes() -> list[str]:
         found += [part.strip().strip("'\"") for part in match.group(1).split(",") if part.strip()]
     # The trailer is written inline rather than as a named array.
     found += re.findall(r"foreach\(array\(([^)]*)\) as \$file\)", php)[0].replace("'", "").split(",")
+    # The lab script is chosen by a ternary, not a named array (battle_sim_local.php:138):
+    # $labScript=$skillsLab?'skills-lab.js':'phase-c-compact-range.js';
+    lab = re.search(r"\$labScript\s*=\s*\$skillsLab\s*\?\s*'([A-Za-z0-9._-]+\.js)'\s*:\s*'([A-Za-z0-9._-]+\.js)'", php)
+    if not lab:
+        raise SystemExit("could not find $labScript ternary in battle_sim_local.php")
+    found += list(lab.groups())
     return [f.strip() for f in found if f.strip().endswith(".js")]
 
 
