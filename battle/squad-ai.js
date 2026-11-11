@@ -977,15 +977,28 @@
     var stats = root.BattleSoldierStats;
     return stats ? stats.scale(soldier, 'sight') : 1;
   }
+  /* `?scanReject=0` restores the scan that asked every enemy for his disposition, stance and distance
+     before finding him out of range. On, a man farther than the most this observer could spot anyone
+     (his role's range at the visibility ceiling) is passed over on two subtractions; he would have been
+     dropped two lines later, so the men considered, their order and the result are the same. */
+  var SCAN_REJECT = !(
+    typeof location !== 'undefined' && /[?&]scanReject=0(?:&|#|$)/.test(location.search || '')
+  );
   function findTarget(soldier, enemies, heightAt, obstacles, battle) {
     var role = ROLES[soldier.role],
       p = soldier.root.position,
       look = lookYaw(soldier, battle),
       sight = sightScale(soldier),
+      lab = root.PhaseCCombatLab,
+      most = role.visionRange * 1.25 * ((lab && lab.rangeScale) || 1) * sight,
+      beyond = SCAN_REJECT ? most * most * (1 + 1e-9) : Infinity,
       i;
     scanBuffer.length = 0;
     for (i = 0; i < enemies.length; i++) {
-      var e = enemies[i];
+      var e = enemies[i],
+        qx = e.root.position.x - p.x,
+        qz = e.root.position.z - p.z;
+      if (qx * qx + qz * qz > beyond) continue;
       if (!threatDisposition(e).combatThreat) continue;
       var ex = e.root.position.x,
         ez = e.root.position.z,
