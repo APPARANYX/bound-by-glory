@@ -1,5 +1,5 @@
 /* ECHO knowledge tier — personal and squad belief stores for ?aiScratch=1.
-   Mutable internal records; confidence is derived from timestamps, never written on frozen objects. */
+   Sight uses timestamped belief records (or engagement lastSeen), never live enemy transforms. */
 (function (root) {
   'use strict';
   var ON = /[?&]aiScratch=1(?:&|#|$)/i.test(typeof location !== 'undefined' ? location.search || '' : '');
@@ -8,6 +8,7 @@
   var DECAY = 14;
   var HEARD_DECAY = 8;
   var TELL_RANGE = 60;
+  var MEMORY_AGE = 14;
 
   function dist(a, b) {
     return !a || !b ? Infinity : Math.hypot(a.x - b.x, a.z - b.z);
@@ -24,6 +25,13 @@
       h = Math.imul(h, 16777619);
     }
     return (h >>> 0) / 4294967296;
+  }
+  function beliefConfidence(rec, t) {
+    if (!rec || t >= rec.expiresAt) return 0;
+    var span = Math.max(0.001, rec.expiresAt - rec.observedAt);
+    var age = Math.max(0, t - rec.observedAt);
+    var base = +rec.baseConfidence || 0.55;
+    return Math.max(0, Math.min(1, base * (1 - age / span)));
   }
   function confidenceOf(tr, t) {
     if (!tr) return 0;
@@ -45,15 +53,13 @@
   function upsertTrack(st, id, row, t) {
     var cur = st.tracks[id];
     if (!cur) st.tracks[id] = row;
-    else {
-      if (row.peakConfidence >= confidenceOf(cur, t)) {
-        cur.x = row.x;
-        cur.z = row.z;
-        cur.peakAt = row.peakAt;
-        cur.peakConfidence = row.peakConfidence;
-        cur.source = row.source;
-        cur.reporterId = row.reporterId || cur.reporterId;
-      }
+    else if (row.peakAt >= cur.peakAt || confidenceOf(row, t) >= confidenceOf(cur, t)) {
+      cur.x = row.x;
+      cur.z = row.z;
+      cur.peakAt = row.peakAt;
+      cur.peakConfidence = row.peakConfidence;
+      cur.source = row.source;
+      cur.reporterId = row.reporterId || cur.reporterId;
     }
   }
   function pruneTracks(st, t) {
@@ -90,40 +96,52 @@
     return st;
   }
 
+  function ingestBeliefRecord(man, st, rec, t) {
+    if (!rec || rec.combatThreat === false || t >= rec.expiresAt) return;
+    var conf = beliefConfidence(rec, t);
+    if (conf < 0.12) return;
+    var source =
+      rec.source === 'seen' ? 'sight' : rec.source === 'told' || rec.source === 'heard' ? 'told' : 'memory';
+    var id = rec.targetId != null ? String(rec.targetId) : rec.key || 'unknown';
+    upsertTrack(
+      st,
+      id,
+      {
+        id: id,
+        x: +rec.x,
+        z: +rec.z,
+        peakAt: +rec.observedAt,
+        peakConfidence: conf,
+        source: source,
+        reporterId: rec.sourceSoldierId != null ? String(rec.sourceSoldierId) : String(man.id)
+      },
+      t
+    );
+  }
+
   function ingestSight(man, sim) {
     if (!ON || !man || man.dead) return;
     var st = personalOf(man);
     var t = +(sim && sim.time) || 0;
     pruneTracks(st, t);
-    if (man.target && !man.target.dead) {
-      var p = here(man.target);
-      if (p)
-        upsertTrack(
-          st,
-          String(man.target.id),
-          {
-            id: String(man.target.id),
-            x: p.x,
-            z: p.z,
-            peakAt: t,
-            peakConfidence: 1,
-            source: 'sight',
-            reporterId: String(man.id)
-          },
-          t
-        );
+    var SA = root.SquadAI;
+    if (SA && SA.soldierBeliefsOn && SA.soldierBeliefsOn() && man._beliefs && man._beliefs.byKey) {
+      var keys = Object.keys(man._beliefs.byKey);
+      for (var i = 0; i < keys.length; i++) ingestBeliefRecord(man, st, man._beliefs.byKey[keys[i]], t);
+      return;
     }
-    if (man.lastSeen && man.lastSeen.pos) {
-      var lid = man.lastSeen.id != null ? String(man.lastSeen.id) : 'unknown';
+    var e = man.eng;
+    if (e && e.lastSeen && Number.isFinite(+e.lastSeenAt) && t - +e.lastSeenAt <= MEMORY_AGE) {
+      var lid = e.lastTargetId != null ? String(e.lastTargetId) : 'last-seen';
       upsertTrack(
         st,
         lid,
         {
           id: lid,
-          x: +man.lastSeen.pos.x,
-          z: +man.lastSeen.pos.z,
-          peakAt: t,
-          peakConfidence: 0.55,
+          x: +e.lastSeen.x,
+          z: +e.lastSeen.z,
+          peakAt: +e.lastSeenAt,
+          peakConfidence: 0.5,
           source: 'memory',
           reporterId: String(man.id)
         },
@@ -164,19 +182,38 @@
   function observedThreat(sq, sim) {
     if (!sq) return null;
     var t = +(sim && sim.time) || 0,
-      men = sq.members || [],
+      SA = root.SquadAI,
+      map = SA && SA.squadContactsMap ? SA.squadContactsMap(sq, sim) : null;
+    if (map && map.length) {
+      for (var i = 0; i < map.length; i++) {
+        var rec = map[i];
+        if (rec.source !== 'seen' || rec.confidence < 0.35) continue;
+        var rep = null;
+        var men = sq.members || [];
+        for (var j = 0; j < men.length; j++)
+          if (men[j] && String(men[j].id) === String(rec.sourceSoldier)) rep = men[j];
+        return {
+          id: rec.targetId != null ? String(rec.targetId) : 'seen',
+          x: +rec.x,
+          z: +rec.z,
+          at: +rec.at,
+          reporter: rep,
+          confidence: rec.confidence
+        };
+      }
+    }
+    var men = sq.members || [],
       best = null,
       bestScore = -1;
-    for (var i = 0; i < men.length; i++) {
-      var m = men[i];
+    for (var k = 0; k < men.length; k++) {
+      var m = men[k];
       if (!m || m.dead) continue;
       var st = personalOf(m);
       var ids = Object.keys(st.tracks);
-      for (var j = 0; j < ids.length; j++) {
-        var tr = st.tracks[ids[j]];
+      for (var n = 0; n < ids.length; n++) {
+        var tr = st.tracks[ids[n]];
         if (tr.source !== 'sight') continue;
         var conf = confidenceOf(tr, t);
-        if (conf < 0.45) continue;
         if (conf > bestScore) {
           bestScore = conf;
           best = {
@@ -189,13 +226,20 @@
           };
         }
       }
-      if (m.target && !m.target.dead) {
-        var p = here(m.target);
-        if (p && 1 > bestScore)
-          best = { id: String(m.target.id), x: p.x, z: p.z, at: t, reporter: m, confidence: 1 };
-      }
     }
     return best;
+  }
+
+  function resolveUnit(sim, faction, targetId) {
+    if (!sim || targetId == null) return null;
+    var f = sim.factions && sim.factions[faction === 'us' ? 'ge' : 'us'];
+    var roster = (f && f.squads) || [];
+    for (var i = 0; i < roster.length; i++) {
+      var mem = roster[i].members || [];
+      for (var j = 0; j < mem.length; j++)
+        if (mem[j] && String(mem[j].id) === String(targetId)) return mem[j];
+    }
+    return null;
   }
 
   function syncSquadThreat(sq, sim) {
@@ -211,31 +255,31 @@
           pos: { x: obs.x, z: obs.z },
           at: t,
           reason: 'observed',
-          reporterId: String(obs.reporter.id)
+          reporterId: obs.reporter ? String(obs.reporter.id) : null
         })
       );
       if (st.reports.length > 12) st.reports.shift();
-      if (sq.leader && !sq.leader.dead && obs.reporter) {
+      if (obs.reporter) {
         var members = sq.members || [];
         for (var i = 0; i < members.length; i++) {
           var m = members[i];
           if (!m || m.dead || m === obs.reporter) continue;
           deliverTold(sim, m, obs.reporter, { id: obs.id, x: obs.x, z: obs.z }, t);
         }
-      }
-      var BC = root.BattleCallouts;
-      if (BC && BC.report && obs.reporter && obs.reporter.target) {
-        BC.report(sim, sq, {
-          unit: obs.reporter.target,
-          x: obs.x,
-          z: obs.z,
-          at: obs.at,
-          stance: (obs.reporter.eng && obs.reporter.eng.stance) || 'crouch',
-          seenBy: obs.reporter.id
-        });
+        var BC = root.BattleCallouts;
+        var unit = resolveUnit(sim, sq.faction, obs.id);
+        if (BC && BC.report && unit) {
+          BC.report(sim, sq, {
+            unit: unit,
+            x: obs.x,
+            z: obs.z,
+            at: obs.at,
+            stance: (obs.reporter.eng && obs.reporter.eng.stance) || 'crouch',
+            seenBy: obs.reporter.id
+          });
+        }
       }
     }
-    if (sq.inContact) st.lastHostileAt = t;
     return obs;
   }
 
@@ -276,11 +320,12 @@
     snapshot: snapshot,
     resetBattle: resetBattle,
     dist: dist,
-    here: here
+    here: here,
+    beliefConfidence: beliefConfidence
   };
   if (ON && root.BattleModules)
     root.BattleModules.registerSystem('echo-knowledge', {
-      version: '2-mutable-tracks',
+      version: '3-belief-sight',
       onBattleStart: resetBattle,
       beforeBattleRestart: resetBattle
     });

@@ -8,6 +8,7 @@
   var ID = 'echo-scratch';
   var squads = new WeakMap();
   var WAKE = 0.45;
+  var BOUND_TIMEOUT = 28;
 
   function K() {
     return root.BattleEchoKnowledge;
@@ -29,7 +30,13 @@
           nextWake: 0,
           holds: new Map(),
           bound: null,
-          scheduler: { sightIngests: 0, boundCompletes: 0, boundWaits: 0 }
+          scheduler: {
+            sightIngests: 0,
+            boundCompletes: 0,
+            boundWaits: 0,
+            boundAborts: 0,
+            boundArmed: 0
+          }
         })
       );
     return st;
@@ -96,9 +103,46 @@
     }
     return st.bound.movers.length > 0;
   }
-  function tryCompleteBound(ctx, st, kb, sim) {
+  function abortBound(ctx, st, why) {
+    if (!st.bound) return;
+    st.bound.movers.concat(st.bound.watchers).forEach(function (id) {
+      var cur = st.men.get(id);
+      if (cur) ctx.finish(cur.actionId, why);
+      st.men.delete(id);
+    });
+    st.bound = null;
+    st.scheduler.boundAborts++;
+  }
+  function boundStalled(ctx, st, b, sim) {
+    var t = +sim.time || 0;
+    if (t - b.startedAt > BOUND_TIMEOUT) return 'bound-timeout';
+    var dead = false;
+    b.movers.concat(b.watchers).forEach(function (id) {
+      var man = b.men[id];
+      if (!man || man.dead) dead = true;
+    });
+    if (dead) return 'bound-casualty';
+    for (var i = 0; i < b.movers.length; i++) {
+      var id = b.movers[i],
+        cur = st.men.get(id);
+      if (!cur) return 'bound-lost-order';
+      var stage = ctx.stage(cur.actionId);
+      if (stage && stage.stage === 'cancelled') return 'bound-cancelled:' + (stage.reason || 'cancelled');
+    }
+    return null;
+  }
+  function tryCompleteBound(ctx, st, kb, sim, sq) {
     var b = st.bound;
     if (!b || b.done) return;
+    var stall = boundStalled(ctx, st, b, sim);
+    if (stall) {
+      abortBound(ctx, st, stall);
+      return;
+    }
+    if (sq && (sq.state === 'retreat' || sq.commandPhase === 'retreat')) {
+      abortBound(ctx, st, 'retreat');
+      return;
+    }
     if (!moversArrived(ctx, st)) {
       st.scheduler.boundWaits++;
       return;
@@ -134,6 +178,7 @@
       shots: shotBaseline(sq, sim),
       done: false
     };
+    st.scheduler.boundArmed++;
     var fwd = C().forwardToObjective(sq, sim);
     var anchor = point(sq.orderAnchor) || C().centroid(men);
     var slots = C().formationSlots(sq, anchor, fwd);
@@ -198,8 +243,9 @@
     st.nextWake = t + WAKE;
     C().refreshSketch(sq, sim, { ingestSights: true });
     st.scheduler.sightIngests++;
-    tryCompleteBound(ctx, st, kb, sim);
-    if (kb.phase === 'contact' && sq.inContact && !st.bound) armBound(ctx, sq, st, kb, sim);
+    tryCompleteBound(ctx, st, kb, sim, sq);
+    var obs = K().observedThreat(sq, sim);
+    if (kb.phase === 'contact' && obs && !st.bound) armBound(ctx, sq, st, kb, sim);
   }
 
   function executeMission(ctx) {

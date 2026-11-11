@@ -36,38 +36,54 @@ function world() {
   us.commandPhase = 'approach';
   us.orderAnchor = { x: 0, z: 0 };
   us._macroMission = { version: 1, status: 'executing', intent: 'capture', point: { x: 0, z: 90 } };
-  H.addSquad(r, b, { id: 'ge-0', faction: 'ge', x: 0, z: 120, objective: { x: 0, z: 0 }, facing: Math.PI });
+  const ge = H.addSquad(r, b, {
+    id: 'ge-0',
+    faction: 'ge',
+    x: 0,
+    z: 120,
+    objective: { x: 0, z: 0 },
+    facing: Math.PI
+  });
   r.BattleAIScratch.takeAll(b);
-  return { r, b, us, TC: r.BattleTacticalController };
+  return { r, b, us, ge, TC: r.BattleTacticalController };
 }
 
 const w = world();
 const K = w.r.BattleEchoKnowledge;
+const SA = w.r.SquadAI;
 assert.ok(w.TC.controls(w.b, w.us));
 
-const man = w.us.members[0];
-const st = K.personalOf(man);
-st.tracks['e1'] = { id: 'e1', x: 40, z: 50, peakAt: 0, peakConfidence: 0.9, source: 'sight' };
-assert.doesNotThrow(() => K.confidenceOf(st.tracks['e1'], 5));
-assert.ok(K.confidenceOf(st.tracks['e1'], 5) < K.confidenceOf(st.tracks['e1'], 0));
+const observer = w.us.members[0];
+const enemy = w.ge.members[0];
+assert.ok(SA.rememberSeen(observer, enemy, w.b, true, 'harness-sight'));
+const before = K.observedThreat(w.us, w.b);
+assert.ok(before);
+const savedX = before.x;
+enemy.root.position.x = 999;
+enemy.root.position.z = 999;
+observer.target = enemy;
+const twin = K.observedThreat(w.us, w.b);
+assert.ok(twin);
+assert.ok(Math.abs(twin.x - savedX) < 2, 'threat must not chase live transform');
 
-man.target = w.b.factions.ge.squads[0].members[0];
-w.b.time = 6;
-K.ingestSight(man, w.b);
-const obs = K.syncSquadThreat(w.us, w.b);
-assert.ok(obs);
-const sqst = K.squadOf(w.us);
-assert.ok(sqst.threatAxis);
-assert.ok(Math.hypot(sqst.threatAxis.x - 0, sqst.threatAxis.z - 120) < 30);
+const listener = w.us.members[1];
+const tracksBefore = Object.keys(K.personalOf(listener).tracks).length;
+const farReporter = w.us.members[2];
+farReporter.root.position.z = 500;
+const heard = K.deliverTold(w.b, listener, farReporter, { id: 'ghost', x: 1, z: 1 }, w.b.time);
+assert.equal(heard, false);
+assert.equal(Object.keys(K.personalOf(listener).tracks).length, tracksBefore);
 
 w.us.inContact = true;
+const sqst = K.squadOf(w.us);
 sqst.lastHostileAt = 6;
 w.b.time = 20;
 w.us.inContact = false;
 w.r.BattleEchoSquadCoord.updateContactPhase(w.us, w.b);
 assert.equal(sqst.phase, 'advance');
 
-H.run(w.r, w.b, 6);
-assert.ok(w.r.BattleAIScratch.summary(w.b).squads.length >= 1);
+w.b.time = 7;
+w.TC.dispatch(w.b, w.us, 'fireAndMovement');
+assert.ok(w.r.BattleAIScratch.summary(w.b).squads[0].scheduler.sightIngests >= 1);
 
 console.log('ai-scratch-check: ok');

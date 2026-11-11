@@ -81,11 +81,12 @@
     if (!Kb.on) return;
     var st = Kb.squadOf(sq);
     var t = +sim.time || 0;
-    if (st.phase === 'advance' && sq.inContact) {
+    var hostile = st.lastHostileAt > 0 && t - st.lastHostileAt <= QUIET_EXIT;
+    if (st.phase === 'advance' && (sq.inContact || hostile)) {
       st.phase = 'contact';
       st.boundPulse = 0;
       st.contactEnteredAt = t;
-    } else if (st.phase === 'contact' && !sq.inContact && t - (st.lastHostileAt || 0) > QUIET_EXIT) {
+    } else if (st.phase === 'contact' && !hostile && t - (st.lastHostileAt || 0) > QUIET_EXIT) {
       st.phase = 'advance';
       st.boundPulse = 0;
     }
