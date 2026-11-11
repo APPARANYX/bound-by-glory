@@ -36,7 +36,8 @@
       squadCommand: M.squadCommand,
       commanderTick: function (ctx) {
         var Q = root.BattleSquadStability;
-        if (Q && Q.controllerSkills && Q.controllerSkills.review) Q.controllerSkills.review(ctx.sim, ctx.squad);
+        if (Q && Q.controllerSkills && Q.controllerSkills.review)
+          Q.controllerSkills.review(ctx.sim, ctx.squad);
       },
       fireAndMovement: M.fireAndMovement,
       executeMission: M.executeMission,

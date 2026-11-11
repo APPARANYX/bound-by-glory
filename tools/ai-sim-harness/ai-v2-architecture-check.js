@@ -17,7 +17,12 @@ function test(name, fn) {
 function boot(search) {
   const r = H.bootstrap({ search: search || '?tacticalController=new&aiV2=1' });
   r.BattleTacticalCapabilityContract = CONTRACT;
-  r.BattleModules = r.BattleModules || { registerSystem() {}, listSystems() { return []; } };
+  r.BattleModules = r.BattleModules || {
+    registerSystem() {},
+    listSystems() {
+      return [];
+    }
+  };
   loadModule(r, 'battle/ai-v2/kernel.js', { location: r.location });
   loadModule(r, 'battle/ai-v2/meso.js', { location: r.location });
   loadModule(r, 'battle/movement-resolver.js');

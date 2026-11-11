@@ -123,7 +123,7 @@
     if (!ON) return true;
     var st = squadState(sq);
     if (st.dirty.has(channel)) return true;
-  /* Strategic layer: bounded reconsideration without meaningful new information. */
+    /* Strategic layer: bounded reconsideration without meaningful new information. */
     if (channel === 'strategic') {
       var b = battleState(sim),
         f = sq.faction,
