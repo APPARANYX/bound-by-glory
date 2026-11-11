@@ -34,6 +34,7 @@ jobs:
     outputs:
       audio: ${{ steps.diff.outputs.changed }}
       plan: ${{ steps.diff.outputs.plan }}
+      runtime: ${{ steps.diff.outputs.runtime }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -49,9 +50,15 @@ jobs:
           if [[ "$EVENT_NAME" != "pull_request" || -z "$BASE_SHA" ]]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "plan=true" >> "$GITHUB_OUTPUT"
+            echo "runtime=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           python3 scripts/audio_tracker.py diff "$BASE_SHA" --github-output "$GITHUB_OUTPUT"
+          if git diff --name-only "$BASE_SHA" HEAD | grep -Ev '^(AGENTS[.]md$|docs/|README[.]md$|[.]github/ISSUE_TEMPLATE/|[.]github/PULL_REQUEST_TEMPLATE[.]md$)' | grep -q .; then
+            echo "runtime=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "runtime=false" >> "$GITHUB_OUTPUT"
+          fi
           if git diff --name-only "$BASE_SHA" HEAD | grep -Eq '^(runtime-contract[.]php$|Assets/audio/|scripts/(recipes/|audio_tracker[.]py|normalize_audio[.]sh|build_voice_pitch_variants[.]sh|validate_voice_manifest[.]py|check_audio_manifest[.]py|check_weapon_clips[.]py|fetch_private_audio[.]sh|slice_weapon_shots[.]py|prepare_incremental_deploy[.]py|check_deploy_coverage[.]py|check_deploy_safety[.]py|build_version[.]py)|[.]github/workflows/(ci|deploy-50webs-php)[.]yml|battle/(battle_sim[.]html|module-registry[.]js))'; then
             echo "plan=true" >> "$GITHUB_OUTPUT"
           else
@@ -60,6 +67,8 @@ jobs:
 
   static:
     name: Syntax
+    needs: changes
+    if: needs.changes.outputs.runtime == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -246,6 +255,8 @@ jobs:
 
   harness:
     name: Sim regressions
+    needs: changes
+    if: needs.changes.outputs.runtime == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
