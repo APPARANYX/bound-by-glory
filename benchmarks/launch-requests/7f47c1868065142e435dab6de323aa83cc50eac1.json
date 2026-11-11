@@ -1,0 +1,21 @@
+{
+  "branch": "work/benchmark-launch/pr797-probe-head",
+  "launch_parent_sha": "5d7cc87eec92d7428fd22c3806c26c0aed5e1c89",
+  "launch_sha": "7f47c1868065142e435dab6de323aa83cc50eac1",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "archive/benchmark-source/5d7cc87eec92d7428fd22c3806c26c0aed5e1c89",
+  "request": {
+    "benchmark": "probe-pack",
+    "map": "tactical",
+    "origin_agent": "human",
+    "purpose": "#797 Micro U gate on 5d7cc87e: probe pack no-param vs all four Micro flags off",
+    "query_off": "strategicInterception=0&controllerStance=0&controllerSoldierFire=0&controllerReactions=0&controllerDrill=0",
+    "query_on": "strategicInterception=0",
+    "ref": "work/pin/pr797-5d7cc87",
+    "seed": "pack-797",
+    "seeds": "40"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/pr797-5d7cc87",
+  "source_sha_at_archive": "5d7cc87eec92d7428fd22c3806c26c0aed5e1c89"
+}
