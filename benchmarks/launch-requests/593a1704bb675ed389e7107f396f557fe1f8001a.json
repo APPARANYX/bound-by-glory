@@ -1,0 +1,23 @@
+{
+  "branch": "work/benchmark-launch/pr797-main-std-us-defend",
+  "launch_parent_sha": "e8650a82bddf0e2b1d314a674623c8aeffd3fc1b",
+  "launch_sha": "593a1704bb675ed389e7107f396f557fe1f8001a",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "battle_type": "us-defend",
+    "benchmark": "standard",
+    "origin_agent": "human",
+    "purpose": "#797 Micro U gate control on e8650a82: main no-param vs explicit legacy, us-defend, 60 seeds",
+    "query_off": "strategicInterception=0&tacticalController=legacy",
+    "query_on": "strategicInterception=0",
+    "ref": "work/pin/pr797-main-e8650a82",
+    "seed": "pr797-micro-u-20261109",
+    "seeds": "60",
+    "sim_seconds": "600",
+    "windows": "0+600"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/pr797-main-e8650a82",
+  "source_sha_at_archive": "e8650a82bddf0e2b1d314a674623c8aeffd3fc1b"
+}
