@@ -74,10 +74,16 @@ def main() -> int:
             failures.append("production lab controller wrongly protected: " + remote)
         if remote.removeprefix("battle/") not in P.BATTLE_FILES:
             failures.append("production lab controller missing from BATTLE_FILES: " + remote)
-    for remote in ("battle/audio-lab.js", "battle/full-audio-stress.js",
-                   "battle/unknown-lab.js", "labs/hand-placed-lab.html"):
+    # Names containing 'lab' are protected. The standalone audio stress probe
+    # has no 'lab' token, but must still stay out of the production upload lists.
+    for remote in ("battle/audio-lab.js", "battle/unknown-lab.js",
+                   "labs/hand-placed-lab.html"):
         if not P.is_protected(remote):
             failures.append("unmanaged lab unexpectedly unprotected: " + remote)
+    for filename in ("audio-lab.js", "full-audio-stress.js"):
+        remote = "battle/" + filename
+        if filename in P.BATTLE_FILES or any(path == remote for _, path in P.STATIC_FILES):
+            failures.append("preview-only audio diagnostic included in production uploads: " + remote)
     # The repo's own Motion Lab files are also explicitly managed: uploaded, never deleted.
     code, deletes, out = plan(PROTECTED_REMOTE + [f"labs/{n}" for n in ("gone-lab.php",)])
     for lab in P.MANAGED_LAB:
