@@ -1,0 +1,20 @@
+{
+  "branch": "work/benchmark-launch/pr799-causal-on",
+  "launch_parent_sha": "2256289d6e788ccd857d409a08df348c85d29b91",
+  "launch_sha": "ed5ad40140f5e46499fa2d48fccefba0364ae3d0",
+  "note": "Launch parent is preserved; the child's actual checkout SHA must be read from the child run.",
+  "parent_retention_ref": "main-ancestor",
+  "request": {
+    "benchmark": "causal",
+    "lifecycle": "1",
+    "query": "strategicInterception=0&tacticalController=new",
+    "ref": "work/pin/pr799-2256289d",
+    "role": "all",
+    "seconds": "600",
+    "seeds": "20",
+    "side": "all"
+  },
+  "schema_version": 1,
+  "source_ref": "work/pin/pr799-2256289d",
+  "source_sha_at_archive": "2256289d6e788ccd857d409a08df348c85d29b91"
+}
