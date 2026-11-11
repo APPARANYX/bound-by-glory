@@ -482,7 +482,7 @@
   function noop() {}
   function skillOn(kind) {
     var Q = root.BattleSquadStability;
-    return !!(ON && Q && Q.controllerSkills && Q.controllerSkills.enabled(kind));
+    return !!((ON || AIV2) && Q && Q.controllerSkills && Q.controllerSkills.enabled(kind));
   }
 
   /* Take every squad on both sides; a refused switch is retried by the controller's own backoff. */

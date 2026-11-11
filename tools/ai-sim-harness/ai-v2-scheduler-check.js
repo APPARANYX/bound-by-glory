@@ -75,6 +75,21 @@ test('timed contact reconciliation without new contact event', () => {
   assert.equal(K.shouldRun(sim, sq, 'contact'), true);
 });
 
+test('contact loss invalidates consumer even when underFire key is unchanged', () => {
+  const r = boot();
+  const K = r.BattleAIV2;
+  const sim = { time: 1, factions: {} };
+  const sq = { id: 'us-0', faction: 'us', inContact: true };
+  const facts = { underFire: 0, effective: 0, pinned: 0, contactStarted: false };
+  K.ingestEngagementFacts({ sim, squad: sq, facts });
+  K.markRan(sim, sq, 'contact');
+  assert.equal(K.shouldRun(sim, sq, 'contact'), false);
+  sq.inContact = false;
+  K.ingestEngagementFacts({ sim, squad: sq, facts });
+  assert.equal(K.shouldRun(sim, sq, 'contact'), true);
+  assert.equal(K.shouldRun(sim, sq, 'maneuver'), true);
+});
+
 test('engagement facts drive invalidation without parallel contact store', () => {
   const r = boot();
   const K = r.BattleAIV2;

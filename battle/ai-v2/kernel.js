@@ -48,9 +48,10 @@
     return st;
   }
 
-  function engagementKey(facts) {
+  function engagementKey(facts, sq) {
     if (!facts || typeof facts !== 'object') return 'none';
     return [
+      sq && sq.inContact ? 1 : 0,
       facts.contactStarted ? 1 : 0,
       +(facts.underFire || 0),
       +(facts.effective || 0),
@@ -123,16 +124,21 @@
     var wasContact = st.tactical.inContact;
     st.tactical.inContact = !!(sq.inContact || (facts && facts.underFire > 0));
     st.tactical.underFire = facts ? +(facts.underFire || 0) : 0;
-    var ek = engagementKey(facts);
+    var ek = engagementKey(facts, sq);
     if (st.contactKey !== ek) {
       st.contactKey = ek;
       emit(sim, 'contact-changed', { squad: sq }, { key: ek });
     }
-    if (st.tactical.inContact) {
+    var nowContact = st.tactical.inContact;
+    if (nowContact !== wasContact) {
+      st.dirty.add('contact');
+      st.dirty.add('maneuver');
+      emit(sim, 'contact-presence', { squad: sq }, { inContact: nowContact });
+    }
+    if (nowContact) {
       scheduleWakeup(sim, sq, 'contact', (+sim.time || 0) + 0.25, 'in-contact');
       scheduleWakeup(sim, sq, 'maneuver', (+sim.time || 0) + 0.35, 'in-contact');
-    }
-    if (st.tactical.inContact !== wasContact && !st.tactical.inContact) {
+    } else if (wasContact) {
       delete st.wakeAt.contact;
       delete st.wakeAt.maneuver;
     }
