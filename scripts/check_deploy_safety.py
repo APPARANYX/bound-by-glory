@@ -4,7 +4,8 @@
 Feeds prepare_incremental_deploy.py a remote hash state that lists sidecar JSON, FBX
 soldier-animation lab files, models and a retired module, and asserts that only the retired
 battle module is deleted, that a mass deletion is refused, and that a protected upload is refused.
-The repo's own Motion Lab files (MANAGED_LAB) are the one lab exception: uploaded, never deleted.
+The repo's own Motion Lab and two production lab controllers are exact allowlist
+exceptions: uploaded, never deleted.
 Run from the repo root (CI's deploy-plan job does).
 """
 from __future__ import annotations
@@ -67,7 +68,23 @@ def main() -> int:
     for remote in PROTECTED_REMOTE:
         if not P.is_protected(remote):
             failures.append("not protected: " + remote)
-    # The repo's own Motion Lab files are the one lab exception: uploaded, never deleted.
+    # The two production lab controllers are managed runtime files, not hand-placed labs.
+    for remote in sorted(P.MANAGED_BATTLE_LABS):
+        if P.is_protected(remote):
+            failures.append("production lab controller wrongly protected: " + remote)
+        if remote.removeprefix("battle/") not in P.BATTLE_FILES:
+            failures.append("production lab controller missing from BATTLE_FILES: " + remote)
+    # Names containing 'lab' are protected. The standalone audio stress probe
+    # has no 'lab' token, but must still stay out of the production upload lists.
+    for remote in ("battle/audio-lab.js", "battle/unknown-lab.js",
+                   "labs/hand-placed-lab.html"):
+        if not P.is_protected(remote):
+            failures.append("unmanaged lab unexpectedly unprotected: " + remote)
+    for filename in ("audio-lab.js", "full-audio-stress.js"):
+        remote = "battle/" + filename
+        if filename in P.BATTLE_FILES or any(path == remote for _, path in P.STATIC_FILES):
+            failures.append("preview-only audio diagnostic included in production uploads: " + remote)
+    # The repo's own Motion Lab files are also explicitly managed: uploaded, never deleted.
     code, deletes, out = plan(PROTECTED_REMOTE + [f"labs/{n}" for n in ("gone-lab.php",)])
     for lab in P.MANAGED_LAB:
         if P.is_protected(lab):
@@ -82,8 +99,9 @@ def main() -> int:
     if failures:
         print("DEPLOY SAFETY FAIL\n  " + "\n  ".join(failures))
         return 1
-    print("Deploy safety: only retired battle/modules/*.js are deleted; sidecar JSON, lab files and "
-          "unmanaged files are never deleted or overwritten; mass deletion is refused.")
+    print("Deploy safety: only retired battle/modules/*.js are deleted; sidecars and "
+          "unmanaged labs are protected; explicitly managed labs upload but are never deleted; "
+          "mass deletion is refused.")
     return 0
 
 

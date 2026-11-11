@@ -25,8 +25,9 @@
   files and everything else unmanaged stay put. The planner may delete only a
   `battle/modules/*.js` it deployed itself that has left the repo; any JSON other than
   `battle/build-version.json` and `Assets/audio/manifest.json`, and any path containing `lab` or
-  `sidecar`, can never be deleted or uploaded over, except the exact `MANAGED_LAB` paths, which
-  are uploaded but never deleted; more than 8 deletes in one run aborts the
+  `sidecar`, can never be deleted or uploaded over, except the exact `MANAGED_LAB` paths and the two explicit managed production
+  controllers `battle/skills-lab.js` and `battle/phase-c-compact-range.js`.
+  These exceptions are uploaded but never deleted; more than 8 deletes in one run aborts the
   deploy (`DEPLOY_MAX_DELETES` to override an intended bulk retirement). `check_deploy_safety.py`
   proves this in CI and again inside the deploy before anything is uploaded. Keep it that way:
   don't add `mirror --delete` or broaden the delete rule for production.

@@ -29,6 +29,9 @@ STATIC_FILES = [
 MANAGED_LAB = ["labs/fbx-animation-lab.html", "labs/vehicle-animation-lab.html", "labs/fbx-animation-root-lock.js", "labs/fbx-animation-compat.js",
                "labs/asset-list.php", "labs/save-calibration.php"]
 STATIC_FILES += [(path, path) for path in MANAGED_LAB]
+# The production Skills/Combat Lab controllers are repo-owned runtime JS. Only these two
+# battle/ lab paths may bypass the server-owned lab/sidecar protection.
+MANAGED_BATTLE_LABS = {"battle/skills-lab.js", "battle/phase-c-compact-range.js"}
 # Every runtime the page loads. A file missing from this list is simply never uploaded, so the
 # deployed loader ends up requesting a 404 - keep it in step with the script tags in
 # battle/battle_sim.html and the lists in battle_sim_local.php.
@@ -40,6 +43,11 @@ BATTLE_FILES = [
     "scenario-generator.js","battle-navigation.js","town-objectives.js","module-registry.js",
     "ai-policy.js","objective-system.js","battle-telemetry.js","commander-doctrine.js",
     "commander-routes.js","commander-ai.js","tactical-capability-contract.js","ai-trainer.js","battle-control.js",
+    # Production Lab controllers, chosen dynamically by battle_sim_local.php ($labScript ternary):
+    # skills-lab.js when skillsLab=1, phase-c-compact-range.js (Combat Lab) otherwise. Without
+    # these the deployed loader asks for a 404 and the lab never boots. (Not the preview-only
+    # diagnostic audio lab - audio-lab.js / full-audio-stress.js stay out, per the comment above.)
+    "skills-lab.js","phase-c-compact-range.js",
 ]
 # Imported soldier models, animation masters, the prepared clip pack (Assets/animations/prepared-clips.bin) and weapon
 # models (source .zip packs stay out). The FBX soldier backend (battle/modules/53-fbx-soldier-backend.js) reads them
@@ -89,7 +97,7 @@ def placeholders() -> set[str]:
 # id and cache epoch, so it must ship with the runtime it labels.
 GENERATED_FILES = ["build-version.json"]
 # Server-side files this deploy must never delete or overwrite: hand-placed sidecar JSON (clip,
-# model and lab metadata beside the FBX assets), the FBX soldier-animation lab, and anything else
+# model and lab metadata beside the FBX assets), server-owned labs, and anything else
 # the repo does not manage. The only JSON the deploy owns are the two it generates below.
 MANAGED_JSON = {"battle/build-version.json", "Assets/audio/manifest.json", "wargame/scenario.json"}
 PROTECTED = [re.compile(r"\.json$", re.I), re.compile(r"lab", re.I), re.compile(r"sidecar", re.I)]
@@ -98,7 +106,8 @@ DELETABLE = re.compile(r"^battle/modules/[A-Za-z0-9._-]+\.js$")
 # A handful of modules retire per release; more means the checkout or state is wrong, not a cleanup.
 MAX_DELETES = int(os.environ.get("DEPLOY_MAX_DELETES", "8"))
 def is_protected(remote: str) -> bool:
-    return remote not in MANAGED_JSON and remote not in MANAGED_LAB and any(p.search(remote) for p in PROTECTED)
+    return (remote not in MANAGED_JSON and remote not in MANAGED_LAB
+            and remote not in MANAGED_BATTLE_LABS and any(p.search(remote) for p in PROTECTED))
 def sha256(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
