@@ -269,6 +269,7 @@ test('the source reads stress exactly where the table says, file by file and mem
 test('the runtime readers are the declared decision, command-observer, display and export layers only', () => {
   assert.deepEqual(Object.keys(found.runtime).sort(), [
     'engagement.js',
+    'modules/11w-ai-v2-individual.js', // experimental ?ai=v2 soldier brain: declared in READERS, reads stress once
     'modules/14-z-ballistic-raycast.js',
     'modules/15e-squad-leader-morale-coa.js',
     'modules/15j-squad-leader-fire-and-movement.js',
@@ -281,6 +282,7 @@ test('the runtime readers are the declared decision, command-observer, display a
   ]);
   const decides = M.READERS.filter(r => r.kind === 'lever' || r.kind === 'status').map(r => r.layer);
   assert.deepEqual([...new Set(decides)].sort(), [
+    'AI V2 individual (experimental)', // ?ai=v2 only
     'Command Reception (observe-only Phase 0A)',
     'Meso (Squad Leader)',
     'Micro (Engagement)',

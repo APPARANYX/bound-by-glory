@@ -33,6 +33,7 @@ const OWNER = 'modules/17-soldier-mind.js';
 /* Per-file names bound to `BattleSoldierMind`, each read off the variable's binding in that file. */
 const ALIASES = {
   'engagement.js': ['M'],
+  'modules/11w-ai-v2-individual.js': ['M'],
   'modules/15e-squad-leader-morale-coa.js': ['M'],
   'modules/15j-squad-leader-fire-and-movement.js': ['M'],
   'modules/15k-squad-leader-reconstitution.js': ['Mind'],

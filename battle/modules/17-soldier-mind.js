@@ -86,8 +86,7 @@
      suppression spell. ?pinNerve=0 restores the uncapped legacy rule for A/B tests.
      Pin duration, shooting, stance, movement and suppression ownership are unchanged. */
   var PIN_NERVE = !(
-    typeof location !== 'undefined' &&
-    /[?&]pinNerve=(?:0|off|false)(?:&|#|$)/i.test(location.search || '')
+    typeof location !== 'undefined' && /[?&]pinNerve=(?:0|off|false)(?:&|#|$)/i.test(location.search || '')
   );
   var MODE = parse(typeof location !== 'undefined' ? location.search : '');
 
@@ -233,6 +232,16 @@
       reads: { freezeProfile: 1 },
       unit: 'recent positive stress dose -> deterministic 12..48 s freeze duration; Engagement owns freezeUntil',
       flag: '?mind= act lever and ?stressAct=freeze'
+    },
+    {
+      kind: 'status',
+      lever: null,
+      layer: 'AI V2 individual (experimental)',
+      file: 'modules/11w-ai-v2-individual.js',
+      reader: 'soldierTick (the break and recover thresholds of the V2 soldier brain)',
+      reads: { stress: 1 },
+      unit: 'stress 0..1; he breaks at 0.9 and recovers below 0.45',
+      flag: '?ai=v2 only; the file reads nothing without it'
     },
     {
       kind: 'status',

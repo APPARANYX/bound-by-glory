@@ -10,6 +10,21 @@ file needs an entry there, which a reviewer sees; a fix that removes a writer mu
 `General (Macro) → Squad Leader (Meso) → Engagement → Movement Resolver → Movement Execution → Navigation`.
 Intent flows down and status flows up. No layer rewrites another's state.
 
+### Experimental AI V2 (`?ai=v2`)
+
+An experimental, opt-in second decision stack (`battle/modules/11v`-`11y`: kernel, soldier brain, squad
+mind, side command). It is **not** part of the controller transition and is never the default: without
+`?ai=v2` the four files define `BattleAIV2` and do nothing. With it, three seams branch to V2 before the
+shipping decision path runs: `SquadAI.updateSquad` and `updateSoldier` (squad-ai.js), `choose` in the
+Movement Resolver (one proposal per man, owner `ai-v2`) and `updateCommander` (commander-ai.js). The
+retained owners still do the writing: the Resolver writes destinations, Engagement's `applyStance`
+writes stance, `publishAnchor` (15f) the anchor pair, `publishAdoptedMission` (commander-ai.js) the
+mission record; Perception, weapons, wounds, the soldier mind, navigation, transport and the objective
+service are unchanged. Orders and reports travel as delayed messages; an order is an issuer record, a
+frozen brief and the holder's own copy. Checks: `tools/ai-sim-harness/ai-v2-check.js`; cost probe:
+`scripts/probes/probe_ai_v2_cost.cjs`. Rollback: drop the flag. Browser behaviour is unverified until
+Muse returns evidence for an exact head.
+
 ### Tactical controller replacement contract (#602)
 
 The October 25 direction replaces tactical **decisions** while retaining the existing
