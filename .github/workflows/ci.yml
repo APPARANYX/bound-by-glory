@@ -35,6 +35,8 @@ jobs:
       audio: ${{ steps.diff.outputs.changed }}
       plan: ${{ steps.diff.outputs.plan }}
       runtime: ${{ steps.diff.outputs.runtime }}
+      risk_tier: ${{ steps.risk.outputs.risk_tier }}
+      full_validation: ${{ steps.risk.outputs.full_validation }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -64,6 +66,25 @@ jobs:
           else
             echo "plan=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Classify PR risk (advisory only)
+        id: risk
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts -p 'test_classify_ci_risk.py'
+          if [[ "$EVENT_NAME" != "pull_request" || -z "$BASE_SHA" ]]; then
+            echo 'risk_tier=architecture' >> "$GITHUB_OUTPUT"
+            echo 'full_validation=true' >> "$GITHUB_OUTPUT"
+            echo 'Manual or unknown event: full validation'
+          else
+            git diff --name-only "$BASE_SHA" HEAD > "$RUNNER_TEMP/changed-paths.txt"
+            python3 scripts/classify_ci_risk.py --files "$RUNNER_TEMP/changed-paths.txt" --github-output "$GITHUB_OUTPUT"
+          fi
+          echo 'Advisory only: existing CI job gates remain unchanged.'
 
   static:
     name: Syntax
