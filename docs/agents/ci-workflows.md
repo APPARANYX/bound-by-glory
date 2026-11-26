@@ -42,6 +42,21 @@ set for an A/B of a flag, and `seeds` (e.g. 100) when the flag needs a verdict a
 probes and single-seed replays only (the scripted benchmark is one seed, about two minutes: `BATTLE_BENCHMARK_WINDOWS=contact+60,every60
 BATTLE_BENCHMARK_COUNT=1 BATTLE_BENCHMARK_SEED=<seed> node scripts/run_battle_benchmark.mjs`).
 
+### Risk routing: which PR checks run
+
+`scripts/classify_ci_risk.py` classifies a PR's changed paths into one tier, and that tier alone decides which pull-request checks run. `ci.yml`'s change detector reads it for Syntax and Sim; every browser QA, probe and benchmark workflow on PRs calls the reusable [`risk-route.yml`](../../.github/workflows/risk-route.yml) first and runs only when `battle_checks` is true.
+
+| Tier | Paths | Syntax | Sim | Browser QA, probes, benchmarks |
+| --- | --- | --- | --- | --- |
+| docs | `docs/`, `*.md`, issue/PR templates | skip | skip | skip |
+| housekeeping | `scripts/housekeeping*`, `scripts/test_housekeeping*` | run | skip | skip |
+| ci-config | `.github/workflows/*.yml`, the classifier and its tests | run | run | skip |
+| audio, ui, deployment, gameplay, architecture | everything else, unknown paths, mixed changes | run | run | run |
+
+Mixed tiers escalate to architecture, except that docs, housekeeping and ci-config together stay ci-config. Benchmark and probe scripts (`scripts/run_*`, `scripts/probes/`) are never ci-config. Audio and deploy-plan jobs keep their own detectors. Path filters on each workflow still apply on top.
+
+**Off switch:** set the repository variable `CI_RISK_ROUTING=off` (all PRs, takes effect on the next run or re-run), or add the label `ci-full` to one PR and push (labels are read from the event that started the run). Manual `workflow_dispatch` and push runs always run every check. New PR-triggered QA or benchmark workflows must add the `route` job; `scripts/test_classify_ci_risk.py` fails if one is not wired.
+
 ### ElevenLabs credential verification (zero generation credits)
 
 `elevenlabs-connection-check.yml` is a permanent **manual-only, read-only** workflow.

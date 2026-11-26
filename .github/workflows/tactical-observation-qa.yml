@@ -41,7 +41,13 @@ concurrency:
 permissions:
   contents: read
 jobs:
+  # Risk routing (scripts/classify_ci_risk.py): skipped on docs, housekeeping and
+  # CI-config-only PRs; manual runs, CI_RISK_ROUTING=off and label ci-full run it all.
+  route:
+    uses: ./.github/workflows/risk-route.yml
   observer:
+    needs: route
+    if: needs.route.outputs.battle_checks == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -83,6 +89,8 @@ jobs:
           path: closeups/tactical-observation/
 
   covered-bound:
+    needs: route
+    if: needs.route.outputs.battle_checks == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -106,6 +114,8 @@ jobs:
             closeups/tactical-observation/covered-bound-*.json
 
   contact-preview:
+    needs: route
+    if: needs.route.outputs.battle_checks == 'true'
     uses: ./.github/workflows/deploy-50webs-preview.yml
     with:
       ref: ${{ github.event.pull_request.head.sha || github.sha }}

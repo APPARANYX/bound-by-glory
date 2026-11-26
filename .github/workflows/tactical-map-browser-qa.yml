@@ -16,7 +16,13 @@ concurrency:
   group: tactical-map-qa-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  # Risk routing (scripts/classify_ci_risk.py): skipped on docs, housekeeping and
+  # CI-config-only PRs; manual runs, CI_RISK_ROUTING=off and label ci-full run it all.
+  route:
+    uses: ./.github/workflows/risk-route.yml
   tactical-map:
+    needs: route
+    if: needs.route.outputs.battle_checks == 'true'
     name: Tactical map / Chromium
     runs-on: ubuntu-latest
     timeout-minutes: 25

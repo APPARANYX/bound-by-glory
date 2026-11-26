@@ -24,7 +24,13 @@ permissions:
   contents: read
 
 jobs:
+  # Risk routing (scripts/classify_ci_risk.py): skipped on docs, housekeeping and
+  # CI-config-only PRs; manual runs, CI_RISK_ROUTING=off and label ci-full run it all.
+  route:
+    uses: ./.github/workflows/risk-route.yml
   parity:
+    needs: route
+    if: needs.route.outputs.battle_checks == 'true'
     name: ${{ matrix.scenario }} · 1x/4x/8x at 20/30/60/120fps
     strategy:
       fail-fast: false
