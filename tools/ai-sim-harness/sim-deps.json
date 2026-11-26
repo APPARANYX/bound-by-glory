@@ -331,6 +331,9 @@
  "scripts/check-autonomous-contact-mobility.cjs": [
   "battle/modules/11-soldier-individuality.js"
  ],
+ "scripts/check-benchmark-early-stop.cjs": [
+  "scripts/benchmark_early_stop.cjs"
+ ],
  "scripts/check-building-interior-ingress.cjs": [
   "battle/modules/20-building-hardpoints.js",
   "battle/modules/52-survival-tactical-route.js"
@@ -3612,11 +3615,13 @@
   "scripts",
   "scripts/battle-benchmark-intent.cjs",
   "scripts/battle-hotpath-profiler.cjs",
+  "scripts/benchmark_early_stop.cjs",
   "scripts/benchmark_full_fidelity.cjs",
   "scripts/build_clip_pack.cjs",
   "scripts/check-audio-lab-contract.cjs",
   "scripts/check-audio-scheduler-queue.cjs",
   "scripts/check-autonomous-contact-mobility.cjs",
+  "scripts/check-benchmark-early-stop.cjs",
   "scripts/check-building-interior-ingress.cjs",
   "scripts/check-macro-mission-command.cjs",
   "scripts/check-meso-formation-frame-stability.cjs",

@@ -1,0 +1,127 @@
+name: Standard benchmark shard
+description: >-
+  One shard of battle-benchmark-standard.yml's seeds mode: plays its seeds with both arms on one runner and
+  uploads the reports. Shared by the first stage and the early-stop second stage, so both run the same steps.
+  The caller checks out the repository first and sets the BATTLE_* / QUERY_* environment.
+inputs:
+  shard:
+    description: Shard number (names the uploaded artifact)
+    required: true
+  runner_pool:
+    description: github or mac
+    required: false
+    default: github
+runs:
+  using: composite
+  steps:
+    - name: Require trusted main for Mac pool
+      if: ${{ inputs.runner_pool == 'mac' }}
+      shell: bash
+      run: |
+        if [ "$GITHUB_REF" != 'refs/heads/main' ]; then
+          echo "::error::Mac pool may execute only vetted main. Refusing: $GITHUB_REF" >&2
+          exit 2
+        fi
+
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Install browser harness
+      shell: bash
+      run: |
+        npm install --no-save --no-package-lock playwright@1.55.0
+        if [ "$RUNNER_OS" = 'macOS' ]; then
+          npx playwright install chromium
+        else
+          npx playwright install --with-deps chromium
+        fi
+
+    - name: Start local battle server
+      shell: bash
+      run: |
+        set -euo pipefail
+        if ! command -v php >/dev/null 2>&1; then
+          echo "::error::PHP CLI is missing on $RUNNER_NAME; install PHP on the runner." >&2
+          exit 2
+        fi
+        php -v
+        if [ "$RUNNER_OS" = 'macOS' ]; then
+          # Four pool runners share one Mac, so fixed port 8765 would collide.
+          case "$RUNNER_NAME" in
+            bbg-ivans-air-01) port=18761 ;;
+            bbg-ivans-air-02) port=18762 ;;
+            bbg-ivans-air-03) port=18763 ;;
+            bbg-ivans-air-04) port=18764 ;;
+            *) echo "::error::Unexpected Mac pool runner: $RUNNER_NAME" >&2; exit 2 ;;
+          esac
+        else
+          port=8765
+        fi
+        site_root="$(mktemp -d "$RUNNER_TEMP/bbg-battle.XXXXXXXX")"
+        ln -s "$GITHUB_WORKSPACE" "$site_root/grasstex"
+        server_log="$site_root/battle-php.log"
+        server_pidfile="$site_root/battle-php.pid"
+        printf 'BBG_BATTLE_BASE_URL=http://127.0.0.1:%s/grasstex/battle_sim_local.php\n' "$port" >> "$GITHUB_ENV"
+        printf 'BBG_BATTLE_LOG=%s\n' "$server_log" >> "$GITHUB_ENV"
+        printf 'BBG_BATTLE_PIDFILE=%s\n' "$server_pidfile" >> "$GITHUB_ENV"
+        echo "Runner $RUNNER_NAME on $RUNNER_OS: isolated PHP port $port"
+        PHP_CLI_SERVER_WORKERS=4 php -S "127.0.0.1:$port" -t "$site_root" >"$server_log" 2>&1 &
+        server_pid=$!
+        echo "$server_pid" > "$server_pidfile"
+        for i in $(seq 1 30); do
+          if ! kill -0 "$server_pid" 2>/dev/null; then
+            echo "::error::PHP server exited unexpectedly; port may be in use." >&2
+            cat "$server_log"
+            exit 1
+          fi
+          if curl -fsS "http://127.0.0.1:$port/grasstex/battle_sim_local.php?seed=healthcheck" >/dev/null; then exit 0; fi
+          sleep 1
+        done
+        cat "$server_log"
+        exit 1
+
+    - name: Run both arms on this shard's seeds
+      shell: bash
+      run: |
+        set -euo pipefail
+        case "$BATTLE_TYPE" in
+          meeting) defender_query='' ;;
+          us-defend) defender_query='defender=us' ;;
+          ge-defend) defender_query='defender=ge' ;;
+          *) echo "Unknown battle type: $BATTLE_TYPE" >&2; exit 2 ;;
+        esac
+        for arm in off on; do
+          if [ "$arm" = off ]; then extra="$QUERY_OFF"; else extra="$QUERY_ON"; fi
+          extra="${extra#[?&]}"
+          query="$defender_query"
+          if [ -n "$extra" ]; then if [ -n "$query" ]; then query="${query}&${extra}"; else query="$extra"; fi; fi
+          export BATTLE_BENCHMARK_URL="${BBG_BATTLE_BASE_URL}${query:+?$query}"
+          export BATTLE_BENCHMARK_OUTPUT="reports/$arm"
+          echo "::group::shard ${{ inputs.shard }}, arm ${arm} (${query:-no flags}), seeds ${BATTLE_BENCHMARK_SEED}-NNNN from index ${BATTLE_BENCHMARK_FIRST} x ${BATTLE_BENCHMARK_COUNT}, windows ${BATTLE_BENCHMARK_WINDOWS}"
+          node scripts/run_battle_benchmark.mjs
+          echo "::endgroup::"
+        done
+
+    - name: Upload shard reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: seeds-${{ github.run_number }}-shard-${{ inputs.shard }}
+        path: reports/
+        if-no-files-found: warn
+        retention-days: 7
+
+    - name: Stop isolated battle server
+      if: always()
+      shell: bash
+      run: |
+        if [ -n "${BBG_BATTLE_PIDFILE:-}" ] && [ -f "$BBG_BATTLE_PIDFILE" ]; then
+          kill "$(cat "$BBG_BATTLE_PIDFILE")" 2>/dev/null || true
+        fi
+
+    - name: Show server log on failure
+      if: failure()
+      shell: bash
+      run: tail -n 300 "${BBG_BATTLE_LOG:-/dev/null}" || true

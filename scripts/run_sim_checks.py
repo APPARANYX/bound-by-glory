@@ -47,6 +47,7 @@ STANDALONE = [
     "scripts/check-strategic-restart-end.cjs",
     "scripts/check-audio-scheduler-queue.cjs",
     "scripts/check-audio-lab-contract.cjs",
+    "scripts/check-benchmark-early-stop.cjs",
 ]
 ENGAGEMENT_SEEDS = ["12345", "1", "2", "3", "5", "8", "13", "21"]
 # Always run, whatever changed: the end-to-end command chain and the engagement seeds.
