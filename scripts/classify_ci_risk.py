@@ -20,7 +20,13 @@ DOC_FILES = {"AGENTS.md", "README.md", "LICENSE", ".github/PULL_REQUEST_TEMPLATE
 RANK = {"docs": 0, "housekeeping": 1, "ci-config": 1, "audio": 2, "ui": 2, "deployment": 3, "gameplay": 3, "architecture": 4}
 # Files that only steer CI itself. Benchmark and probe scripts are NOT here: they decide
 # what a benchmark measures, so they stay architecture and keep every check.
-CI_CONFIG_FILES = {"scripts/classify_ci_risk.py", "scripts/test_classify_ci_risk.py"}
+CI_CONFIG_FILES = {
+    "scripts/classify_ci_risk.py", "scripts/test_classify_ci_risk.py",
+    # Sim test selection: the runner, its tests, the read recorder and the recorded map.
+    # Any change to these makes the Sim job run every check (run_sim_checks.RUN_ALL_PATHS).
+    "scripts/run_sim_checks.py", "scripts/test_run_sim_checks.py",
+    "scripts/lib/record-repo-reads.cjs", "tools/ai-sim-harness/sim-deps.json",
+}
 # Tiers that may be combined without escalating to architecture: tooling that the game
 # never loads. Any runtime or unknown path mixed in still escalates.
 TOOLING = {"docs", "housekeeping", "ci-config"}

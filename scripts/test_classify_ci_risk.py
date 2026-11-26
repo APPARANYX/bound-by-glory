@@ -21,6 +21,12 @@ class RiskClassificationTests(unittest.TestCase):
         self.assertEqual(result["checks"], {"syntax": True, "sim": True, "battle_checks": False})
     def test_classifier_itself_is_ci_config(self):
         self.assertEqual(risk.classify(["scripts/classify_ci_risk.py", "scripts/test_classify_ci_risk.py"])["tier"], "ci-config")
+        # Sim selection machinery is CI config too, and still runs Sim (all of it).
+        result = risk.classify(["scripts/run_sim_checks.py", "tools/ai-sim-harness/sim-deps.json"])
+        self.assertEqual(result["tier"], "ci-config")
+        self.assertTrue(result["checks"]["sim"])
+        # Other harness files stay gameplay.
+        self.assertEqual(risk.classify(["tools/ai-sim-harness/harness.js"])["tier"], "gameplay")
     def test_workflow_plus_runtime_escalates(self):
         result = risk.classify([".github/workflows/mini-meeting-qa.yml", "battle/scenario-generator.js"])
         self.assertEqual(result["tier"], "architecture")
