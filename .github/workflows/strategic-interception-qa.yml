@@ -30,7 +30,7 @@ jobs:
     needs: route
     if: needs.route.outputs.battle_checks == 'true'
     name: Native 5km battle / interception ON-OFF
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4

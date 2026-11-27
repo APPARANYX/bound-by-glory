@@ -27,7 +27,7 @@ jobs:
     needs: route
     if: needs.route.outputs.battle_checks == 'true'
     name: 120m mixed cover / actual gait versus FBX
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 24
     steps:
       - uses: actions/checkout@v4

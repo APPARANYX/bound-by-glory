@@ -36,7 +36,7 @@ jobs:
       fail-fast: false
       matrix:
         scenario: [meeting, us-defend, ge-defend]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       PARITY_SCENARIO: ${{ matrix.scenario }}
