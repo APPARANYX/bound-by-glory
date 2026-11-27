@@ -98,11 +98,12 @@ env:
     squadPerformance.meanMission squadPerformance.meanMovement squadPerformance.meanControl squadPerformance.meanCohesion
 
 jobs:
+  # Battle jobs pin ubuntu-24.04: ubuntu-latest moved to 26.04 (11-27), where Playwright's chromium install fails.
   # ---- one seed: the scripted scenario ------------------------------------------------------------------------------------
   single:
     name: Scripted scenario, off vs on
     if: ${{ (github.event.inputs.seeds || '1') == '1' }}
-    runs-on: ${{ fromJSON((inputs.runner_pool == 'mac' && github.ref == 'refs/heads/main' && '["self-hosted","macOS","ARM64","bbg-mac-bench"]') || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON((inputs.runner_pool == 'mac' && github.ref == 'refs/heads/main' && '["self-hosted","macOS","ARM64","bbg-mac-bench"]') || '["ubuntu-24.04"]') }}
     timeout-minutes: ${{ fromJSON(github.event.inputs.sim_seconds || '600') > 600 && 75 || 30 }}
     permissions:
       contents: write
@@ -379,7 +380,7 @@ jobs:
   shards:
     name: Shard ${{ matrix.shard }}
     needs: plan
-    runs-on: ${{ fromJSON((inputs.runner_pool == 'mac' && github.ref == 'refs/heads/main' && '["self-hosted","macOS","ARM64","bbg-mac-bench"]') || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON((inputs.runner_pool == 'mac' && github.ref == 'refs/heads/main' && '["self-hosted","macOS","ARM64","bbg-mac-bench"]') || '["ubuntu-24.04"]') }}
     timeout-minutes: ${{ fromJSON(github.event.inputs.sim_seconds || '600') > 600 && 75 || 30 }}
     strategy:
       fail-fast: false
@@ -458,7 +459,7 @@ jobs:
     name: Shard ${{ matrix.shard }} (second stage)
     needs: [plan, decide]
     if: ${{ needs.plan.outputs.staged == 'true' && needs.decide.outputs.extend == 'true' }}
-    runs-on: ${{ fromJSON((inputs.runner_pool == 'mac' && github.ref == 'refs/heads/main' && '["self-hosted","macOS","ARM64","bbg-mac-bench"]') || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON((inputs.runner_pool == 'mac' && github.ref == 'refs/heads/main' && '["self-hosted","macOS","ARM64","bbg-mac-bench"]') || '["ubuntu-24.04"]') }}
     timeout-minutes: ${{ fromJSON(github.event.inputs.sim_seconds || '600') > 600 && 75 || 30 }}
     strategy:
       fail-fast: false
