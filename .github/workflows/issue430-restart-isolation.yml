@@ -15,7 +15,13 @@ permissions:
   contents: read
 
 jobs:
+  # Risk routing (scripts/classify_ci_risk.py): skipped on docs, housekeeping and
+  # CI-config-only PRs; manual runs, CI_RISK_ROUTING=off and label ci-full run it all.
+  route:
+    uses: ./.github/workflows/risk-route.yml
   owner-regression:
+    needs: route
+    if: needs.route.outputs.battle_checks == 'true'
     name: Wound restart owner regression
     runs-on: ubuntu-latest
     steps:

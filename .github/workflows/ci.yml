@@ -34,13 +34,17 @@ jobs:
     outputs:
       audio: ${{ steps.diff.outputs.changed }}
       plan: ${{ steps.diff.outputs.plan }}
-      runtime: ${{ steps.diff.outputs.runtime }}
       risk_tier: ${{ steps.risk.outputs.risk_tier }}
       full_validation: ${{ steps.risk.outputs.full_validation }}
+      syntax: ${{ steps.risk.outputs.syntax }}
+      sim: ${{ steps.risk.outputs.sim }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # Blobless: full history for diffs and build tags, file contents only for this
+          # commit. A full clone of the repo's history took 70-90 s per job.
+          filter: blob:none
       - name: Diff against PR base
         id: diff
         shell: bash
@@ -52,49 +56,59 @@ jobs:
           if [[ "$EVENT_NAME" != "pull_request" || -z "$BASE_SHA" ]]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "plan=true" >> "$GITHUB_OUTPUT"
-            echo "runtime=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           python3 scripts/audio_tracker.py diff "$BASE_SHA" --github-output "$GITHUB_OUTPUT"
-          if git diff --name-only "$BASE_SHA" HEAD | grep -Ev '^(AGENTS[.]md$|docs/|README[.]md$|[.]github/ISSUE_TEMPLATE/|[.]github/PULL_REQUEST_TEMPLATE[.]md$)' | grep -q .; then
-            echo "runtime=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "runtime=false" >> "$GITHUB_OUTPUT"
-          fi
           if git diff --name-only "$BASE_SHA" HEAD | grep -Eq '^(runtime-contract[.]php$|Assets/audio/|scripts/(recipes/|audio_tracker[.]py|normalize_audio[.]sh|build_voice_pitch_variants[.]sh|validate_voice_manifest[.]py|check_audio_manifest[.]py|check_weapon_clips[.]py|fetch_private_audio[.]sh|slice_weapon_shots[.]py|prepare_incremental_deploy[.]py|check_deploy_coverage[.]py|check_deploy_safety[.]py|build_version[.]py)|[.]github/workflows/(ci|deploy-50webs-php)[.]yml|battle/(battle_sim[.]html|module-registry[.]js))'; then
             echo "plan=true" >> "$GITHUB_OUTPUT"
           else
             echo "plan=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Classify PR risk (advisory only)
+      # Risk routing decides Syntax and Sim here; browser QA, probe and benchmark
+      # workflows ask the same classifier through risk-route.yml. Only docs (nothing),
+      # housekeeping (Syntax) and CI-config-only PRs (Syntax + Sim) skip anything.
+      # Off switch: repository variable CI_RISK_ROUTING=off or PR label ci-full.
+      - name: Classify PR risk
         id: risk
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          ROUTING: ${{ vars.CI_RISK_ROUTING }}
+          FORCE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci-full') }}
         run: |
           set -euo pipefail
           python3 -m unittest discover -s scripts -p 'test_classify_ci_risk.py'
+          elevated=()
+          if [[ "$ROUTING" == "off" || "$FORCE_LABEL" == "true" ]]; then
+            echo 'Risk routing is off for this run (CI_RISK_ROUTING=off or label ci-full): every check runs.'
+            elevated=(--elevated)
+          fi
           if [[ "$EVENT_NAME" != "pull_request" || -z "$BASE_SHA" ]]; then
-            echo 'risk_tier=architecture' >> "$GITHUB_OUTPUT"
-            echo 'full_validation=true' >> "$GITHUB_OUTPUT"
+            printf 'risk_tier=architecture\nfull_validation=true\nsyntax=true\nsim=true\nbattle_checks=true\n' >> "$GITHUB_OUTPUT"
             echo 'Manual or unknown event: full validation'
           else
             git diff --name-only "$BASE_SHA" HEAD > "$RUNNER_TEMP/changed-paths.txt"
-            python3 scripts/classify_ci_risk.py --files "$RUNNER_TEMP/changed-paths.txt" --github-output "$GITHUB_OUTPUT"
+            python3 scripts/classify_ci_risk.py "${elevated[@]}" --files "$RUNNER_TEMP/changed-paths.txt" --github-output "$GITHUB_OUTPUT"
           fi
-          echo 'Advisory only: existing CI job gates remain unchanged.'
+          {
+            echo '### Risk route'
+            grep -E '^(risk_tier|syntax|sim|battle_checks)=' "$GITHUB_OUTPUT" | sed 's/^/- /'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   static:
     name: Syntax
     needs: changes
-    if: needs.changes.outputs.runtime == 'true'
+    if: needs.changes.outputs.syntax == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # Blobless: full history for diffs and build tags, file contents only for this
+          # commit. A full clone of the repo's history took 70-90 s per job.
+          filter: blob:none
 
       - name: JavaScript
         run: |
@@ -201,6 +215,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # Blobless: full history for diffs and build tags, file contents only for this
+          # commit. A full clone of the repo's history took 70-90 s per job.
+          filter: blob:none
 
       - name: Install FFmpeg
         run: |
@@ -277,68 +294,47 @@ jobs:
   harness:
     name: Sim regressions
     needs: changes
-    if: needs.changes.outputs.runtime == 'true'
+    if: needs.changes.outputs.sim == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
 
-      # Lifted from .github/workflows/validate-simplify.yml, which triggered only on a branch
-      # named simplify-v134. No such branch exists, so this suite ran nowhere at all. It
-      # passes on main and the whole thing takes seconds, so it belongs on every PR.
       - name: Harness syntax
         run: |
           set -euo pipefail
           for file in tools/ai-sim-harness/*.js; do node --check "$file"; done
           echo "Parsed $(ls tools/ai-sim-harness/*.js | wc -l) harness files."
 
-      - name: Regression checks
-        run: |
-          set -euo pipefail
-          # Every check in tools/ai-sim-harness, not just the seven the old workflow named:
-          # macro-command-toggle, map-pipeline, movement-recovery and movement-state were
-          # never wired to anything.
-          for check in tools/ai-sim-harness/*-check.js; do
-            echo "--- $(basename "$check")"
-            node "$check"
-          done
-          # Standalone architecture-bound regressions outside the canonical harness glob.
-          # Keep formation-frame stability explicit: publishing the same Meso commitment must not
-          # jitter/reissue destinations. Macro mission command also exercises its VM fixture here.
-          # #361: real command/recon/physical-movement chain in nine deterministic
-          # ridge variants, including 3/4/5-person squads and legitimate holds.
-          node scripts/run_command_lifecycle_audit.cjs
-          node scripts/check-meso-formation-frame-stability.cjs
-          node scripts/check-macro-mission-command.cjs
-          # Three more standalone checks that existed but were never wired to anything (the
-          # complexity audit found them passing yet unreachable): movement-order ownership
-          # (committed Meso formation order survives resolve calls), meso-micro movement
-          # ownership (a defensive mission does not issue offensive bounds) and physical
-          # waypoint refill (rolling queues refill in place, no full physical replan).
-          node scripts/check-movement-order-ownership.cjs
-          node scripts/check-meso-micro-movement-ownership.cjs
-          node scripts/check-physical-waypoint-refill.cjs
-          node scripts/check-purposeful-contact-gait.cjs
-          node scripts/check-autonomous-contact-mobility.cjs
-          node scripts/check-building-interior-ingress.cjs
-          node scripts/check-strategic-5km.cjs
-          node scripts/check-strategic-front-lines.cjs
-          node scripts/check-strategic-reinforcements.cjs
-          node scripts/check_vehicle_lab.cjs
-          node scripts/check-strategic-truck-visual.cjs
-          node scripts/check-strategic-truck-lite.cjs
-          node scripts/check-strategic-restart-end.cjs
-          # Use the real audio scheduler in a deterministic 50v50-scale overload fixture.
-          node scripts/check-audio-scheduler-queue.cjs
-          node scripts/check-audio-lab-contract.cjs
+      # Every tools/ai-sim-harness/*-check.js, the standalone architecture regressions
+      # (lifecycle audit, Meso/Micro ownership, strategic, audio scheduler...) and the
+      # eight engagement harness seeds, now listed in scripts/run_sim_checks.py. They run in
+      # parallel. On a pull request only the checks that read a changed file run (the map
+      # is tools/ai-sim-harness/sim-deps.json, recorded by running them), plus the lifecycle
+      # audit and the engagement seeds every time. Manual runs, CI_RISK_ROUTING=off, the
+      # ci-full label and any change to the suite itself run all of them. A check that
+      # reads a file its map entry does not list fails, so the map cannot go stale quietly.
+      - name: Selection tests
+        run: python3 -m unittest discover -s scripts -p 'test_run_sim_checks.py'
 
-      - name: Engagement harness seeds
+      - name: Regression checks
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          ROUTING: ${{ vars.CI_RISK_ROUTING }}
+          FORCE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci-full') }}
         run: |
           set -euo pipefail
-          for seed in 12345 1 2 3 5 8 13 21; do
-            HARNESS_SEED="$seed" node tools/ai-sim-harness/run.js > /dev/null
-          done
-          echo "Engagement harness clean across 8 seeds."
+          if [[ "$EVENT_NAME" != "pull_request" || -z "$BASE_SHA" || "$ROUTING" == "off" || "$FORCE_LABEL" == "true" ]]; then
+            python3 scripts/run_sim_checks.py --all --summary "$GITHUB_STEP_SUMMARY"
+          else
+            git diff --name-only "$BASE_SHA" HEAD > "$RUNNER_TEMP/changed-paths.txt"
+            python3 scripts/run_sim_checks.py --changed "$RUNNER_TEMP/changed-paths.txt" --summary "$GITHUB_STEP_SUMMARY"
+          fi
 
   deploy-plan:
     name: Deploy plan
@@ -350,6 +346,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # Blobless: full history for diffs and build tags, file contents only for this
+          # commit. A full clone of the repo's history took 70-90 s per job.
+          filter: blob:none
 
       # No audio clip is in this public repo: check out the private APPARANYX/grasstex-audio at the
       # commit Assets/audio/private-audio.lock.json pins, with a private-audio deploy key, and overlay it

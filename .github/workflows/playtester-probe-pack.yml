@@ -55,7 +55,13 @@ permissions:
 run-name: Probe pack ${{ github.event.inputs.seed || 'pr-smoke' }} ${{ github.event.inputs.purpose }}
 
 jobs:
+  # Risk routing (scripts/classify_ci_risk.py): skipped on docs, housekeeping and
+  # CI-config-only PRs; manual runs, CI_RISK_ROUTING=off and label ci-full run it all.
+  route:
+    uses: ./.github/workflows/risk-route.yml
   plan:
+    needs: route
+    if: needs.route.outputs.battle_checks == 'true'
     runs-on: ubuntu-latest
     outputs:
       shards: ${{ steps.plan.outputs.shards }}
@@ -147,8 +153,8 @@ jobs:
           retention-days: 7
 
   merge:
-    needs: run
-    if: always()
+    needs: [route, run]
+    if: always() && needs.route.outputs.battle_checks == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

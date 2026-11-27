@@ -1,0 +1,58 @@
+name: ⭐ Risk route
+# Reusable: every browser QA, probe and benchmark workflow that runs on pull requests
+# calls this first and runs only when battle_checks is true. The decision comes from
+# scripts/classify_ci_risk.py (one table, shared with ci.yml's change detector).
+# Fail-safe: manual and push runs, the repository variable CI_RISK_ROUTING=off and the
+# PR label ci-full all force every check. Only docs, housekeeping and CI-config-only
+# PRs skip anything.
+on:
+  workflow_call:
+    outputs:
+      risk_tier:
+        value: ${{ jobs.classify.outputs.risk_tier }}
+      battle_checks:
+        value: ${{ jobs.classify.outputs.battle_checks }}
+
+permissions:
+  contents: read
+
+jobs:
+  classify:
+    name: Classify PR risk
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      risk_tier: ${{ steps.risk.outputs.risk_tier }}
+      battle_checks: ${{ steps.risk.outputs.battle_checks }}
+    steps:
+      # Blobless and sparse: the diff needs commits and trees only, and the job runs one
+      # script, so none of the repo's assets are downloaded.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: scripts/classify_ci_risk.py
+          sparse-checkout-cone-mode: false
+      - id: risk
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          ROUTING: ${{ vars.CI_RISK_ROUTING }}
+          FORCE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci-full') }}
+        run: |
+          set -euo pipefail
+          elevated=()
+          if [[ "$ROUTING" == "off" || "$FORCE_LABEL" == "true" ]]; then
+            echo "Risk routing is off for this run (CI_RISK_ROUTING=off or label ci-full): every check runs."
+            elevated=(--elevated)
+          fi
+          if [[ "$EVENT_NAME" != "pull_request" || -z "$BASE_SHA" ]]; then
+            echo "Manual, push or unknown event: every check runs."
+            printf 'risk_tier=architecture\nbattle_checks=true\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git diff --name-only "$BASE_SHA" HEAD > "$RUNNER_TEMP/changed-paths.txt"
+          python3 scripts/classify_ci_risk.py "${elevated[@]}" --files "$RUNNER_TEMP/changed-paths.txt" --github-output "$GITHUB_OUTPUT"
+          echo "### Risk route" >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^(risk_tier|battle_checks)=' "$GITHUB_OUTPUT" | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"

@@ -42,7 +42,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Risk routing (scripts/classify_ci_risk.py): skipped on docs, housekeeping and
+  # CI-config-only PRs; manual runs, CI_RISK_ROUTING=off and label ci-full run it all.
+  route:
+    uses: ./.github/workflows/risk-route.yml
   evidence:
+    needs: route
+    if: needs.route.outputs.battle_checks == 'true'
     name: Select unchanged battle evidence
     runs-on: ubuntu-latest
     outputs:
@@ -243,8 +249,8 @@ jobs:
 
   acceptance-report:
     name: Aggregate strategic diagnostic acceptance
-    needs: [evidence, diagnostic-replay]
-    if: always() && !cancelled()
+    needs: [route, evidence, diagnostic-replay]
+    if: always() && !cancelled() && needs.route.outputs.battle_checks == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
