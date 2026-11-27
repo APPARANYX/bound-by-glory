@@ -16,7 +16,7 @@ jobs:
   paired-tempo:
     needs: route
     if: needs.route.outputs.battle_checks == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4

@@ -35,7 +35,7 @@ jobs:
   smoke-profile:
     if: github.event_name == 'push'
     name: ${{ matrix.battle_type }} · ${{ matrix.label }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -104,7 +104,7 @@ jobs:
   manual-profile:
     if: github.event_name == 'workflow_dispatch'
     name: manual · ${{ inputs.battle_type }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       BATTLE_BENCHMARK_SOURCE_SHA: ${{ github.sha }}
