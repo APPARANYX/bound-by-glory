@@ -3,8 +3,7 @@
 | Area | Entry points | Status |
 | --- | --- | --- |
 | **Battle Sim** (WW2 squad-AI lab, 50v50 US vs GE) | `battle_sim.php` → `battle/battle_sim.html`; runtime in `battle/*.js`, `battle/modules/NN-*.js` (auto-discovered, load in numeric order) | Active. Proving ground for systems that later move to `ww2fps`. |
-| Grass renderer | `game.html`, `grass-api.js`, `grass-streaming.js`, `grass-realism.js`, `grass-effects.js`, `terrain-demo.js`, `terrain-baked.js` | Ported to `ww2fps`; grass is **off** unless `?grass=1` or `window.GRASS_SIM_ENABLED=true`. |
-| Terrain bake | `tools/terrain-bake/` | Prototype. |
+| Terrain bake | `tools/terrain-bake/` | Offline prototype (heightfield, splat and graded roads from `map.svg`). Its only runtime consumer, the grass demo page, was removed; the grass renderer lives in `ww2fps`. |
 | Learning/telemetry backend | `battle_learning.php`, `battle_policy.php`, `battle_log*.php`, `battle_metrics.php` ("What We Learned" page) | Active. The page no longer reads or writes the policy and learning endpoints: the genome is stashed (below). POSTs to `battle_policy.php` and `battle_learning.php` need an `X-Write-Key` header whose SHA-256 matches `state/write-key.php` on the host (`<?php return '<hash>';`, placed by hand, never deployed); with no key file writes are off. |
 | FBX Motion Lab | `labs/fbx-animation-lab.html` (calibration workbench), in-page **Motion Lab** button | Previews clips; measures hand/weapon contacts and saves per-model sidecars the game loads. |
 

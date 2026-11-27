@@ -31,8 +31,9 @@
   deploy (`DEPLOY_MAX_DELETES` to override an intended bulk retirement). `check_deploy_safety.py`
   proves this in CI and again inside the deploy before anything is uploaded. Keep it that way:
   don't add `mirror --delete` or broaden the delete rule for production.
-- `Assets/terrain/{terrain.json,terrain.bin,splat.png,roaduv.png}` exist only on the host. **Don't
-  add placeholders** with those names.
+- `Assets/terrain/{terrain.json,terrain.bin,splat.png,roaduv.png}` exist only on the host. They fed
+  the removed grass demo page and nothing in the repository reads them now. **Don't add placeholders**
+  with those names.
 - `runtime-contract.php` owns server-side optional-module selection and preview query forwarding.
   Both loaders and the launcher require it; the deploy plan uploads this exact helper before
   dependent loaders. Actions preview packaging copies it when present, preserving historical
