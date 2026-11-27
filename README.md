@@ -2,8 +2,8 @@
 
 # Bound by Glory
 
-WW2 squad-AI Battle Sim lab (Babylon.js), plus the original grass/terrain rendering prototype
-now ported to `ww2fps`.
+WW2 squad-AI Battle Sim lab (Babylon.js). The original grass/terrain rendering prototype moved
+to `ww2fps` and was removed from this repository.
 
 Live: `https://test.ivandpopov.com/bound-by-glory/battle_sim.php`
 

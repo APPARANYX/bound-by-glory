@@ -40,5 +40,5 @@ if (is_file($fallback) && is_readable($fallback)) {
 }
 
 header('HTTP/1.1 503 Service Unavailable');
-echo '<!doctype html><html><body style="font-family:Arial;background:#111;color:#fff;padding:30px"><h1>Grass demo unavailable</h1><p>GitHub could not be reached and local index.html was not found.</p></body></html>';
+echo '<!doctype html><html><body style="font-family:Arial;background:#111;color:#fff;padding:30px"><h1>Bound by Glory unavailable</h1><p>GitHub could not be reached and local index.html was not found.</p></body></html>';
 ?>

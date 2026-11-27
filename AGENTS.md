@@ -35,7 +35,6 @@ Read this file first. Load **only the reference documents relevant to the task**
 | Models, weapons, animation | [Soldiers, weapons and animation](docs/agents/soldiers-weapons-animation.md) |
 | Audio changes (only when explicitly requested) | [Audio](docs/agents/audio.md) |
 | Deployment and asset publishing | [Deployment and assets](docs/agents/deployment-assets.md) |
-| Grass and terrain | [Grass and terrain](docs/agents/grass-terrain.md) |
 | Tuning and genome parameters | [Tunables inventory](docs/reference/TUNABLES.md) |
 | Local conversation cleanup | [Conversation maintenance](docs/agents/conversation-maintenance.md) |
 
