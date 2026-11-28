@@ -101,7 +101,9 @@ jobs:
       # about a second. Links and anchors, required agent files, AGENTS.md size, retired
       # instructions, the workflow inventory and Spec Kit artifact consistency.
       - name: Agent docs and Spec Kit artifacts
-        run: python3 scripts/check_agent_docs.py --measure
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_check_agent_docs.py'
+          python3 scripts/check_agent_docs.py --measure
 
   static:
     name: Syntax

@@ -10,8 +10,9 @@ Checks (each is mechanical; nothing scores prose):
   budget      AGENTS.md stays small; the mandatory start set stays under its budget
   obsolete    retired instructions do not come back into the routing documents
   workflows   every .github/workflows/*.yml appears in docs/agents/ci/workflows.md
-  speckit     specs/*/spec.md has a valid Status; tasks have unique IDs; ticked tasks cite evidence;
-              in an Active or Draft spec every FR-NNN is served by a task
+  speckit     specs/*/spec.md has a valid Status; tasks have unique IDs and name only defined FRs and
+              stories; ticked tasks cite evidence; in an Active spec every FR-NNN is served (directly or
+              through its story's **Requirements** line) and every story has an [EV] evidence task
 Run by the `changes` job of .github/workflows/ci.yml on every pull request.
 """
 import argparse
@@ -45,6 +46,8 @@ REQUIRED = [
     ".muse/commands/speckit.specify.md",
     ".muse/commands/speckit.implement.md",
     ".muse/commands/speckit.converge.md",
+    ".specify/templates/overrides/spec-template.md",
+    ".specify/templates/overrides/tasks-template.md",
 ]
 
 # Retired instructions: (pattern, why). Checked in the routing documents only.
@@ -158,31 +161,76 @@ def check_workflows(errors):
             errors.append(f"workflows: {name} is not listed in docs/agents/ci/workflows.md")
 
 
+TICK_EVIDENCE = re.compile(r"#\d+|\b[0-9a-f]{7,40}\b|https?://")
+
+
+def story_requirements(spec_text):
+    """{'US1': {'FR-001', ...}} from each '### User Story N' section's '**Requirements**:' line."""
+    out = {}
+    parts = re.split(r"^### User Story (\d+)\b.*$", spec_text, flags=re.M)
+    for i in range(1, len(parts) - 1, 2):
+        m = re.search(r"^\*\*Requirements\*\*:\s*(.*)$", parts[i + 1].split("\n## ")[0], re.M)
+        out["US" + parts[i]] = set(re.findall(r"FR-\d{3}", m.group(1))) if m else set()
+    return out
+
+
+def analyze_spec(spec_text, tasks_text, label="spec"):
+    """Errors for one feature. tasks_text is None when tasks.md does not exist.
+
+    Draft: Status, IDs and references are checked; coverage is not (tasks may not exist yet).
+    Active: tasks.md must exist; every FR is served directly (a task names it) or through a story
+    whose '**Requirements**:' line lists it; every story has at least one [EV] evidence task.
+    Implemented/Superseded/Abandoned/Deferred: only Status, IDs, references and ticks.
+    Limits: this checks structure, not whether a task really proves its requirement.
+    """
+    errs = []
+    m = re.search(r"^\*\*Status\*\*:\s*([A-Za-z]+)", spec_text, re.M)
+    status = m.group(1) if m else None
+    if status not in SPEC_STATUSES:
+        errs.append(f"{label}: Status must be one of {sorted(SPEC_STATUSES)}, found {status!r}")
+    defined = set(re.findall(r"\*\*(FR-\d{3})\*\*", spec_text))
+    stories = story_requirements(spec_text)
+    for us, frs in sorted(stories.items()):
+        for fr in sorted(frs - defined):
+            errs.append(f"{label}: {us} lists {fr}, which the spec does not define")
+    if tasks_text is None:
+        if status == "Active":
+            errs.append(f"{label}: an Active spec needs tasks.md")
+        return errs
+    task_lines = re.findall(r"^\s*- \[( |x|X)\] (T\d{3})\b(.*)$", tasks_text, re.M)
+    ids = [t[1] for t in task_lines]
+    for dup in sorted({i for i in ids if ids.count(i) > 1}):
+        errs.append(f"{label}: task ID {dup} is used more than once")
+    served, story_tasks, evidence = set(), set(), set()
+    for box, tid, rest in task_lines:
+        if box in "xX" and not TICK_EVIDENCE.search(rest):
+            errs.append(f"{label}: {tid} is ticked but cites no PR, commit or link")
+        frs = set(re.findall(r"FR-\d{3}", rest))
+        uss = set(re.findall(r"\[(US\d+)\]", rest))
+        for fr in sorted(frs - defined):
+            errs.append(f"{label}: {tid} names {fr}, which the spec does not define")
+        for us in sorted(uss - set(stories)):
+            errs.append(f"{label}: {tid} names [{us}], which the spec does not define")
+        served |= frs
+        story_tasks |= uss
+        if "[EV]" in rest:
+            evidence |= uss
+        for us in uss & set(stories):
+            served |= stories[us]
+    if status == "Active":
+        for fr in sorted(defined - served):
+            errs.append(f"{label}: {fr} is not served by any task (name it in a task or in a story's **Requirements** line)")
+        for us in sorted(set(stories) - evidence):
+            errs.append(f"{label}: {us} has no [EV] evidence task")
+    return errs
+
+
 def check_speckit(errors):
     for spec in sorted(glob.glob(os.path.join(ROOT, "specs/*/spec.md"))):
-        d = os.path.dirname(spec)
-        text = open(spec, encoding="utf-8").read()
-        m = re.search(r"^\*\*Status\*\*:\s*([A-Za-z]+)", text, re.M)
-        status = m.group(1) if m else None
-        if status not in SPEC_STATUSES:
-            errors.append(f"speckit: {rel(spec)}: Status must be one of {sorted(SPEC_STATUSES)}, found {status!r}")
-        tasks_path = os.path.join(d, "tasks.md")
-        if not os.path.exists(tasks_path):
-            continue
-        tasks = open(tasks_path, encoding="utf-8").read()
-        task_lines = re.findall(r"^\s*- \[( |x|X)\] (T\d{3})\b(.*)$", tasks, re.M)
-        ids = [t[1] for t in task_lines]
-        for dup in sorted({i for i in ids if ids.count(i) > 1}):
-            errors.append(f"speckit: {rel(tasks_path)}: task ID {dup} is used more than once")
-        for box, tid, rest in task_lines:
-            if box in "xX" and not re.search(r"#\d+|\b[0-9a-f]{7,40}\b|https?://", rest):
-                errors.append(f"speckit: {rel(tasks_path)}: {tid} is ticked but cites no PR, commit or link")
-        if status in ("Draft", "Active"):
-            served = set(re.findall(r"FR-\d{3}", tasks))
-            stories = set(re.findall(r"\[(US\d+)\]", tasks))
-            for fr in sorted(set(re.findall(r"\*\*(FR-\d{3})\*\*", text))):
-                if fr not in served and not stories:
-                    errors.append(f"speckit: {rel(tasks_path)}: {fr} is not served by any task")
+        tasks_path = os.path.join(os.path.dirname(spec), "tasks.md")
+        tasks = open(tasks_path, encoding="utf-8").read() if os.path.exists(tasks_path) else None
+        for e in analyze_spec(open(spec, encoding="utf-8").read(), tasks, rel(os.path.dirname(spec))):
+            errors.append("speckit: " + e)
 
 
 def measure(groups):

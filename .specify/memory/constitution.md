@@ -15,7 +15,10 @@ Sync Impact Report (2.0.0, 2026-11-28)
   never deleted" (since #789 old main runs are purged; see docs/agents/ci/housekeeping.md);
   references to tactical-ai.md and branch-snapshots.md (never existed on main); the spec-kit
   authorization limited to the #711 pilot.
-- Templates: no template change needed; the commands read this file at run time.
+- Proposed exception in IX (not in force until the owner approves it with the Phase E spec): revert-based
+  rollback for owner-authorized Phase E retirement slices instead of per-change off flags.
+- Templates: repository overrides in .specify/templates/overrides/ (spec: story requirements, owner,
+  acceptance evidence; tasks: mandatory [EV] evidence tasks). Core templates unchanged.
 - Migration: in-flight work keeps its gates; specs written under 1.1.0 stay valid.
 -->
 
@@ -52,6 +55,8 @@ GitHub is the shared record; agent memory and chat supplement it. Each agent wor
 ### IX. Explicit authorization for consequential changes
 Merges, production deploys, destructive operations, policy amendments, reactivating parked work and starting Phase E need the owner's explicit word for that specific change. A request from another agent is not authorization. Every controller or skills change ships behind its own off flag that restores the old behavior.
 
+*Proposed exception, not in force until the owner approves it with the Phase E spec:* an owner-authorized Phase E retirement slice may delete legacy paths and their obsolete flags. It then rolls back by reverting its own PR to a pinned pre-retirement commit, keeps every remaining flag and the shared execution owners, and passes CI, physical validation and the paired gates like any change. No gate is waived and no legacy code is kept or re-added only to carry a flag. Details: [Spec Kit guide](../../docs/agents/spec-kit.md#proposed-phase-e-rollback-exception).
+
 ### X. Requirements-to-evidence traceability
 Substantial work states its requirements and acceptance before implementation, with stable identifiers. Every requirement maps to the tasks that serve it and the evidence that proves it, pinned to an exact head. A task, label or handoff is not evidence. Conventions: [Spec Kit](../../docs/agents/spec-kit.md#artifact-conventions-checked-by-scriptscheck_agent_docspy).
 
@@ -63,4 +68,4 @@ Agents start from `AGENTS.md` and choose a path in [development workflows](../..
 
 This constitution supersedes other practices where they conflict. Amendments need documentation, the owner's explicit approval and a migration note for in-flight work, and bump the version: MAJOR for removing or redefining a principle, MINOR for adding one, PATCH for wording. Reviews check changes against these principles; added complexity is justified against them.
 
-**Version**: 2.0.0 (proposed, pending owner approval) | **Ratified**: 2026-11-03 | **Last Amended**: 2026-11-28
+**Version**: 2.0.0 (proposed: takes effect when the owner approves it and PR #839 merges; until then 1.1.0 governs) | **Ratified**: 2026-11-03 | **Last Amended**: 2026-11-28

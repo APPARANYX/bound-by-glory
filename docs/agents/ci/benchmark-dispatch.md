@@ -1,6 +1,8 @@
 # Benchmark dispatch
 
-**Kind:** current CI contract. Index: [CI and workflows](../ci-workflows.md). **Read when:** a benchmark has to be launched or its inputs chosen. **Who launches:** Muse/Kit launches and reruns browser-backed benchmarks ([ownership](../handoffs.md#muse-browser-qa-ownership)). Other agents prepare the request (this page says what to ask for) and read the results.
+**Kind:** current CI contract. Index: [CI and workflows](../ci-workflows.md). **Read when:** a benchmark has to be launched or its inputs chosen. **Who launches:** only Muse/Kit. Pushing a launcher request (or pressing a `workflow_dispatch` button, or running a local browser probe, even on one seed) **is** execution, and it is reserved for Muse/Kit ([ownership](../handoffs.md#muse-browser-qa-ownership)). Other agents choose the inputs from this page, then post the exact-head handoff with the `needs-kit-testing` label; they never push the triggering branch or file.
+
+**Before any launch:** the exact-source [Skills Lab preflight](../testing/skills-lab.md#preflight-before-any-battle-benchmark) must have passed, with physical evidence for the skill being benchmarked, and its run and head SHA go in the handoff.
 
 <!-- Moved from docs/agents/ci-workflows.md at d15687b. The temporary per-topic dispatch workflow section was removed: the permanent launcher below replaced it. -->
 
@@ -23,7 +25,10 @@ set for an A/B of a flag, and `seeds` (e.g. 100) when the flag needs a verdict a
 probes and single-seed replays only (the scripted benchmark is one seed, about two minutes: `BATTLE_BENCHMARK_WINDOWS=contact+60,every60
 BATTLE_BENCHMARK_COUNT=1 BATTLE_BENCHMARK_SEED=<seed> node scripts/run_battle_benchmark.mjs`).
 
-## Permanent agent benchmark launcher
+## Permanent agent benchmark launcher (Muse/Kit's procedure)
+
+The steps below are how Muse/Kit launches. Other agents read them only to fill in the request.
+
 
 The canonical [⭐ Agent Benchmark Launcher](../../../.github/workflows/agent-benchmark-launcher.yml) accepts a JSON request placed at `.github/benchmark-request.json` on a **new branch matching** `work/benchmark-launch/**`. Use GitHub create-branch (from main or the desired source) and create-file on that branch. Its push triggers the launcher, which invokes an **existing** workflow through authenticated `gh workflow run`. The launcher does not run any benchmark directly and does not change gameplay. Do not merge launch branches.
 

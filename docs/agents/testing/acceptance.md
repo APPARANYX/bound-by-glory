@@ -11,7 +11,7 @@
 
 ## Rollback
 
-- Every controller or skills change ships behind its own off flag that restores the old behavior (owner rule 2026-10-31), and legacy play (`?tacticalController=legacy`) must stay equal to `main`.
+- Every controller or skills change ships behind its own off flag that restores the old behavior (owner rule 2026-10-31), and legacy play (`?tacticalController=legacy`) must stay equal to `main`. A [proposed Phase E exception](../spec-kit.md#proposed-phase-e-rollback-exception) (revert-based rollback for deliberately removed legacy paths) is not in force until the owner approves it.
 - A candidate that regresses movement feel is reverted as a unit.
 - `main` deploys to production on every push; a bad merge is rolled back by reverting its squash commit in a new PR, through the same CI gates.
 
