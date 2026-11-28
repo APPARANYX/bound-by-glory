@@ -20,6 +20,10 @@ on:
         description: Simulated seconds to profile
         required: false
         default: '120'
+      query:
+        description: 'Extra page flags, added after the defender (e.g. strategicInterception=0&tacticalController=legacy for the legacy arm). Default: the 2 km tactical benchmark map with the default controller.'
+        required: false
+        default: 'strategicInterception=0'
   push:
     branches:
       - main
@@ -111,6 +115,7 @@ jobs:
       BATTLE_PROFILE_TYPE: ${{ inputs.battle_type }}
       BATTLE_PROFILE_SEED: ${{ inputs.seed }}
       BATTLE_PROFILE_SECONDS: ${{ inputs.sim_seconds }}
+      BATTLE_PROFILE_QUERY: ${{ inputs.query }}
       BATTLE_PROFILE_STEP: '0.15'
       BATTLE_PROFILE_SNAPSHOT_SECONDS: '30'
       BATTLE_PROFILE_OUTPUT: reports/profile
@@ -143,6 +148,10 @@ jobs:
             ge-defend) url='http://127.0.0.1:8765/grasstex/battle_sim_local.php?defender=ge' ;;
             *) echo "Unknown battle type: ${BATTLE_PROFILE_TYPE}" >&2; exit 2 ;;
           esac
+          if [ -n "${BATTLE_PROFILE_QUERY}" ]; then
+            case "$url" in *\?*) url="${url}&${BATTLE_PROFILE_QUERY}" ;; *) url="${url}?${BATTLE_PROFILE_QUERY}" ;; esac
+          fi
+          echo "Profiling ${url}"
           echo "BATTLE_PROFILE_URL=$url" >> "$GITHUB_ENV"
       - name: Profile deterministic battle
         run: node scripts/profile_battle_hotpaths.mjs

@@ -3763,6 +3763,7 @@
   "scripts/probes/retreat-episodes.js",
   "scripts/probes/route-361.js",
   "scripts/probes/route-437.js",
+  "scripts/probes/s1-skill-episodes.js",
   "scripts/probes/scouts-forward.js",
   "scripts/probes/sidearm.js",
   "scripts/probes/soldier-beliefs.js",
@@ -3787,6 +3788,7 @@
   "scripts/probes/timeline.js",
   "scripts/probes/unreachable-men.js",
   "scripts/probes/vacant-objective.js",
+  "scripts/probes/writer-conflict-sites.js",
   "scripts/process_benchmark_results.cjs",
   "scripts/profile_battle_hotpaths.mjs",
   "scripts/profile_command_read_model.cjs",
@@ -4903,6 +4905,13 @@
   "battle/obstacle-field.js",
   "battle/squad-ai.js",
   "battle/weapons.js",
+  "tools/ai-sim-harness/harness.js",
+  "tools/ai-sim-harness/module-loader.js",
+  "tools/ai-sim-harness/squad-command-stack.js"
+ ],
+ "tools/ai-sim-harness/s1-skill-episodes-check.js": [
+  "battle/battle-sim.js",
+  "scripts/probes/s1-skill-episodes.js",
   "tools/ai-sim-harness/harness.js",
   "tools/ai-sim-harness/module-loader.js",
   "tools/ai-sim-harness/squad-command-stack.js"
@@ -7771,5 +7780,22 @@
  "tools/ai-sim-harness/wound-restart-isolation-check.js": [
   "battle/modules/14-wound-model.js"
  ],
- "tools/ai-sim-harness/write-endpoint-auth-check.js": []
+ "tools/ai-sim-harness/write-endpoint-auth-check.js": [],
+ "tools/ai-sim-harness/writer-conflict-sites-check.js": [
+  "battle/battle-sim.js",
+  "battle/core-runtime.js",
+  "battle/engagement.js",
+  "battle/modules/13k-tactical-soldier-policy.js",
+  "battle/modules/19-engagement-cover-positions.js",
+  "battle/modules/19a-engagement-stress-reactions.js",
+  "battle/modules/19b-engagement-fire-stance.js",
+  "battle/modules/36-order-provenance.js",
+  "battle/obstacle-field.js",
+  "battle/squad-ai.js",
+  "battle/weapons.js",
+  "scripts/probes/writer-conflict-sites.js",
+  "tools/ai-sim-harness/harness.js",
+  "tools/ai-sim-harness/module-loader.js",
+  "tools/ai-sim-harness/squad-command-stack.js"
+ ]
 }
