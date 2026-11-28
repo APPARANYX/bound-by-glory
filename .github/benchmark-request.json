@@ -1,0 +1,13 @@
+{
+  "benchmark": "standard",
+  "ref": "claude/project-thread-m7x8vq",
+  "seeds": 40,
+  "query_off": "",
+  "query_on": "",
+  "battle_type": "meeting",
+  "sim_seconds": 600,
+  "runner_pool": "github",
+  "origin_agent": "kit",
+  "correlation_id": "pr835-gate-control",
+  "purpose": "PR #835 gate dispatch 1/3: control (both arms empty) - expect stop after 20 seeds, inert reason"
+}
