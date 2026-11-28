@@ -26,6 +26,8 @@ CI_CONFIG_FILES = {
     # Any change to these makes the Sim job run every check (run_sim_checks.RUN_ALL_PATHS).
     "scripts/run_sim_checks.py", "scripts/test_run_sim_checks.py",
     "scripts/lib/record-repo-reads.cjs", "tools/ai-sim-harness/sim-deps.json",
+    # Docs and Spec Kit artifact checks, run by ci.yml's changes job.
+    "scripts/check_agent_docs.py", "scripts/test_check_agent_docs.py",
 }
 # Tiers that may be combined without escalating to architecture: tooling that the game
 # never loads. Any runtime or unknown path mixed in still escalates.

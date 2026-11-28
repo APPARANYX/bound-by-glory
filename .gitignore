@@ -40,3 +40,7 @@ decal-sheets.png
 /Assets/audio/**/*.mp3
 /Assets/audio/**/*.caf
 /Assets/audio/**/*.ogg
+
+# Per-machine agent hook settings (copy from the *.local.example.json templates)
+.claude/settings.local.json
+.codex/hooks.json

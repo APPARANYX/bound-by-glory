@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-03
 
-**Status**: Draft
+**Status**: Superseded (reconciled 2026-11-28; see the reconciliation at the top of [tasks.md](tasks.md). Not to be reactivated without the owner's word.)
 
 **Input**: User description: "Reduce the new Meso controller geometry query volume so the 120m lab ratio meets the 1.25x acceptance gate" (Spec Kit pilot for the current performance work, issue #711)
 

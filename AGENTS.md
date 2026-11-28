@@ -1,41 +1,51 @@
 # Agent entry point
 
-Read this file first. Load **only the reference documents relevant to the task**, except the shared working rules, which are mandatory. Inspect the current branch, relevant code, and any existing PR diff before editing. Do not assume that a listed feature is unfinished without checking the code and current PRs.
+Bound by Glory (repo `APPARANYX/bound-by-glory`, formerly grasstex): a WW2 squad battle simulation. Owner: Ivan (`Teethree89`).
 
-## Universal requirements
+## Start here
 
-- **THE TACTICAL CONTROLLER IS A REBUILD, NOT A REFORMAT. DO NOT TRY TO MATCH LEGACY RESULTS.** The job is to PORT every skill and behavior to the new controller (`?tacticalController=new`), one owner per capability, reusing the existing skill logic. It is NOT to reproduce legacy numbers (fire volume, retreats, loop alerts, wall time, scores). Behaviors WILL change and may improve; that is the goal, and tuning comes later. Never cut, cap or retune controller behavior just to make a controller-on vs legacy comparison look equal. Judge controller-on runs by real broken behavior (runtime errors, writer conflicts, stalls, unexplained silence, lost skills) and report differences from legacy as information.
-- **`[PARKED]` pull requests are reference-only, not active work.** Do not continue implementation, fix failures, request or run tests/benchmarks, reapply testing labels, mark ready for review, or merge a parked PR unless the user explicitly reactivates that specific PR. Draft status reinforces the pause but does not enforce it. Parked PRs remain valid references for **ideas, architecture, algorithms, code, tests, and concrete solutions**; agents may inspect and selectively adapt useful material into separately authorized work on the production roadmap, with normal ownership, validation, and PR gates. Referencing or reusing a solution does **not** reactivate the parked PR or authorize its tests. Treat the `[PARKED]` title prefix as authoritative even if older comments or labels request tests.
-- Read [shared working rules](docs/agents/working-rules.md) before changing code. They define benchmark methodology, preview requirements, validation, PR/CI/merge safety, scope restrictions, and production deployment.
-- **Muse owns browser testing repository-wide.** Route all interactive and headless browser QA, browser probes, Playwright/Puppeteer/CDP runs and browser CPU profiles through Muse. Other agents prepare changes and offline checks, then use the [Muse browser QA handoff](docs/agents/working-rules.md#muse-browser-qa-ownership). Existing automatic CI and exact-head acceptance gates remain required; a posted handoff is not an executed test.
-- **Agent benchmark launcher:** [⭐ Agent Benchmark Launcher](.github/workflows/agent-benchmark-launcher.yml) selects the existing standard, causal, targeted-fire, timescale, matrix-smoke or full-matrix workflow. To run through the GitHub connector, create a fresh `work/benchmark-launch/<topic>` branch from the requested source, add `.github/benchmark-request.json` with `{"benchmark":"standard","seed":"your-seed","seeds":"1","battle_type":"meeting"}`, and push the request. The launcher runs on that branch push and dispatches the existing benchmark using `ref` (default `main`); verify the resulting *child benchmark* Actions run and report, not just the launcher. Full matrix requires `confirm_full_matrix: true` and `ref: main`. See [CI and workflows](docs/agents/ci-workflows.md) for options; never create another temporary dispatcher workflow.
-- **Mandatory Skills Lab preflight before every benchmark:** The [native Tactical Skills Lab](battle/skills-lab.js) (`?skillsLab=1&tacticalController=new`) is the **standard skills test**. Before dispatching any standard, causal, targeted-fire, probe-pack, timescale, matrix-smoke/full, or other battle/AI benchmark, first run [Native Tactical Skills Lab QA](.github/workflows/tactical-skills-lab-qa.yml) against the **exact same source commit** and require a passing `scripts/probes/probe_skills_lab.cjs` result. Verify the correct new/legacy controller flag, live soldier/target identities, real simulation steps, skill/action ownership, and repeatable same-seed reset. Then exercise **the specific skill being benchmarked** in the visible lab and inspect real owner receipts, physical motion, fire/suppression and cancellation reasons; do not count staged casualties, synthetic contact, or fixtures as spontaneous tactical success. **If the lab preflight fails, is unavailable for that source, or reveals a skill regression, fix it before spending CI time on larger battle benchmarks; do not treat a green launch job as a lab pass.** Include the passing lab run/head SHA in the benchmark handoff. Lab success is a prerequisite, **not** sufficient evidence of realistic battle behavior; retain equal-seed full-battle A/B acceptance afterward.
-- State success criteria before implementation; validate them and report actual results. Never claim a test, visual check, deployment, or merge that was not verified.
-- **Requesting Kit's browser/VM testing:** apply the `needs-kit-testing` label to the issue or PR and state the branch/PR, what to test (120 m lab profile, 600 s deterministic validation, or paired benchmark), and the acceptance criteria. Mentioning "Muse" or "Kit" in the body or a comment does not trigger anything, and @mentions do not reach Kit — the label is the only signal. Kit's hook polls every 5 minutes; GitHub label indexing can lag ~4–5 minutes. **Every push of a new commit to a PR Kit is testing gets its test request (that SHA, the runs and flags, acceptance, whether an older running gate stays valid) posted in the same step as the push** ([handoff rules](docs/agents/working-rules.md#route-work-to-muse)). When Kit picks up a request it acknowledges first (👍 on the request comment), sends Ivan the test-plan message in chat, and posts a start comment on the PR with a time estimate, then posts the verdict when the gate finishes. When the verdict is posted Kit removes `needs-kit-testing`; for an unambiguous verdict it also applies `test-passed` (acceptance met) or `test-failed` (acceptance not met or a regression found). Blocked, incomplete, or mixed verdicts get no result label — the verdict comment is the record. A re-test needs the label re-applied AND a new head: the hook only wakes on a head change, so re-applying the label on the same head will not re-wake Kit.
-- `main` deploys to production. Develop on a dedicated branch and merge only after that PR's own head CI finishes green. Follow the post-merge deploy and branch-housekeeping checks in the working rules.
-- Preserve existing ownership boundaries and contracts. Read the relevant architecture/reference material before modifying behavior.
-- Keep completed work separate from outstanding work; check the current implementation rather than treating historical notes as a task list.
-- Do not create new roadmap/summary Markdown files for routine work. Update the relevant existing reference only when its documented contract or behavior changes.
+1. Read this file and the [working rules](docs/agents/working-rules.md) (mandatory).
+2. Pick a [development workflow](docs/agents/development-workflows.md): full spec, lightweight fix, or maintenance. Say which in your first update.
+3. Read only the references your task needs (map below). Do not load every reference.
+4. Check the current branch, code and open PRs before editing. Historical notes are not a task list.
 
-- **Check retired work before rewriting a fix.** The 2026-11-08 cleanup kept these closed, unmerged PRs and archive tags as reuse candidates; when you hit the same problem, read them first and port only what still applies to current `main` (behind its own off flag, gated like any change):
-  - *Speed (controller wall time):* closed PRs #707-#750, the route, cover, nav and sight caches (static wall broad-phase #708, sight-candidate cache #749, nav reuse #725-#743). Some were redone in #767-#770 and #773; #733 was rejected (stale truck clearance).
-  - *Soldier behaviour (Micro slices, roadmap section 8):* #764 a fleeing man's own destination across a squad rebrief, #766 a prone man after his contact march arrived, #763 refuge posture and released capture assignments on retreat, #774 combat holds across rebriefs, #696 a living man's station claim when the roster changes, #761 reload stand/crouch flicker (largely covered by #776 and #784).
-  - *Cover tests:* tags `archive/branch/work/hedge420-*` hold a hedge-ambush scenario (`scripts/scenarios/hedge-ambush*.js`) and `tools/ai-sim-harness/hedgerow-firing-lane-check.js`, plus rear-side-peek and covering-fire trials.
-  - Other archive tags (`archive/branch/*`) are October probes, audits and preview builds, superseded by the controller.
+## Rules that must never be missed
 
-## Task-based reading map
+- **`main` deploys to production on every push.** Work on your own branch and PR. Never edit or force-push another agent's branch.
+- **Merges need Ivan's explicit word naming the PR**, after the PR's own CI is green on its head. Never merge on your own judgment or on another agent's request.
+- **Muse/Kit owns browser testing and benchmark launches** (Playwright, CDP, Skills Lab, battle benchmarks). Request it with the `needs-kit-testing` label plus a comment giving the exact head SHA, runs, flags and acceptance; mentions do nothing. **Every push to a PR Kit tests gets its request in the same step.** [Protocol](docs/agents/handoffs.md#route-work-to-muse).
+- **Evidence over inspection.** A handoff, task tick, label or green launcher is not a test. Report only what you verified, pinned to a SHA.
+- **One owner per capability.** No second movement writer, timer or competing order path. Fix at the owning layer.
+- **Every controller or skills change has its own off flag**, and legacy play (`?tacticalController=legacy`) stays equal to `main`. Exception (owner-approved 2026-11-28): owner-authorized Phase E retirement slices roll back by revert instead ([contract](docs/agents/spec-kit.md#phase-e-rollback-exception)).
+- **`[PARKED]` PRs are reference only.** Do not continue, test, label, ready or merge one unless the owner reactivates that PR. You may adapt its ideas into separately authorized work.
+- **Phase E (legacy retirement) has not started.** It needs the owner's word and runs as a full spec-driven project.
+- Stay in scope: no audio, assets or animation changes unless asked. Never print secrets. ElevenLabs generation only when the owner starts it.
 
-| When working on | Read |
+## Controller philosophy
+
+The tactical controller is the default since #785 (`?tacticalController=legacy` rolls back). It is a **rebuild, not a reformat**: port each skill to one controller owner, reusing existing skill logic. Do not tune it to match legacy numbers; behavior will change and tuning comes later. Judge controller runs by real broken behavior (errors, writer conflicts, stalls, unexplained silence, lost skills).
+
+## Reuse before rewriting
+
+Closed PRs and `archive/branch/*` tags hold reuse candidates: speed caches #707-#750 (some redone in #767-#770, #773; #733 rejected), soldier fixes #764 #766 #763 #774 #696 #761, hedge-ambush tests in `archive/branch/work/hedge420-*`, and the #817 salvage list in issue #837. Port only what still applies to `main`, behind its own off flag.
+
+## Reading map
+
+| Task | Read |
 | --- | --- |
-| Repository layout, entry points, features | [Repository overview](docs/agents/repository-overview.md) |
-| AI ownership, squad behavior, individual soldiers | [Battle architecture](docs/agents/battle-architecture.md) |
-| New tactics, reconnaissance, command and control | [Battle architecture](docs/agents/battle-architecture.md) and [Tactics outline](docs/reference/AI_TACTICS_OUTLINE.md) |
-| Benchmarks, probes, regression tests, scoring | [Testing and benchmarks](docs/agents/testing.md) and [CI and workflows](docs/agents/ci-workflows.md) (including agent-triggered benchmark dispatch) |
-| GitHub Actions, CI, automation | [CI and workflows](docs/agents/ci-workflows.md) |
+| Choosing how to work | [Development workflows](docs/agents/development-workflows.md); [Spec Kit](docs/agents/spec-kit.md) for the full path |
+| Principles | [Constitution](.specify/memory/constitution.md) |
+| Repository layout | [Repository overview](docs/agents/repository-overview.md) |
+| AI behavior, ownership, soldiers | [Architecture index](docs/agents/battle-architecture.md), then one subsystem page |
+| Planned AI work | [AI Skills roadmap](docs/architecture/AI_SKILLS_ROADMAP.md) sections 7-9 |
+| Requesting tests, handing off work | [Handoffs](docs/agents/handoffs.md) |
+| Tests, benchmarks, acceptance | [Testing index](docs/agents/testing.md) |
+| CI, workflows, housekeeping | [CI index](docs/agents/ci-workflows.md) |
+| Runtime lifecycle | [Runtime contracts](docs/agents/runtime-contracts.md) |
 | Models, weapons, animation | [Soldiers, weapons and animation](docs/agents/soldiers-weapons-animation.md) |
-| Audio changes (only when explicitly requested) | [Audio](docs/agents/audio.md) |
-| Deployment and asset publishing | [Deployment and assets](docs/agents/deployment-assets.md) |
-| Tuning and genome parameters | [Tunables inventory](docs/reference/TUNABLES.md) |
-| Local conversation cleanup | [Conversation maintenance](docs/agents/conversation-maintenance.md) |
+| Audio (only when asked) | [Audio](docs/agents/audio.md) |
+| Deployment and assets | [Deployment and assets](docs/agents/deployment-assets.md) |
+| Tunable numbers | [Tunables](docs/reference/TUNABLES.md) |
+| Local conversation hooks | [Conversation maintenance](docs/agents/conversation-maintenance.md) |
 
-Read additional references when the task crosses boundaries. These documents are authoritative; do not copy their full contents back into this entry point.
+Each fact has one home. Link to it; do not copy it here.
