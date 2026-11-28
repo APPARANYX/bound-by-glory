@@ -46,6 +46,19 @@
     function profiled(){var parent=currentScope(),start=clock();try{return fn.apply(this,arguments);}finally{var elapsed=clock()-start;record(label,elapsed);record(label+'@'+parent,elapsed);}}
     profiled.__battleHotpathWrapped=true;profiled.__battleHotpathOriginal=fn;obj[key]=profiled;wrapped.push({obj:obj,key:key,fn:fn});return true;
   }
+  /* Tactical controller cost per entry point (dispatch(sim, unit, point, ...)), scoped so the sight queries a
+     provider asks are attributed to its point. Legacy battles never reach a provider, so the rows show only
+     the cheap legacy answer there. selectSoldier is the Micro per-soldier policy slot. */
+  function wrapController(){
+    var TC=root.BattleTacticalController;if(!TC)return;
+    ['dispatch'].forEach(function(key){
+      if(typeof TC[key]!=='function'||TC[key].__battleHotpathWrapped)return;
+      var fn=TC[key];
+      function profiled(sim,unit,point){var label='controller.dispatch.'+safeLabel(point),start=clock();scope.push(label);try{return fn.apply(this,arguments);}finally{scope.pop();record(label,clock()-start);}}
+      profiled.__battleHotpathWrapped=true;profiled.__battleHotpathOriginal=fn;TC[key]=profiled;wrapped.push({obj:TC,key:key,fn:fn});
+    });
+    wrapScoped(TC,'selectSoldier','controller.selectSoldier');
+  }
   function physicalVersion(sim){
     var N=root.BattleNavigation,o=sim&&sim.obstacles;if(!N||!o)return null;
     var p=o.__physicalFootprints,count;
@@ -124,16 +137,17 @@
     wrapMany(root.BattleCommanderRoutes,'commander-routes',['ensureAssignments','assignSquad','initForce','routeFor']);
     wrapMany(root.BattleCommanderDoctrine,'commander-doctrine',['chooseObjective','buildContext','nearestEnemyToSquad','objectiveValueScore','forceScore']);
     wrapScoped(root.BattleEngagement,'updateSoldier','engagement.updateSoldier');wrapScoped(root.BattleEngagement,'updateSquad','engagement.updateSquad');
+    wrapController();
     wrapSystems();
   }
   function reset(){stats=Object.create(null);startedAt=clock();scope.length=0;}
   function snapshot(limit){
     var wallMs=Math.max(0,clock()-startedAt),rows=Object.keys(stats).map(function(k){var b=stats[k];return{label:b.label,calls:b.calls,totalMs:+b.totalMs.toFixed(3),maxMs:+b.maxMs.toFixed(3),avgUs:b.calls?+(b.totalMs*1000/b.calls).toFixed(2):0,wallPct:wallMs?+(b.totalMs/wallMs*100).toFixed(2):0};});
     rows.sort(function(a,b){return b.totalMs-a.totalMs||b.calls-a.calls;});if(limit>0)rows=rows.slice(0,limit);
-    return{version:'1.4',wallMs:+wallMs.toFixed(3),rows:rows};
+    return{version:'1.5',wallMs:+wallMs.toFixed(3),rows:rows};
   }
   function restore(){for(var i=wrapped.length-1;i>=0;i--){var w=wrapped[i];if(w.obj&&w.obj[w.key]&&w.obj[w.key].__battleHotpathWrapped)w.obj[w.key]=w.fn;}wrapped=[];scope.length=0;}
 
   install();
-  root.BattleHotpathProfiler={version:'1.4',reset:reset,snapshot:snapshot,restore:restore};
+  root.BattleHotpathProfiler={version:'1.5',reset:reset,snapshot:snapshot,restore:restore};
 })(typeof window!=='undefined'?window:globalThis);
