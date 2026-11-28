@@ -16,6 +16,12 @@ name: ⭐ M3C Standard Benchmark
 # seeds = N > 1, a paired run across seeds: `seed` is a prefix, the seeds are `<prefix>-0001` to `<prefix>-<N>`, spread over up to
 #   20 shards that each play their seeds with both arms on one runner, `windows` (default contact+120: the first two minutes of
 #   fighting, not the whole battle). A last job pools the shards and reports each counter paired by seed. About 3.5 minutes for 100.
+#
+# Early stop (early_stop, default true; false restores the old single stage): with more seeds than first_stage (default 20) the
+#   run plays the first first_stage seeds, compares them, and asks scripts/benchmark_early_stop.cjs whether the result is already
+#   clear (inert, runtime errors, or a counter past a stricter line than the final verdict's, with wall time clearly away from the
+#   speed gate). Only an unclear result plays the remaining seeds; the final comparison pools both stages. The summary says
+#   where it stopped and why.
 
 on:
   workflow_dispatch:
@@ -60,6 +66,15 @@ on:
         description: Short description of the question this benchmark is intended to answer
         required: false
         default: ''
+      early_stop:
+        description: 'Seeds mode: play first_stage seeds, compare, and play the rest only if the result is not yet clear (scripts/benchmark_early_stop.cjs). false plays every seed.'
+        type: choice
+        options: ['true', 'false']
+        default: 'true'
+      first_stage:
+        description: Seeds in the early-stop first stage (default 20)
+        required: false
+        default: '20'
       runner_pool:
         description: 'Execution target for battle jobs (Mac is trusted dispatch only).'
         type: choice
@@ -83,6 +98,7 @@ env:
     squadPerformance.meanMission squadPerformance.meanMovement squadPerformance.meanControl squadPerformance.meanCohesion
 
 jobs:
+  # Battle jobs pin ubuntu-24.04: ubuntu-latest moved to 26.04 (11-27), where Playwright's chromium install fails.
   # ---- one seed: the scripted scenario ------------------------------------------------------------------------------------
   single:
     name: Scripted scenario, off vs on
@@ -314,6 +330,9 @@ jobs:
     timeout-minutes: 5
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
+      matrix2: ${{ steps.plan.outputs.matrix2 }}
+      staged: ${{ steps.plan.outputs.staged }}
+      stage1: ${{ steps.plan.outputs.stage1 }}
       windows: ${{ steps.plan.outputs.windows }}
     steps:
       - name: Checkout the planner
@@ -327,17 +346,36 @@ jobs:
           SEEDS: ${{ github.event.inputs.seeds }}
           WINDOWS: ${{ github.event.inputs.windows }}
           SIM_SECONDS: ${{ github.event.inputs.sim_seconds || '600' }}
+          EARLY_STOP: ${{ github.event.inputs.early_stop || 'true' }}
+          FIRST_STAGE: ${{ github.event.inputs.first_stage || '20' }}
         run: |
           set -euo pipefail
+          if ! [[ "$FIRST_STAGE" =~ ^[0-9]+$ ]] || (( FIRST_STAGE < 1 )); then
+            echo 'first_stage must be a whole number of 1 or more' >&2
+            exit 2
+          fi
           if ! [[ "$SIM_SECONDS" =~ ^[0-9]+$ ]] || (( SIM_SECONDS < 60 || SIM_SECONDS > 10800 )); then
             echo 'sim_seconds must be an integer between 60 and 10800' >&2
             exit 2
           fi
           if [[ -z "$WINDOWS" && "$SIM_SECONDS" != 600 ]]; then WINDOWS="0+${SIM_SECONDS}"; fi
-          shards="$(node scripts/plan_benchmark_shards.cjs "$SEEDS" 20)"
+          if [[ "$EARLY_STOP" == true ]] && (( SEEDS > FIRST_STAGE )); then
+            shards="$(node scripts/plan_benchmark_shards.cjs "$FIRST_STAGE" 20)"
+            last="$(node -e 'const p=JSON.parse(process.argv[1]); console.log(p[p.length-1].shard)' "$shards")"
+            shards2="$(node scripts/plan_benchmark_shards.cjs "$((SEEDS - FIRST_STAGE))" 20 "$FIRST_STAGE" "$((last + 1))")"
+            echo "staged=true" >> "$GITHUB_OUTPUT"
+            echo "stage1=${FIRST_STAGE}" >> "$GITHUB_OUTPUT"
+            echo "Early stop: first ${FIRST_STAGE} seeds over: ${shards}; the other $((SEEDS - FIRST_STAGE)) only if undecided: ${shards2}"
+          else
+            shards="$(node scripts/plan_benchmark_shards.cjs "$SEEDS" 20)"
+            shards2='[{"shard":0,"first":0,"count":0}]'
+            echo "staged=false" >> "$GITHUB_OUTPUT"
+            echo "stage1=${SEEDS}" >> "$GITHUB_OUTPUT"
+            echo "${SEEDS} seeds over: ${shards}"
+          fi
           echo "matrix={\"include\":${shards}}" >> "$GITHUB_OUTPUT"
+          echo "matrix2={\"include\":${shards2}}" >> "$GITHUB_OUTPUT"
           echo "windows=${WINDOWS:-contact+120}" >> "$GITHUB_OUTPUT"
-          echo "${SEEDS} seeds over: ${shards}"
 
   shards:
     name: Shard ${{ matrix.shard }}
@@ -361,121 +399,96 @@ jobs:
       QUERY_ON: ${{ github.event.inputs.query_on || '' }}
 
     steps:
-      - name: Require trusted main for Mac pool
-        if: ${{ inputs.runner_pool == 'mac' }}
-        shell: bash
-        run: |
-          if [ "$GITHUB_REF" != 'refs/heads/main' ]; then
-            echo "::error::Mac pool may execute only vetted main. Refusing: $GITHUB_REF" >&2
-            exit 2
-          fi
-
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Play this shard's seeds, both arms
+        uses: ./.github/actions/benchmark-shard
         with:
-          node-version: '22'
+          shard: ${{ matrix.shard }}
+          runner_pool: ${{ inputs.runner_pool || 'github' }}
 
-      - name: Install browser harness
-        run: |
-          npm install --no-save --no-package-lock playwright@1.55.0
-          if [ "$RUNNER_OS" = 'macOS' ]; then
-            npx playwright install chromium
-          else
-            npx playwright install --with-deps chromium
-          fi
-
-      - name: Start local battle server
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! command -v php >/dev/null 2>&1; then
-            echo "::error::PHP CLI is missing on $RUNNER_NAME; install PHP on the runner." >&2
-            exit 2
-          fi
-          php -v
-          if [ "$RUNNER_OS" = 'macOS' ]; then
-            # Four pool runners share one Mac, so fixed port 8765 would collide.
-            case "$RUNNER_NAME" in
-              bbg-ivans-air-01) port=18761 ;;
-              bbg-ivans-air-02) port=18762 ;;
-              bbg-ivans-air-03) port=18763 ;;
-              bbg-ivans-air-04) port=18764 ;;
-              *) echo "::error::Unexpected Mac pool runner: $RUNNER_NAME" >&2; exit 2 ;;
-            esac
-          else
-            port=8765
-          fi
-          site_root="$(mktemp -d "$RUNNER_TEMP/bbg-battle.XXXXXXXX")"
-          ln -s "$GITHUB_WORKSPACE" "$site_root/grasstex"
-          server_log="$site_root/battle-php.log"
-          server_pidfile="$site_root/battle-php.pid"
-          printf 'BBG_BATTLE_BASE_URL=http://127.0.0.1:%s/grasstex/battle_sim_local.php\n' "$port" >> "$GITHUB_ENV"
-          printf 'BBG_BATTLE_LOG=%s\n' "$server_log" >> "$GITHUB_ENV"
-          printf 'BBG_BATTLE_PIDFILE=%s\n' "$server_pidfile" >> "$GITHUB_ENV"
-          echo "Runner $RUNNER_NAME on $RUNNER_OS: isolated PHP port $port"
-          PHP_CLI_SERVER_WORKERS=4 php -S "127.0.0.1:$port" -t "$site_root" >"$server_log" 2>&1 &
-          server_pid=$!
-          echo "$server_pid" > "$server_pidfile"
-          for i in $(seq 1 30); do
-            if ! kill -0 "$server_pid" 2>/dev/null; then
-              echo "::error::PHP server exited unexpectedly; port may be in use." >&2
-              cat "$server_log"
-              exit 1
-            fi
-            if curl -fsS "http://127.0.0.1:$port/grasstex/battle_sim_local.php?seed=healthcheck" >/dev/null; then exit 0; fi
-            sleep 1
-          done
-          cat "$server_log"
-          exit 1
-
-      - name: Run both arms on this shard's seeds
-        run: |
-          set -euo pipefail
-          case "$BATTLE_TYPE" in
-            meeting) defender_query='' ;;
-            us-defend) defender_query='defender=us' ;;
-            ge-defend) defender_query='defender=ge' ;;
-            *) echo "Unknown battle type: $BATTLE_TYPE" >&2; exit 2 ;;
-          esac
-          for arm in off on; do
-            if [ "$arm" = off ]; then extra="$QUERY_OFF"; else extra="$QUERY_ON"; fi
-            extra="${extra#[?&]}"
-            query="$defender_query"
-            if [ -n "$extra" ]; then if [ -n "$query" ]; then query="${query}&${extra}"; else query="$extra"; fi; fi
-            export BATTLE_BENCHMARK_URL="${BBG_BATTLE_BASE_URL}${query:+?$query}"
-            export BATTLE_BENCHMARK_OUTPUT="reports/$arm"
-            echo "::group::shard ${{ matrix.shard }}, arm ${arm} (${query:-no flags}), seeds ${BATTLE_BENCHMARK_SEED}-NNNN from index ${BATTLE_BENCHMARK_FIRST} x ${BATTLE_BENCHMARK_COUNT}, windows ${BATTLE_BENCHMARK_WINDOWS}"
-            node scripts/run_battle_benchmark.mjs
-            echo "::endgroup::"
-          done
-
-      - name: Upload shard reports
-        if: always()
-        uses: actions/upload-artifact@v4
+  # Early stop: compare the first stage and decide whether the rest of the seeds are needed.
+  decide:
+    name: Early stop check
+    needs: [plan, shards]
+    if: ${{ always() && needs.plan.outputs.staged == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      extend: ${{ steps.decide.outputs.extend }}
+      reason: ${{ steps.decide.outputs.reason }}
+    steps:
+      - name: Checkout the comparison scripts
+        uses: actions/checkout@v4
         with:
-          name: seeds-${{ github.run_number }}-shard-${{ matrix.shard }}
-          path: reports/
-          if-no-files-found: warn
-          retention-days: 7
-
-      - name: Stop isolated battle server
-        if: always()
+          sparse-checkout: |
+            scripts/compare_benchmark_arms.cjs
+            scripts/benchmark_early_stop.cjs
+          sparse-checkout-cone-mode: false
+      - name: Download the first stage's shard reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: seeds-${{ github.run_number }}-shard-*
+          path: shard-reports
+      - name: Decide
+        id: decide
         shell: bash
+        env:
+          SHARDS_RESULT: ${{ needs.shards.result }}
         run: |
-          if [ -n "${BBG_BATTLE_PIDFILE:-}" ] && [ -f "$BBG_BATTLE_PIDFILE" ]; then
-            kill "$(cat "$BBG_BATTLE_PIDFILE")" 2>/dev/null || true
+          set -uo pipefail
+          off="$(find shard-reports -path '*/off/battle-benchmark.json' | sort | paste -sd, -)"
+          on="$(find shard-reports -path '*/on/battle-benchmark.json' | sort | paste -sd, -)"
+          verdict='{"stop":false,"reason":"no first-stage comparison: play every seed"}'
+          if [ "$SHARDS_RESULT" = success ] && [ -n "$off" ] && [ -n "$on" ]; then
+            args=(); for c in $BENCH_COUNTERS; do args+=(--count "$c"); done
+            node scripts/compare_benchmark_arms.cjs "${args[@]}" "$off" "$on" > stage1-compare.json || true
+            verdict="$(node scripts/benchmark_early_stop.cjs stage1-compare.json)"
+          elif [ "$SHARDS_RESULT" != success ]; then
+            verdict="{\"stop\":false,\"reason\":\"first-stage shards: ${SHARDS_RESULT}: play every seed\"}"
           fi
+          stop="$(node -e 'console.log(JSON.parse(process.argv[1]).stop)' "$verdict")"
+          reason="$(node -e 'console.log(JSON.parse(process.argv[1]).reason)' "$verdict")"
+          if [ "$stop" = true ]; then echo "extend=false" >> "$GITHUB_OUTPUT"; else echo "extend=true" >> "$GITHUB_OUTPUT"; fi
+          echo "reason=${reason}" >> "$GITHUB_OUTPUT"
+          echo "Early stop: stop=${stop}: ${reason}"
+          echo "### Early stop: $([ "$stop" = true ] && echo 'stopped after the first stage' || echo 'playing every seed')" >> "$GITHUB_STEP_SUMMARY"
+          echo "${reason}" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Show server log on failure
-        if: failure()
-        run: tail -n 300 "${BBG_BATTLE_LOG:-/dev/null}" || true
+  shards2:
+    name: Shard ${{ matrix.shard }} (second stage)
+    needs: [plan, decide]
+    if: ${{ needs.plan.outputs.staged == 'true' && needs.decide.outputs.extend == 'true' }}
+    runs-on: ${{ fromJSON((inputs.runner_pool == 'mac' && github.ref == 'refs/heads/main' && '["self-hosted","macOS","ARM64","bbg-mac-bench"]') || '["ubuntu-24.04"]') }}
+    timeout-minutes: ${{ fromJSON(github.event.inputs.sim_seconds || '600') > 600 && 75 || 30 }}
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ inputs.runner_pool == 'mac' && 4 || 20 }}
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix2) }}
+    env:
+      BATTLE_BENCHMARK_SOURCE_SHA: ${{ github.sha }}
+      BATTLE_BENCHMARK_COUNT: ${{ matrix.count }}
+      BATTLE_BENCHMARK_FIRST: ${{ matrix.first }}
+      BATTLE_BENCHMARK_TIME_LIMIT: ${{ github.event.inputs.sim_seconds || '600' }}
+      BATTLE_BENCHMARK_STEP: '0.15'
+      BATTLE_BENCHMARK_WINDOWS: ${{ needs.plan.outputs.windows }}
+      BATTLE_BENCHMARK_SEED: ${{ github.event.inputs.seed || 'scripted-seeds' }}
+      BATTLE_TYPE: ${{ github.event.inputs.battle_type || 'meeting' }}
+      QUERY_OFF: ${{ github.event.inputs.query_off || '' }}
+      QUERY_ON: ${{ github.event.inputs.query_on || '' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Play this shard's seeds, both arms
+        uses: ./.github/actions/benchmark-shard
+        with:
+          shard: ${{ matrix.shard }}
+          runner_pool: ${{ inputs.runner_pool || 'github' }}
 
   compare:
     name: Pool the shards and compare
-    needs: [plan, shards]
+    needs: [plan, shards, decide, shards2]
     if: ${{ always() && needs.plan.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -487,12 +500,16 @@ jobs:
       viewer_preview: ${{ steps.publish.outputs.viewer_preview }}
     env:
       SEED_PREFIX: ${{ github.event.inputs.seed || 'scripted-seeds' }}
-      SEEDS: ${{ github.event.inputs.seeds }}
+      # Seeds actually played: the first stage alone when the early stop ended the run there.
+      SEEDS: ${{ (needs.plan.outputs.staged == 'true' && needs.decide.outputs.extend != 'true') && needs.plan.outputs.stage1 || github.event.inputs.seeds }}
+      SEEDS_ASKED: ${{ github.event.inputs.seeds }}
+      EARLY_STOP_REASON: ${{ needs.decide.outputs.reason }}
       WINDOWS: ${{ needs.plan.outputs.windows }}
       BATTLE_TYPE: ${{ github.event.inputs.battle_type || 'meeting' }}
       QUERY_OFF: ${{ github.event.inputs.query_off || '' }}
       QUERY_ON: ${{ github.event.inputs.query_on || '' }}
       SHARDS_RESULT: ${{ needs.shards.result }}
+      SHARDS2_RESULT: ${{ needs.shards2.result }}
     steps:
       - name: Checkout the compare tools
         uses: actions/checkout@v4
@@ -563,7 +580,8 @@ jobs:
               echo '**No comparison was produced.**'
             fi
             echo
-            echo "- shard jobs: ${SHARDS_RESULT}; compare exit $(cat reports/compare.rc 2>/dev/null || echo '?') (1 means a runtime error or a median wall-time slowdown above 25%). \`unpaired\` counts seeds only one arm completed; the arms ran one after the other on each shard's runner."
+            if [ -n "$EARLY_STOP_REASON" ]; then echo "- early stop: played ${SEEDS} of ${SEEDS_ASKED} seeds. ${EARLY_STOP_REASON}"; fi
+            echo "- shard jobs: ${SHARDS_RESULT}, second stage ${SHARDS2_RESULT:-none}; compare exit $(cat reports/compare.rc 2>/dev/null || echo '?') (1 means a runtime error or a median wall-time slowdown above 25%). \`unpaired\` counts seeds only one arm completed; the arms ran one after the other on each shard's runner."
             if [ -f reports/compare.json ]; then
               echo
               echo "<details><summary>compare.json</summary>"
@@ -592,16 +610,17 @@ jobs:
           rc="$(cat reports/compare.rc 2>/dev/null || echo 2)"
           if [ "$rc" != 0 ]; then echo "compare_benchmark_arms.cjs exited ${rc}" >&2; exit 1; fi
           if [ "$SHARDS_RESULT" != success ]; then echo "shard jobs: ${SHARDS_RESULT}; the comparison above uses the seeds that completed" >&2; exit 1; fi
+          if [ "$SHARDS2_RESULT" != success ] && [ "$SHARDS2_RESULT" != skipped ]; then echo "second-stage shard jobs: ${SHARDS2_RESULT}; the comparison above uses the seeds that completed" >&2; exit 1; fi
 
   notify:
     name: Notify benchmark result
-    needs: [single, plan, shards, compare]
+    needs: [single, plan, shards, decide, shards2, compare]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Send ntfy notification
         env:
-          RESULTS: ${{ needs.single.result }} ${{ needs.plan.result }} ${{ needs.shards.result }} ${{ needs.compare.result }}
+          RESULTS: ${{ needs.single.result }} ${{ needs.plan.result }} ${{ needs.shards.result }} ${{ needs.shards2.result }} ${{ needs.compare.result }}
           HEADLINE: ${{ needs.single.outputs.headline || needs.compare.outputs.headline }}
           VIEWER: ${{ needs.single.outputs.viewer || needs.compare.outputs.viewer }}
           VIEWER_PREVIEW: ${{ needs.single.outputs.viewer_preview || needs.compare.outputs.viewer_preview }}
@@ -637,7 +656,7 @@ jobs:
         continue-on-error: true
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_BENCHMARK_WEBHOOK_URL }}
-          RESULTS: ${{ needs.single.result }} ${{ needs.plan.result }} ${{ needs.shards.result }} ${{ needs.compare.result }}
+          RESULTS: ${{ needs.single.result }} ${{ needs.plan.result }} ${{ needs.shards.result }} ${{ needs.shards2.result }} ${{ needs.compare.result }}
           HEADLINE: ${{ needs.single.outputs.headline || needs.compare.outputs.headline }}
           VIEWER: ${{ needs.single.outputs.viewer || needs.compare.outputs.viewer }}
           VIEWER_PREVIEW: ${{ needs.single.outputs.viewer_preview || needs.compare.outputs.viewer_preview }}

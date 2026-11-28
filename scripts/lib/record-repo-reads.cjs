@@ -19,24 +19,48 @@ function note(file) {
   if (rel.startsWith('node_modules/') || rel.startsWith('.git/')) return;
   seen.add(rel);
 }
-for (const name of ['readFileSync', 'readFile', 'openSync', 'open', 'createReadStream', 'readdirSync', 'existsSync', 'statSync']) {
+for (const name of [
+  'readFileSync',
+  'readFile',
+  'openSync',
+  'open',
+  'createReadStream',
+  'readdirSync',
+  'existsSync',
+  'statSync'
+]) {
   const orig = fs[name];
   if (typeof orig !== 'function') continue;
-  fs[name] = function (file, ...rest) { note(file); return orig.call(this, file, ...rest); };
+  fs[name] = function (file, ...rest) {
+    note(file);
+    return orig.call(this, file, ...rest);
+  };
 }
 const promises = fs.promises;
 for (const name of ['readFile', 'open']) {
   const orig = promises[name];
-  promises[name] = function (file, ...rest) { note(file); return orig.call(this, file, ...rest); };
+  promises[name] = function (file, ...rest) {
+    note(file);
+    return orig.call(this, file, ...rest);
+  };
 }
 const origLoad = Module._load;
 Module._load = function (request, parent, isMain) {
   if (Module.isBuiltin(request)) return origLoad.apply(this, arguments);
-  try { note(Module._resolveFilename(request, parent, isMain)); } catch (_) { /* builtin or missing */ }
+  try {
+    note(Module._resolveFilename(request, parent, isMain));
+  } catch (_) {
+    /* builtin or missing */
+  }
   return origLoad.apply(this, arguments);
 };
 if (out) {
   process.on('exit', () => {
-    try { fs.mkdirSync(out, { recursive: true }); fs.writeFileSync(path.join(out, process.pid + '.json'), JSON.stringify([...seen].sort())); } catch (_) { /* best effort */ }
+    try {
+      fs.mkdirSync(out, { recursive: true });
+      fs.writeFileSync(path.join(out, process.pid + '.json'), JSON.stringify([...seen].sort()));
+    } catch (_) {
+      /* best effort */
+    }
   });
 }
