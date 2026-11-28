@@ -28,7 +28,7 @@ concurrency:
 jobs:
   full-mix:
     if: github.event.pull_request.number == 683
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4

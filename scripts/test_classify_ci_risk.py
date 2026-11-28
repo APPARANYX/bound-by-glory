@@ -39,6 +39,10 @@ class RiskClassificationTests(unittest.TestCase):
         result = risk.classify([".github/workflows/branch-housekeeping.yml", "scripts/housekeeping-actions-runs.sh", "docs/agents/ci-workflows.md"])
         self.assertEqual(result["tier"], "ci-config")
         self.assertTrue(result["checks"]["sim"])
+    def test_agent_docs_check_is_ci_config(self):
+        result = risk.classify(["scripts/check_agent_docs.py", "AGENTS.md", "CLAUDE.md", ".claude/skills/spec-driven-workflow/SKILL.md"])
+        self.assertEqual(result["tier"], "ci-config")
+        self.assertFalse(result["checks"]["battle_checks"])
     def test_package_json_escalates(self):
         self.assertEqual(risk.classify(["package.json"])["tier"], "architecture")
     def test_mixed_escalates(self):

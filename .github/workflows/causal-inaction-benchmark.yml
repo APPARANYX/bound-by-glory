@@ -90,7 +90,7 @@ jobs:
       fail-fast: false
       matrix:
         battle_type: [meeting, us-defend, ge-defend]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
       CAUSAL_SEEDS: ${{ github.event.inputs.seeds || (github.event_name == 'pull_request' && '1') || '20' }}

@@ -280,7 +280,7 @@ jobs:
     name: Native Combat Lab Chromium QA
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.lab_qa == true }}
     needs: preview
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 16
     env:
       WEB_ROOT: ${{ vars.BATTLE_WEB_ROOT || 'bound-by-glory' }}

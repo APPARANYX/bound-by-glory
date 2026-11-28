@@ -140,3 +140,119 @@ Even high difficulty should operate from legitimate battlefield information and 
 ## Promotion rule
 
 When an item becomes actionable, move its detailed design into a dedicated `docs/plans/` document and scope it to its own PR/issue. This backlog remains the cross-cutting parking lot and roadmap, not an implementation specification.
+
+## Deferred 2026-09-29 (from the battle architecture page)
+
+**Kind:** deferred or future proposals, not commitments and not a task list. Check GitHub issues and `main` before acting on any item. Moved from `docs/agents/battle-architecture.md` at d15687b.
+
+**Residual small debt (track individually, not as “AI polish”).**
+
+- `objectiveHoldWin` remains an unread legacy genome parameter while the genome is stashed; remove/settle it during
+  the eventual genome rewrite rather than reviving it now.
+
+**Deferred / future — not V1 blockers**
+
+Deferred 2026-09-29, none is a broken system. The first five were open items: sniper roles is a feature
+that waits for models, the next four are measured tuning questions that each need a paired benchmark
+before any effect is claimed.
+
+- **Sniper roles.** Loadouts, MG-by-kind and the sidearm switch are shipped (see Loadouts and
+  sidearms). Left: sniper roles (M1903A4 / Kar98k ZF39). They need a model and a weapon seat measured in
+  Motion Lab, so they wait for that; the sidearm's pose and grip on the sergeant and gunner models is
+  also worth a Motion Lab look once a close fight shows it. Any new role changes combat: benchmark it paired.
+- **Grenades** (#409, **ON by default**; `?grenades=0` turns the whole system off and leaves it inert). `modules/23-grenades.js`
+  owns carried counts, commitments, releases and bursts. Loadouts issue 2 to leaders/riflemen/scouts,
+  1 to gunners and 3 to engineers; possession and weapon rearming do not refill them, battle restart does.
+  The player chooses the grenade with G/controller RB (press again to put it away), aim mode
+  (RMB/LT) then shows the owner's arc and landing point, and fire (LMB/RT) throws it, one press one
+  throw, never a rifle round while it is chosen. Engagement's `throw` action uses the same 0.9 s
+  commitment. Only death
+  before release cancels it; retreat, a changed target or a skipped AI tick do not. Release consumes
+  one, starts an 18 s cooldown and freezes the physical arc. The fuse expires 3.6 s after landing.
+  AI requires a fresh confident personal contact within 30 m, blocked rifle fire, fire authorization,
+  a clear arc and no friendly (including itself) within 13 m of the intended landing. Scatter uses
+  a separate scenario-seeded `grenades` RNG stream and fragment hits a second, `grenade-fragments`;
+  neither draws combat randomness. Physical cover/walls/terrain use
+  `BattleBallistics.environmentLineBlocked`. A burst gives every man within 22 m with a clear line a
+  Poisson number of fragment hits (mean `hits5 x stance area x (5 / d)^spread`, legs and low torso
+  favoured; crouched men present 0.6 and prone men 0.3 of the standing silhouette) plus one
+  overpressure chest wound inside the kind's blast radius. Each is an ordinary `BattleWounds` blast
+  hit whose energy decays with range, so a man is wounded, bled and dropped by the existing owner.
+  The US Mk 2 (57 g TNT, serrated cast iron) and the German M24 (170 g TNT in a thin steel head:
+  bigger overpressure radius, fewer and shorter-ranged fragments) have their own constants. They are
+  fitted to the published figures for the class (lethal radius about 5 m, casualty radius about 15 m,
+  fragments to hundreds of metres at negligible density; TC 3-23.30 for the M67, Mk 2 fill 52-66 g
+  by period): a standing man in the open is a casualty about 95 % of the time at 2 m, half the time
+  at 5 m and rarely at 15 m, and lying down cuts that by roughly two thirds. Ordinary suppression
+  events reach 16 m. Friendly/self injuries retain attribution and earn no kill credit. Imported
+  Mk 2/M24 props, three stance-specific throw clips and a brief flash plus an **instant full-footprint
+  3D smoke density volume** are presentation only (`24-grenade-fx.js`). Smoke replaces the old
+  expanding dust billboards: one shader-integrated world-space field per explosion, no center-emitting
+  particle generator. The footprint is 5.5 m horizontally and 2.3 m half-height at the moment
+  of detonation; the density holds for ~3 simulated seconds, then dissipates by 10 seconds
+  (8 active volumes max, no screen-size postprocess). `?grenadeFog=off` or `grenadeFog=0`
+  disables only the fog, not flash, damage, audio or grenade behavior. Restart clears it.
+  Player aim displays the owner's arc and landing point. Default-enabled in #442 after a
+  paired 100-seed benchmark (quiet: casualties +0.4 %, p 0.625) and owner review. Arming, spoon
+  and burst audio are presentation only (`24a-grenade-audio.js`, `?grenadeAudio=0` off; see Audio).
+- **FG 42 balance.** The four-arm benchmark attributed the scout balance shift to the FG 42, not
+  the perception cones. Test one lever at a time: Kar98k assignment, shorter practical FG 42 range,
+  or wider dispersion/grouping at range. Use the existing `perception=0` / `geScout=carbine`
+  arms and paired benchmark; do not bundle this with unrelated tactics changes.
+- **Fighting stance doctrine.** Ownership is fixed: Engagement is the only stance writer. The open
+  question is tactical policy only: whether long/medium/close combat should map more aggressively
+  to prone/crouch/stand than the current `fightingStance` thresholds. Treat any change as tactics
+  and benchmark it.
+- **Strategic-stall scoring.** The stall mechanism is working, but ~43-46% of live-policy wakes can
+  repeat the same effort because distance can outweigh `stallCost`. If revisited, tune score
+  weighting with the existing `stallOutcomes`/ `stall-wakes` evidence and a paired benchmark;
+  claim outcome effects only from the large benchmark.
+- **Movement tolerance audit.** Cover-bound deadlock: fixed, see `bound-episodes`. Movement Progress still uses a
+  3 m arrival band while some destinations require tighter placement; cover has its own bound
+  window now. Audit another destination kind only if a real stuck case appears.
+- **Performance:** the 100-soldier targets are met. Do not restart the audit without a measured
+  regression. Startup prebaking of the 10 model FBXs / far-LOD lists is worth at most ~1 s;
+  retargeted clip prebaking stays rejected at ~45 MiB. Sim CPU work (Engagement/sight and movement
+  resolver) is deferred until `ww2fps` decides it will reuse this AI implementation. The trainer
+  and headless benchmark staying on the procedural rig is also deferred.
+- **Damage asset upgrade:** UV-painted body wounds V1 is accepted on the monolithic FBX. When Tripo
+  or manual segmentation provides separate helmet/holster/major-gear meshes, add material-specific
+  impact layers and detachable-equipment effects. Segmentation is not required for V1.
+- **Command architecture / tactics outline:** the General/Squad Leader/Engagement ownership split and
+  mission contract are already shipped. The larger next AI phase remains intentionally out of the current queue:
+  versioned `SquadIntent`/single intent resolver, the stronger Squad Leader local planner, structure-control and
+  street/route-transition state machines, objective secure/exploit/handoff, then platoon/company command,
+  fallback/counterattack and combined arms when force size/vehicle work justifies them. The detailed source of
+  truth is `docs/reference/AI_TACTICS_OUTLINE.md` (introduced by `f71ab0dd55cd03daae4b07c81665d3d74452618c`); do not
+  duplicate that roadmap here or implement isolated pieces as ad-hoc substitutes. ~5 squads per side still does
+  not justify a platoon layer yet.
+- **Height-aware window LOS, window animation.** The limits under Window firing port: global LOS ignores the sill and the lintel, the
+  sector does not follow the pose, and there is no firing, braced or reload pose at a window. Any change to global LOS is a behaviour
+  change for every ray through a window: its own flag and a paired benchmark.
+- **Genome rewrite and AI Graph return.** Both are stashed (see the top of this file), so the genome is the
+  code defaults. When the whole AI system rewrite is finished, rewrite the genome against the finished layers
+  (what it parameterises, what the layers own, one owner per number, the unread `objectiveHoldWin` settled), bring the graph back to mirror the layers and their mapping,
+  then flip `STASHED` in `ai-policy.js` and run `probe_ai_graph_stash.cjs` with `STASH_EXPECT=present` and a
+  paired benchmark against the defaults baseline. Not before. It must settle two things, and one direction is
+  recorded:
+  - **One default parameter surface.** The machines' numbers live in five places today: `BattleEngagement.tuning`,
+    module 16's bound timing and `cfg()` defaults, `BattleSoldierMind.tuning`, `commander-doctrine.js`
+    `FALLBACK`/`FALLBACK_DOCTRINE` and the genome's `DEFAULT_PARAMETERS`/`DEFAULT_DOCTRINE`. Make it one declared
+    table (name, owner layer, default, range, unit, the states that read it) that the genome, the harness and the
+    graph all read, so the duplicated defaults and `genome-gate-check.js`'s agreement test go away.
+  - **The genome tunes, it never rewires.** It may change the numbers and scoring weights the declared states read
+    (thresholds, holds, wake times, weights, inside their ranges) and pick among declared actions by weighted
+    score with a deterministic tiebreak. States, legal transitions and owners stay code (the Phase 1 tables), so
+    the ownership checks hold whatever a genome says: a genome cannot add a transition or a writer.
+  - **Direction, not committed: the genome as the basis for a very light LLM planner.** It would compose a
+    standing order from the declared vocabulary, e.g. "we need to retreat; base is reachable but the route
+    crosses enemy ground, so retreat to the last known safe location, wait there for reinforcement or another
+    retreating squad, and hold at the rally point to the last man until then". Its limits: it runs only on the
+    General's and Squad Leader's declared wakes (never per soldier or per tick); its output is data checked
+    against the vocabulary and executed through the existing owners (`transitionMission`, leases, the resolver),
+    so a bad output is rejected, not obeyed; it is deterministic (decisions recorded with the seed and replayed,
+    no live model call in a benchmark or fingerprint run, no combat-RNG draw). The example needs pieces that do not
+    exist yet, each a code state or action first, with the model only choosing among them: a per-side memory of
+    safe points ("last known safe location"), an assessment of a route through enemy ground, a hold with an exit
+    condition ("until reinforced or joined by a retreating squad"; today a retreating squad walks `to-base` and
+    reconstitution groups the `at-base` survivors at a rally point), and a hold-to-the-last-man terminal.

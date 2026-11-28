@@ -1,5 +1,23 @@
 # Tasks: Reduce the new controller's geometry query volume
 
+## Reconciliation (2026-11-28)
+
+**Feature status: Superseded.** No task below was completed on `main`, so no box is ticked. Evidence was checked on GitHub on 2026-11-28.
+
+| Tasks | State | Evidence |
+| --- | --- | --- |
+| Spec, plan, research, data model, quickstart, checklist | Merged | spec artifacts landed on `main` with the Spec Kit install (#745, #746, #751) |
+| T001 (coordinate with #707-#743) | Superseded | the Meso speed PRs #707-#750 were closed unmerged in the 2026-11-08 cleanup; parts were redone in #767-#770 and #773 |
+| T002, T003 (branch, draft PR, handoff) | Superseded | the implementation came as #817 from a Cursor agent on `feature/001-geometry-reduction`, not on the planned branch |
+| T004-T009 (per-step cache, keys, wiring, tests, hot sites) | Abandoned | implemented on #817 (tip c2c68d1) but closed unmerged 2026-11-27; issue #837 records why the cache is unsafe as written (`hasLineOfSight` keyed on ids only, module-global cache, URL-gated on `?tacticalController=new`). Idea kept as salvage item 2 in #837 (Deferred) |
+| T010, T018 (physical validation) | Abandoned | never run: the VM ran out of memory for the 120 m lab (issue #711 comments); the diagnostic census PRs #750, #753, #754, #755 closed unmerged |
+| T011-T014 (candidate pruning) | Deferred | never started; #735 closed unmerged |
+| T015-T017 (1.25x gate on lab and 600 s) | Superseded | the controller became the default in #785 on a wall-ratio baseline the owner set (roadmap section 7); the 1.25x requirement itself is unchanged in the constitution |
+| T019, T020 (converge, final handoff) | Superseded | replaced by this reconciliation |
+
+Still useful: the query census numbers in `plan.md` and `research.md`, and #837's route-LOS-with-trucks item (best salvage candidate). Lessons for the next spec: [Spec Kit pilot record](../../docs/agents/spec-kit.md#pilot-record).
+
+
 **Input**: Design documents from `/specs/001-geometry-query-reduction/`
 
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md
