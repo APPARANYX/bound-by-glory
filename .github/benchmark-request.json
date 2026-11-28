@@ -1,0 +1,13 @@
+{
+  "benchmark": "standard",
+  "ref": "claude/project-thread-m7x8vq",
+  "seeds": 40,
+  "query_off": "",
+  "query_on": "controllerDefault=0",
+  "battle_type": "meeting",
+  "sim_seconds": 600,
+  "runner_pool": "github",
+  "origin_agent": "kit",
+  "correlation_id": "pr835-gate-real-flag",
+  "purpose": "PR #835 gate dispatch 2/3: real flag (query_on=controllerDefault=0) - expect all 40 seeds, or stop with stated decided reason"
+}
