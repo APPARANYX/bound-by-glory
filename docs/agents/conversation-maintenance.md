@@ -1,8 +1,15 @@
 ## Conversation maintenance (local Codex / VS Code only)
 
-Hooks in `.claude/settings.json` and `.codex/hooks.json` run `scripts/conversation-maintenance.py`
-to queue `/compact` and `/clear` via keystrokes or the Codex app-server. They do nothing in cloud
-sessions.
+Local hooks run `scripts/conversation-maintenance.py` to queue `/compact` and `/clear` via keystrokes or
+the Codex app-server. They are **not committed as active settings** (owner decision 2026-11-28), so cloud and
+other agents' sessions never run them. To use them on your machine, copy the templates:
+
+```bash
+cp .claude/settings.local.example.json .claude/settings.local.json   # Claude Code, per-machine
+cp .codex/hooks.local.example.json .codex/hooks.json                  # Codex, per-machine
+```
+
+Both targets are in `.gitignore`.
 
 - When a task gets long, run `scripts/conversation-maintenance.py compact --reason "context is long"`.
 - On a clear task pivot, tell the user it hit a task-pivot marker and run `clear "next task" --reason "task pivot" --summary "…" --criteria "…"`.

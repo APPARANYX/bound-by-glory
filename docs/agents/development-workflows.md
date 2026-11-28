@@ -26,7 +26,7 @@ No Spec Kit artifacts. The owning issue and PR carry everything:
 2. **Scope and acceptance** stated in the PR body before the fix: what changes, what must not, and how success is shown.
 3. **Root cause** at the owning layer (steps below).
 4. **A regression check** that fails on the old code, when practical.
-5. **The applicable gates**: CI, and for behavior changes Muse's Skills Lab preflight and the [benchmark merge gate](testing/benchmarks.md#rules). A controller or skills change ships behind its own off flag (the only proposed exception is for owner-approved Phase E retirement slices, [not yet in force](spec-kit.md#proposed-phase-e-rollback-exception)).
+5. **The applicable gates**: CI, and for behavior changes Muse's Skills Lab preflight and the [benchmark merge gate](testing/benchmarks.md#rules). A controller or skills change ships behind its own off flag (the one exception is an owner-authorized Phase E retirement slice: [rollback by revert](spec-kit.md#phase-e-rollback-exception)).
 
 Behavior changes and diagnostics-only changes go in separate PRs.
 

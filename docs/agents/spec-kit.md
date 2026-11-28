@@ -67,9 +67,9 @@ Verified on 2026-11-28 with a disposable fixture spec (not committed): `setup-ta
 
 Phase E (legacy retirement, ordered Meso, then Macro, then Micro) is the first project for this path. Its spec should carry, per layer: a **removal contract** (code, flags and checks that go), a **retention contract** (services, shared execution owners, remaining flags and diagnostics that stay), the **owner audit** proving each capability already has one controller owner (`wire-map-check.js`, the capability contract), one PR per layer with its **rollback reference**, acceptance per layer against the [benchmark gate](testing/benchmarks.md#rules) and the speed gate, and a final converge against every requirement. The roadmap ([section 8](../architecture/AI_SKILLS_ROADMAP.md)) holds the current plan.
 
-### Proposed Phase E rollback exception
+### Phase E rollback exception
 
-**Status: proposed for owner approval in PR #839. Not in force.** Today every controller or skills change needs its own off flag and legacy play must equal `main`. Retirement exists to delete legacy paths and their flags, so those two rules cannot hold for it. Proposal, for owner-authorized Phase E slices only:
+**Status: approved by the owner on 2026-11-28 (PR #839), for owner-authorized Phase E retirement slices only.** Every other change still follows the rule: every controller or skills change needs its own off flag and legacy play must equal `main`. Retirement exists to delete legacy paths and their flags, so those two rules cannot hold for it. The exception, for owner-authorized Phase E slices only:
 
 1. Before the first slice, pin an immutable pre-retirement reference (a tag on the last `main` commit where `?tacticalController=legacy` works) and record it in the spec.
 2. Each slice's spec section lists exactly what it removes and what it keeps. Anything not listed for removal keeps its flag and behavior.
@@ -77,12 +77,12 @@ Phase E (legacy retirement, ordered Meso, then Macro, then Micro) is the first p
 4. Each slice still passes CI, Muse/Kit physical validation and the paired gates on its exact head. No gate is waived.
 5. No legacy code is kept or re-added only to carry a flag.
 
-Adopting this needs the owner's explicit approval (constitution IX). This PR does not authorize any retirement.
+Each retirement slice still needs the owner's explicit word (constitution IX). The approval of this exception authorizes no retirement by itself.
 
 ## Pilot record
 
-The first feature, [`specs/001-geometry-query-reduction`](../../specs/001-geometry-query-reduction/spec.md) (issue #711), is **Superseded**: its reconciliation is at the top of its [`tasks.md`](../../specs/001-geometry-query-reduction/tasks.md). Lessons: tasks were never ticked as work moved to other PRs; the spec pinned file and line numbers that changed; validation steps assumed a VM that later ran out of memory; and no state words separated "built" from "tested".
+The first feature, [`specs/001-geometry-query-reduction`](../../specs/001-geometry-query-reduction/spec.md) (issue #711, closed as superseded 2026-11-28), is **Superseded**: its reconciliation is at the top of its [`tasks.md`](../../specs/001-geometry-query-reduction/tasks.md). Lessons: tasks were never ticked as work moved to other PRs; the spec pinned file and line numbers that changed; validation steps assumed a VM that later ran out of memory; and no state words separated "built" from "tested".
 
 ## Upgrade decision
 
-Not upgraded. 1.3.0 to 1.4.5 adds native skill layouts per agent, an opt-in `bug` extension, and fixes; it removes `taskstoissues` (unused here). Installing per-agent integrations would write another copy of every command for each agent, which this repo avoids. If the owner wants the upgrade: commit first, `specify self upgrade --tag v1.4.5`, `specify integration upgrade generic` (it refuses to overwrite modified managed files without `--force` and never touches the constitution), run `python3 scripts/check_agent_docs.py`, and roll back by reverting that commit.
+Deferred by the owner on 2026-11-28; revisit once the shared workflow has been used on a real feature. Not upgraded. 1.3.0 to 1.4.5 adds native skill layouts per agent, an opt-in `bug` extension, and fixes; it removes `taskstoissues` (unused here). Installing per-agent integrations would write another copy of every command for each agent, which this repo avoids. If the owner wants the upgrade: commit first, `specify self upgrade --tag v1.4.5`, `specify integration upgrade generic` (it refuses to overwrite modified managed files without `--force` and never touches the constitution), run `python3 scripts/check_agent_docs.py`, and roll back by reverting that commit.

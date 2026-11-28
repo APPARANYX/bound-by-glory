@@ -11,7 +11,7 @@
 
 ## Rollback
 
-- Every controller or skills change ships behind its own off flag that restores the old behavior (owner rule 2026-10-31), and legacy play (`?tacticalController=legacy`) must stay equal to `main`. A [proposed Phase E exception](../spec-kit.md#proposed-phase-e-rollback-exception) (revert-based rollback for deliberately removed legacy paths) is not in force until the owner approves it.
+- Every controller or skills change ships behind its own off flag that restores the old behavior (owner rule 2026-10-31), and legacy play (`?tacticalController=legacy`) must stay equal to `main`. Exception (owner-approved 2026-11-28): an owner-authorized Phase E retirement slice rolls back by reverting its PR to a pinned pre-retirement reference ([contract](../spec-kit.md#phase-e-rollback-exception)).
 - A candidate that regresses movement feel is reverted as a unit.
 - `main` deploys to production on every push; a bad merge is rolled back by reverting its squash commit in a new PR, through the same CI gates.
 
@@ -48,5 +48,5 @@ for controlled pairs, and serve both arms the same way: `battle_sim_local.php` i
 
 - **Official performance acceptance gate and deterministic regression:** the 600-second natural meeting scenario, seed `controller-natural-20261026-0002`, `strategicInterception=0`, fixed timestep 0.15 s, controller on (the default since #785; it used to need `tacticalController=new`).
 - **Primary profiling environment:** the 120 m skills-range lab, seed `skills-range-0001`, 210 simulated seconds, `labMove=autonomous`, `pinSeed=1`, preview build.
-- **Wall-time ratio:** the integrated controller's requirement is at most 1.25x legacy overhead ([constitution](../../../.specify/memory/constitution.md), principle VII). The standard benchmark's compare step fails a run whose median wall-time slowdown is above 25% (`compare_benchmark_arms.cjs`). For the default switch (#785) the owner set a baseline on wall ratio instead (main d036b3f: meeting x1.695, US defense x1.506, GE defense x1.435; [roadmap section 7](../../architecture/AI_SKILLS_ROADMAP.md)).
+- **Wall-time ratio:** the integrated controller's requirement is at most 1.25x legacy overhead ([constitution](../../../.specify/memory/constitution.md), principle VII). The standard benchmark's compare step fails a run whose median wall-time slowdown is above 25% (`compare_benchmark_arms.cjs`). The owner confirmed on 2026-11-28 that 1.25x stays the formal acceptance gate, including for Phase E. The baseline set for the default switch (#785: main d036b3f, meeting x1.695, US defense x1.506, GE defense x1.435; [roadmap section 7](../../architecture/AI_SKILLS_ROADMAP.md)) is historical context, not a replacement gate. A conflict between the two goes to the owner with numbers.
 - **Before anything destructive** (deleting runs, branches, data): dry run with exact counts, exclude cited evidence, honor the [retention rules](../ci/housekeeping.md), verify afterwards and account for any discrepancy.
